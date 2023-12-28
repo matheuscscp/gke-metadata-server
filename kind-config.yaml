@@ -20,11 +20,15 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-# Docs:
-# https://docs.github.com/github/administering-a-repository/configuration-options-for-dependency-updates
-version: 2
-updates:
-- package-ecosystem: gomod
-  directory: /
-  schedule:
-    interval: weekly
+apiVersion: kind.x-k8s.io/v1alpha4
+kind: Cluster
+nodes:
+- role: control-plane
+  kubeadmConfigPatches:
+  - |
+    kind: ClusterConfiguration
+    apiServer:
+      extraArgs:
+        service-account-issuer: https://storage.googleapis.com/gke-metadata-server-test
+        service-account-jwks-uri: https://storage.googleapis.com/gke-metadata-server-test/openid/v1/jwks
+- role: worker

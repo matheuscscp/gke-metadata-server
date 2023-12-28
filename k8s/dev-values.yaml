@@ -20,11 +20,16 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-# Docs:
-# https://docs.github.com/github/administering-a-repository/configuration-options-for-dependency-updates
-version: 2
-updates:
-- package-ecosystem: gomod
-  directory: /
-  schedule:
-    interval: weekly
+config:
+  workloadIdentityProvider: projects/989331309750/locations/global/workloadIdentityPools/test/providers/kind-cluster
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8080"
+  prometheus.io/path: /metrics
+
+image:
+  tag: dev
+  pullPolicy: Always
+
+timestampPodAnnotation: true

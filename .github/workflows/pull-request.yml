@@ -20,11 +20,24 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-# Docs:
-# https://docs.github.com/github/administering-a-repository/configuration-options-for-dependency-updates
-version: 2
-updates:
-- package-ecosystem: gomod
-  directory: /
-  schedule:
-    interval: weekly
+on: [pull_request]
+
+jobs:
+  pull-request:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-go@v4
+      with:
+        go-version: 1.21.5
+    - run: make tidy
+    - name: Fail if make tidy produced changes
+      run: |
+        if [ -n "$(git diff --name-only)" ] || [ -n "$(git status --porcelain | grep '??')" ]; then
+          git status
+          echo ""
+          echo "The command 'make tidy' produced differences."
+          echo "Please remember to run it locally before committing your changes."
+          echo ""
+          exit 1
+        fi
