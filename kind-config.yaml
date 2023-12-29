@@ -29,6 +29,6 @@ nodes:
     kind: ClusterConfiguration
     apiServer:
       extraArgs:
-        service-account-issuer: https://storage.googleapis.com/gke-metadata-server-test
-        service-account-jwks-uri: https://storage.googleapis.com/gke-metadata-server-test/openid/v1/jwks
+        service-account-issuer: https://storage.googleapis.com/gke-metadata-server-issuer-test
+        service-account-jwks-uri: https://storage.googleapis.com/gke-metadata-server-issuer-test/openid/v1/jwks
 - role: worker
