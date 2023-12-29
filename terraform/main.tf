@@ -91,6 +91,15 @@ resource "google_storage_bucket" "test" {
   name                     = local.test_bucket
   location                 = "us"
   public_access_prevention = "enforced"
+
+  lifecycle_rule {
+    action {
+      type = "Delete"
+    }
+    condition {
+      age = 1
+    }
+  }
 }
 
 resource "google_storage_bucket_iam_member" "test_service_account_bucket_object_admin" {
