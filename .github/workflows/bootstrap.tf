@@ -22,7 +22,8 @@
 
 locals {
   pool_name        = google_iam_workload_identity_pool.github_actions.name
-  wi_member_prefix = "principal://iam.googleapis.com/${local.pool_name}/subject/repo:matheuscscp/gke-metadata-server:environment:terraform-"
+  sub_prefix       = "repo:matheuscscp/gke-metadata-server:environment:terraform-"
+  wi_member_prefix = "principal://iam.googleapis.com/${local.pool_name}/subject/${local.sub_prefix}"
 }
 
 data "google_project" "matheuspimenta_com" {
@@ -57,19 +58,19 @@ resource "google_service_account_iam_member" "plan_workload_identity_user" {
   member             = "${local.wi_member_prefix}plan"
 }
 
-resource "google_service_account" "tf_apply" {
+resource "google_service_account" "apply" {
   project    = google_project.gke_metadata_server.name
   account_id = "tf-apply"
 }
 
-resource "google_project_iam_member" "tf_apply_project_owner" {
+resource "google_project_iam_member" "apply_project_owner" {
   project = google_project.gke_metadata_server.name
   role    = "roles/owner"
-  member  = google_service_account.tf_apply.member
+  member  = google_service_account.apply.member
 }
 
-resource "google_service_account_iam_member" "tf_apply_workload_identity_user" {
-  service_account_id = google_service_account.tf_apply.name
+resource "google_service_account_iam_member" "apply_workload_identity_user" {
+  service_account_id = google_service_account.apply.name
   role               = "roles/iam.workloadIdentityUser"
   member             = "${local.wi_member_prefix}apply"
 }
@@ -104,10 +105,13 @@ resource "google_storage_bucket" "terraform_state" {
   }
 }
 
-resource "google_storage_bucket_iam_member" "tf_apply_state_manager" {
+resource "google_storage_bucket_iam_binding" "tf_state_manager" {
   bucket = google_storage_bucket.terraform_state.name
   role   = "roles/storage.objectAdmin"
-  member = google_service_account.tf_apply.member
+  members = [
+    google_service_account.plan.member,
+    google_service_account.apply.member,
+  ]
 }
 
 resource "google_iam_workload_identity_pool" "github_actions" {
@@ -118,7 +122,7 @@ resource "google_iam_workload_identity_pool" "github_actions" {
 resource "google_iam_workload_identity_pool_provider" "github_actions" {
   depends_on                         = [google_iam_workload_identity_pool.github_actions]
   project                            = google_project.gke_metadata_server.name
-  workload_identity_pool_id          = "github-actions"
+  workload_identity_pool_id          = google_iam_workload_identity_pool.github_actions.workload_identity_pool_id
   workload_identity_pool_provider_id = "github-actions"
   oidc {
     issuer_uri = "https://token.actions.githubusercontent.com"

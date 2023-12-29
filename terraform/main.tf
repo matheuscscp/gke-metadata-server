@@ -26,6 +26,12 @@
 #   https://cloud.google.com/iam/docs/workload-identity-federation-with-kubernetes
 #
 
+terraform {
+  backend "gcs" {
+    bucket = "gke-metadata-server-tf-state"
+  }
+}
+
 locals {
   project = "gke-metadata-server"
   bucket  = "gke-metadata-server-test"
