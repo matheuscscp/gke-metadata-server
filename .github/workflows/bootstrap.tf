@@ -21,9 +21,9 @@
 # SOFTWARE.
 
 locals {
-  pool_name        = google_iam_workload_identity_pool.github_actions.name
-  sub_prefix       = "repo:matheuscscp/gke-metadata-server:environment:terraform-"
-  wi_member_prefix = "principal://iam.googleapis.com/${local.pool_name}/subject/${local.sub_prefix}"
+  wi_pool_name     = google_iam_workload_identity_pool.github_actions.name
+  gh_sub_prefix    = "repo:matheuscscp/gke-metadata-server:environment"
+  wi_member_prefix = "principal://iam.googleapis.com/${local.wi_pool_name}/subject/${local.gh_sub_prefix}"
 }
 
 data "google_project" "matheuspimenta_com" {
@@ -46,6 +46,12 @@ resource "google_service_account" "plan" {
   account_id = "tf-plan"
 }
 
+resource "google_service_account_iam_member" "plan_workload_identity_user" {
+  service_account_id = google_service_account.plan.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "${local.wi_member_prefix}:terraform-plan"
+}
+
 resource "google_project_iam_member" "plan_project_viewer" {
   project = google_project.gke_metadata_server.name
   role    = "roles/viewer"
@@ -58,27 +64,21 @@ resource "google_project_iam_member" "plan_project_security_reviewer" {
   member  = google_service_account.plan.member
 }
 
-resource "google_service_account_iam_member" "plan_workload_identity_user" {
-  service_account_id = google_service_account.plan.name
-  role               = "roles/iam.workloadIdentityUser"
-  member             = "${local.wi_member_prefix}plan"
-}
-
 resource "google_service_account" "apply" {
   project    = google_project.gke_metadata_server.name
   account_id = "tf-apply"
+}
+
+resource "google_service_account_iam_member" "apply_workload_identity_user" {
+  service_account_id = google_service_account.apply.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "${local.wi_member_prefix}:terraform-apply"
 }
 
 resource "google_project_iam_member" "apply_project_owner" {
   project = google_project.gke_metadata_server.name
   role    = "roles/owner"
   member  = google_service_account.apply.member
-}
-
-resource "google_service_account_iam_member" "apply_workload_identity_user" {
-  service_account_id = google_service_account.apply.name
-  role               = "roles/iam.workloadIdentityUser"
-  member             = "${local.wi_member_prefix}apply"
 }
 
 resource "google_storage_bucket" "terraform_state" {
@@ -136,4 +136,21 @@ resource "google_iam_workload_identity_pool_provider" "github_actions" {
   attribute_mapping = {
     "google.subject" = "assertion.sub" # repo:{repo_org}/{repo_name}:environment:{env_name}
   }
+}
+
+resource "google_service_account" "pull_request" {
+  project    = google_project.gke_metadata_server.name
+  account_id = "pull-request"
+}
+
+resource "google_service_account_iam_member" "pull_request_workload_identity_user" {
+  service_account_id = google_service_account.pull_request.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "${local.wi_member_prefix}:pull-request"
+}
+
+resource "google_storage_bucket_iam_member" "pull_request_cluster_issuer_admin" {
+  bucket = "gke-metadata-server-issuer-test"
+  role   = "roles/storage.objectAdmin"
+  member = google_service_account.pull_request.member
 }

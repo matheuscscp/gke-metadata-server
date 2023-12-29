@@ -95,7 +95,8 @@ func newPublishCommand() *cobra.Command {
 				},
 			}
 
-			for _, key := range []string{".well-known/openid-configuration", "openid/v1/jwks"} {
+			const jwksURI = "openid/v1/jwks"
+			for _, key := range []string{".well-known/openid-configuration", jwksURI} {
 				// request document to control plane
 				url := fmt.Sprintf("%s/%s", kubeConfig.Host, key)
 				req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -130,7 +131,15 @@ func newPublishCommand() *cobra.Command {
 				if err := w.Close(); err != nil {
 					return fmt.Errorf("error closing %s upload to bucket %s: %w", objKey, bucket, err)
 				}
+				fmt.Printf("Object gs://%s/%s sucessfully uploaded.\n", bucket, objKey)
 			}
+
+			bktURL := fmt.Sprintf("https://storage.googleapis.com/%s/%s", bucket, keyPrefix)
+			fmt.Println()
+			fmt.Println("Use the values below for configuring your Kubernetes API Server.")
+			fmt.Println()
+			fmt.Printf("Issuer URI (--service-account-issuer):   %s\n", bktURL)
+			fmt.Printf("JWKS URI   (--service-account-jwks-uri): %s/%s\n", bktURL, jwksURI)
 
 			return nil
 		},

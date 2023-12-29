@@ -22,6 +22,10 @@
 
 on: [pull_request]
 
+concurrency:
+  group: terraform-plan
+  cancel-in-progress: false
+
 jobs:
   terraform-plan:
     runs-on: ubuntu-latest

@@ -21,15 +21,8 @@
 # SOFTWARE.
 
 config:
-  workloadIdentityProvider: projects/989331309750/locations/global/workloadIdentityPools/test/providers/kind-cluster
-
-podAnnotations:
-  prometheus.io/scrape: "true"
-  prometheus.io/port: "8080"
-  prometheus.io/path: /metrics
+  workloadIdentityProvider: projects/637293746831/locations/global/workloadIdentityPools/ci-kind-cluster/providers/test
 
 image:
-  tag: dev
+  tag: ci
   pullPolicy: Always
-
-timestampPodAnnotation: true

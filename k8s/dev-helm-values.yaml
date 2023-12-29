@@ -20,15 +20,16 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-apiVersion: kind.x-k8s.io/v1alpha4
-kind: Cluster
-nodes:
-- role: control-plane
-  kubeadmConfigPatches:
-  - |
-    kind: ClusterConfiguration
-    apiServer:
-      extraArgs:
-        service-account-issuer: https://storage.googleapis.com/gke-metadata-server-issuer-test
-        service-account-jwks-uri: https://storage.googleapis.com/gke-metadata-server-issuer-test/openid/v1/jwks
-- role: worker
+config:
+  workloadIdentityProvider: projects/637293746831/locations/global/workloadIdentityPools/dev-kind-cluster/providers/test
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8080"
+  prometheus.io/path: /metrics
+
+image:
+  tag: dev
+  pullPolicy: Always
+
+timestampPodAnnotation: true
