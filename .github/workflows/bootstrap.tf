@@ -35,6 +35,11 @@ resource "google_project" "gke_metadata_server" {
   billing_account = data.google_project.matheuspimenta_com.billing_account
 }
 
+resource "google_project_service" "iam" {
+  project = google_project.gke_metadata_server.name
+  service = "iam.googleapis.com"
+}
+
 resource "google_service_account" "plan" {
   project    = google_project.gke_metadata_server.name
   account_id = "tf-plan"
