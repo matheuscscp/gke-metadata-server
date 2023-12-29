@@ -57,9 +57,9 @@ resource "google_service_account" "tf_apply" {
   account_id = "tf-apply"
 }
 
-resource "google_project_iam_member" "tf_apply_project_editor" {
+resource "google_project_iam_member" "tf_apply_project_owner" {
   project = google_project.gke_metadata_server.name
-  role    = "roles/editor"
+  role    = "roles/owner"
   member  = google_service_account.tf_apply.member
 }
 
