@@ -46,9 +46,15 @@ resource "google_service_account" "plan" {
   account_id = "tf-plan"
 }
 
-resource "google_project_iam_member" "plan_project_editor" {
+resource "google_project_iam_member" "plan_project_viewer" {
   project = google_project.gke_metadata_server.name
   role    = "roles/viewer"
+  member  = google_service_account.plan.member
+}
+
+resource "google_project_iam_member" "plan_project_security_reviewer" {
+  project = google_project.gke_metadata_server.name
+  role    = "roles/iam.securityReviewer"
   member  = google_service_account.plan.member
 }
 
