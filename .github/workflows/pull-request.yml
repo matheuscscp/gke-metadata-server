@@ -61,4 +61,4 @@ jobs:
         project_id: gke-metadata-server
         workload_identity_provider: projects/637293746831/locations/global/workloadIdentityPools/github-actions/providers/github-actions
         service_account: pull-request@gke-metadata-server.iam.gserviceaccount.com
-    - run: make ci-cluster
+    - run: make ci-cluster ci-test

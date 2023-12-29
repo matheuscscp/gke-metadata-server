@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+SHELL := /bin/bash
+
 .PHONY: all
 all: dev-push helm-upgrade
 
@@ -40,24 +42,27 @@ DEV_IMAGE=matheuscscp/gke-metadata-server:dev
 CI_IMAGE=ghcr.io/matheuscscp/gke-metadata-server/container:ci
 .PHONY: test
 test:
-	@if [ "${IMAGE}" = "" ]; then echo "IMAGE variable is required."; exit -1; fi
-	kubectl --context kind-kind -n default delete po test || true
-	sed 's|GKE_METADATA_SERVER_IMAGE|${IMAGE}|g' k8s/test.yaml | kubectl --context kind-kind apply -f -
-	sleep 6
+	@if [ "${IMAGE}" == "" ]; then echo "IMAGE variable is required."; exit -1; fi
+	@if [ "${SLEEP}" == "" ]; then echo "SLEEP variable is required."; exit -1; fi
+	sed 's|GKE_METADATA_SERVER_IMAGE|${IMAGE}|g' k8s/test.yaml | tee >(kubectl --context kind-kind apply -f -)
+	sleep ${SLEEP}
+	kubectl --context kind-kind -n kube-system describe $$(kubectl --context kind-kind -n kube-system get po -o name | grep gke)
+	kubectl --context kind-kind -n kube-system logs ds/gke-metadata-server | jq
 	kubectl --context kind-kind -n default logs test -c test-gcloud -f
 	kubectl --context kind-kind -n default logs test -c test-go -f
 
 .PHONY: dev-test
 dev-test:
-	make test IMAGE=${DEV_IMAGE}
+	kubectl --context kind-kind -n default delete po test || true
+	make test IMAGE=${DEV_IMAGE} SLEEP=6
 
 .PHONY: ci-test
 ci-test:
-	make test IMAGE=${CI_IMAGE}
+	make test IMAGE=${CI_IMAGE} SLEEP=60
 
 .PHONY: push
 push:
-	@if [ "${IMAGE}" = "" ]; then echo "IMAGE variable is required."; exit -1; fi
+	@if [ "${IMAGE}" == "" ]; then echo "IMAGE variable is required."; exit -1; fi
 	docker build . -t ${IMAGE}
 	docker push ${IMAGE}
 
@@ -72,7 +77,7 @@ ci-push:
 
 .PHONY: cluster
 cluster:
-	@if [ "${CLUSTER_ENV}" = "" ]; then echo "CLUSTER_ENV variable is required."; exit -1; fi
+	@if [ "${CLUSTER_ENV}" == "" ]; then echo "CLUSTER_ENV variable is required."; exit -1; fi
 	kind create cluster --config k8s/${CLUSTER_ENV}-kind-config.yaml
 	helm -n kube-system install --wait gke-metadata-server helm/gke-metadata-server/ -f k8s/${CLUSTER_ENV}-helm-values.yaml
 	go run ./cmd publish --bucket gke-metadata-server-issuer-test --key-prefix ${CLUSTER_ENV}
