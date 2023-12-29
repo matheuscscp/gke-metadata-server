@@ -20,11 +20,35 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-# Docs:
-# https://docs.github.com/github/administering-a-repository/configuration-options-for-dependency-updates
-version: 2
-updates:
-- package-ecosystem: gomod
-  directory: /
-  schedule:
-    interval: weekly
+on: [pull_request]
+
+jobs:
+  terraform-plan:
+    runs-on: ubuntu-latest
+    environment: terraform-plan
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    steps:
+    - uses: actions/checkout@v4
+    - uses: google-github-actions/auth@v2
+      with:
+        workload_identity_provider: projects/637293746831/locations/global/workloadIdentityPools/github-actions/providers/github-actions
+    - uses: hashicorp/setup-terraform@v3
+    - run: cd terraform/ && terraform init
+    - run: cd terraform/ && terraform plan -no-color > plan.txt
+    - name: Comment plan if not empty
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const plan = require('fs').readFileSync('terraform/plan.txt').toString()
+          if (!plan.includes('No changes.')) {
+            const issue_number = context.issue.number
+            github.rest.issues.createComment({
+              ...context.repo,
+              issue_number,
+              body: "```"+plan+"```",
+            })
+          }

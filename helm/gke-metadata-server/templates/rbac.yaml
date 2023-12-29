@@ -20,11 +20,36 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-# Docs:
-# https://docs.github.com/github/administering-a-repository/configuration-options-for-dependency-updates
-version: 2
-updates:
-- package-ecosystem: gomod
-  directory: /
-  schedule:
-    interval: weekly
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gke-metadata-server
+  namespace: {{ .Values.namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: gke-metadata-server
+rules:
+- apiGroups: [""]
+  resources: [pods]
+  verbs: [list]
+- apiGroups: [""]
+  resources: [serviceaccounts]
+  verbs: [get]
+- apiGroups: [""]
+  resources: [serviceaccounts/token]
+  verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: gke-metadata-server
+subjects:
+- kind: ServiceAccount
+  name: gke-metadata-server
+  namespace: {{ .Values.namespace }}
+roleRef:
+  kind: ClusterRole
+  name: gke-metadata-server
+  apiGroup: rbac.authorization.k8s.io

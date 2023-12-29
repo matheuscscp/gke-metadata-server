@@ -1,0 +1,75 @@
+# MIT License
+#
+# Copyright (c) 2023 Matheus Pimenta
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+# Default values for gke-metadata-server.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+#
+# !!!Attention!!! Except for the empty values, the defaults in this file are well
+# tested. If you decide to override these defaults, please make sure to test those
+# values and take responsibility. This is not an official Google product. This is
+# a project created by the open-source community. Google enterprise support is not
+# available. Use at your own risk.
+
+config:
+  # Full name of the GCP Workload Identity Provider.
+  # This full name can be retrieved on the Google Cloud Console webpage for the provider.
+  # Example: projects/12345/locations/global/workloadIdentityPools/on-prem-kubernetes/providers/this-cluster
+  workloadIdentityProvider: ""
+
+  serverAddr: :8080
+  logLevel: info
+
+podAnnotations: {}
+  # Optionally, configure Prometheus to scrape the server:
+  # prometheus.io/scrape: "true"
+  # prometheus.io/port: "8080"
+  # prometheus.io/path: /metrics
+
+resources: {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+image:
+  repository: matheuscscp/gke-metadata-server
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  # tag: some-tag
+
+# This is a very powerful, critical infrastructure application, granting properly configured GCP access to
+# all the workloads inside a Kubernetes cluster. It should reside in the kube-system namespace.
+namespace: kube-system
+
+# Pod .spec.priorityClassName. This controls how much
+# preemptible the DaemonSet pods will be.
+priorityClass: system-node-critical
+
+# This Pod needs to listen on the host network, port 80.
+hostNetwork: true

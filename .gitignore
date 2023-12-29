@@ -1,0 +1,4 @@
+cli
+logs.txt
+.terraform*
+terraform.*

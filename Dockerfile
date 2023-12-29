@@ -20,11 +20,25 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-# Docs:
-# https://docs.github.com/github/administering-a-repository/configuration-options-for-dependency-updates
-version: 2
-updates:
-- package-ecosystem: gomod
-  directory: /
-  schedule:
-    interval: weekly
+FROM golang:1.21.5-alpine3.19 as builder
+
+WORKDIR /app
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY ./cmd/ ./cmd/
+COPY ./internal/ ./internal/
+
+# CGO_ENABLED=0 to build a statically-linked binary
+# -ldflags '-w -s' to strip debugging information for smaller size
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o gke-metadata-server \
+    github.com/matheuscscp/gke-metadata-server/cmd
+
+FROM alpine:3.19.0
+
+# Copy the binary from the builder stage
+COPY --from=builder /app/gke-metadata-server .
+
+# Set the binary as the entry point of the container
+ENTRYPOINT ["./gke-metadata-server"]
