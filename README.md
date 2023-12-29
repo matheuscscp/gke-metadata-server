@@ -96,41 +96,57 @@ has a field called `jwks_uri` containing a URI for the *JSON Web Key Sets* docum
 for verifying the signatures of ServiceAccount Tokens issued by Kubernetes.
 
 The Kubernetes API serves these two documents, but since both can be publicly available it's much safer
-to store and serve them from a reliable, publicly and highly available endpoint from where GCP will,
-guaranteed, be able to discover the authentication parameters from. For example, public GCS/S3 buckets and
-objects, etc. The CLI of the project also offers the command `publish` for uploading the two required JSON
-documents to a GCS bucket, but basically this is how you could retrieve the documents from inside a Pod using
-`curl` and `gcloud`:
+to store and serve them from a reliable, publicly and highly available endpoint where GCP will guaranteed
+be able to discover the authentication parameters from. For example, public GCS/S3 buckets/objects, etc.
+
+The CLI of the project offers the command `publish` for automatically fetching and uploading the two required
+JSON documents to a GCS bucket. This command will try to retrieve the Kubernetes and Google credentials from
+the environment where it runs on. Example:
 
 ```bash
-# fetch the JSON documents from the k8s API server
-curl -s --cacert /run/secrets/kubernetes.io/serviceaccount/ca.crt -H "Authorization: Bearer $(cat /run/secrets/kubernetes.io/serviceaccount/token)" "https://kubernetes.default.svc.cluster.local/.well-known/openid-configuration" > ./.well-known/openid-configuration
-curl -s --cacert /run/secrets/kubernetes.io/serviceaccount/ca.crt -H "Authorization: Bearer $(cat /run/secrets/kubernetes.io/serviceaccount/token)" "https://kubernetes.default.svc.cluster.local/openid/v1/jwks" > ./openid/v1/jwks
-
-# upload them to a public GCS bucket named $ISSUER_BUCKET
-gcloud storage cp ./.well-known/openid-configuration gs://$ISSUER_BUCKET/.well-known/openid-configuration
-gcloud storage cp ./openid/v1/jwks gs://$ISSUER_BUCKET/openid/v1/jwks
-
-# their public HTTPS URLs will be respectively:
-echo "https://storage.googleapis.com/$ISSUER_BUCKET/.well-known/openid-configuration"
-echo "https://storage.googleapis.com/$ISSUER_BUCKET/openid/v1/jwks"
+gke-metadata-server publish --bucket $BUCKET_NAME
 ```
 
-If `gcloud` is not configured with the required permissions inside the Pod you can
-simply `cat` the files in the terminal, copy their content, exit to your local env
-and run the `gcloud` upload commands authenticating with your own local credentials.
-
-Configuring the OIDC Issuer and JWKS URIs usually implies restarting the Kubernetes Control Plane for
-specifying the required CLI flags for the API server (e.g. see the KinD development configuration at
-[`./kind-config.yaml`](./kind-config.yaml)).
+Optionally, specify a prefix for the GCS object keys:
 
 ```bash
-# the --service-account-issuer k8s API server CLI flag is the $ISSUER_URI (i.e without the
-# ./.well-known/openid-configuration last part):
-echo "https://storage.googleapis.com/$ISSUER_BUCKET"
+gke-metadata-server publish --bucket $BUCKET_NAME --key-prefix $KEY_PREFIX
+```
 
-# the --service-account-jwks-uri k8s API server CLI flag must be the full URL:
-echo "https://storage.googleapis.com/$ISSUER_BUCKET/openid/v1/jwks"
+Alternatively, this is how you could retrieve the documents from inside a Pod using `curl`:
+
+```bash
+curl -s --cacert /run/secrets/kubernetes.io/serviceaccount/ca.crt -H "Authorization: Bearer $(cat /run/secrets/kubernetes.io/serviceaccount/token)" "https://kubernetes.default.svc.cluster.local/.well-known/openid-configuration"
+curl -s --cacert /run/secrets/kubernetes.io/serviceaccount/ca.crt -H "Authorization: Bearer $(cat /run/secrets/kubernetes.io/serviceaccount/token)" "https://kubernetes.default.svc.cluster.local/openid/v1/jwks"
+```
+
+Copy the outputs of the two `curl` commands above into files named respectively `openid-config.json`
+and `openid-keys.json`, and run the following commands to upload them to GCS:
+
+```bash
+gcloud storage cp openid-config.json gs://$ISSUER_GCS_URI/.well-known/openid-configuration
+gcloud storage cp openid-keys.json   gs://$ISSUER_GCS_URI/openid/v1/jwks
+```
+
+Where `"$ISSUER_GCS_URI"` is either just `"$BUCKET_NAME"` or `"$BUCKET_NAME/$KEY_PREFIX"`. Their public
+HTTPS URLs will be respectively:
+
+```bash
+echo "https://storage.googleapis.com/$ISSUER_GCS_URI/.well-known/openid-configuration"
+echo "https://storage.googleapis.com/$ISSUER_GCS_URI/openid/v1/jwks"
+```
+
+Configuring the OIDC Issuer and JWKS URIs usually implies restarting the Kubernetes Control Plane for
+specifying the required API server binary arguments (e.g. see the KinD development configuration at
+[`./k8s/dev-kind-config.yaml`](./k8s/dev-kind-config.yaml)).
+
+```bash
+# the --service-account-issuer k8s API server CLI flag will be the following (short URL form,
+# no need for the /.well-known/openid-configuration suffix):
+echo "https://storage.googleapis.com/$ISSUER_GCS_URI"
+
+# the --service-account-jwks-uri k8s API server CLI flag will be the following (full URL form):
+echo "https://storage.googleapis.com/$ISSUER_GCS_URI/openid/v1/jwks"
 ```
 
 ### Configure GCP Workload Identity Federation

@@ -20,11 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-# References:
-#
-# Configuration of Workload Identity Pool and Provider for Kubernetes:
-#   https://cloud.google.com/iam/docs/workload-identity-federation-with-kubernetes
-#
+# Reference:
+# https://cloud.google.com/iam/docs/workload-identity-federation-with-kubernetes
 
 terraform {
   backend "gcs" {
@@ -39,6 +36,7 @@ provider "google" {
 locals {
   cluster_issuer_bucket = "gke-metadata-server-issuer-test"
   test_bucket           = "gke-metadata-server-test"
+  environments          = toset(["dev", "ci"])
 }
 
 resource "google_storage_bucket" "cluster_issuer_test" {
@@ -52,13 +50,15 @@ resource "google_storage_bucket_iam_member" "all_users_object_viewer" {
   member = "allUsers"
 }
 
-resource "google_iam_workload_identity_pool" "test" {
-  workload_identity_pool_id = "kind-cluster"
+resource "google_iam_workload_identity_pool" "test_kind_cluster" {
+  for_each                  = local.environments
+  workload_identity_pool_id = "${each.key}-kind-cluster"
 }
 
 resource "google_iam_workload_identity_pool_provider" "test" {
-  workload_identity_pool_id          = google_iam_workload_identity_pool.test.workload_identity_pool_id
-  workload_identity_pool_provider_id = "kind-cluster"
+  for_each                           = google_iam_workload_identity_pool.test_kind_cluster
+  workload_identity_pool_id          = each.value.workload_identity_pool_id
+  workload_identity_pool_provider_id = "test"
   oidc {
     issuer_uri = "https://storage.googleapis.com/${local.cluster_issuer_bucket}"
   }
@@ -72,9 +72,10 @@ resource "google_service_account" "test" {
 }
 
 resource "google_service_account_iam_member" "workload_identity_user" {
+  for_each           = google_iam_workload_identity_pool.test_kind_cluster
   service_account_id = google_service_account.test.name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principal://iam.googleapis.com/${google_iam_workload_identity_pool.test.name}/subject/system:serviceaccount:default:test"
+  member             = "principal://iam.googleapis.com/${each.value.name}/subject/system:serviceaccount:default:test"
 }
 
 # this allows an OAuth 2.0 Access Token for the Google Service Account to be exchanged
