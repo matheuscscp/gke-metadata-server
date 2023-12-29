@@ -37,18 +37,30 @@ provider "google" {
 }
 
 locals {
-  bucket = "gke-metadata-server-test"
+  cluster_issuer_bucket = "gke-metadata-server-issuer-test"
+  test_bucket           = "gke-metadata-server-test"
+}
+
+resource "google_storage_bucket" "cluster_issuer_test" {
+  name     = local.cluster_issuer_bucket
+  location = "us"
+}
+
+resource "google_storage_bucket_iam_member" "all_users_object_viewer" {
+  bucket = google_storage_bucket.cluster_issuer_test.name
+  role   = "roles/storage.objectViewer"
+  member = "allUsers"
 }
 
 resource "google_iam_workload_identity_pool" "test" {
-  workload_identity_pool_id = "test"
+  workload_identity_pool_id = "kind-cluster"
 }
 
 resource "google_iam_workload_identity_pool_provider" "test" {
   workload_identity_pool_id          = google_iam_workload_identity_pool.test.workload_identity_pool_id
   workload_identity_pool_provider_id = "kind-cluster"
   oidc {
-    issuer_uri = "https://storage.googleapis.com/${local.bucket}"
+    issuer_uri = "https://storage.googleapis.com/${local.cluster_issuer_bucket}"
   }
   attribute_mapping = {
     "google.subject" = "assertion.sub" # system:serviceaccount:{namespace}:{name}
@@ -75,7 +87,7 @@ resource "google_service_account_iam_member" "openid_token_creator" {
 }
 
 resource "google_storage_bucket" "test" {
-  name                     = local.bucket
+  name                     = local.test_bucket
   location                 = "us"
   public_access_prevention = "enforced"
 }
