@@ -69,7 +69,7 @@ resource "google_service_account_iam_member" "openid_token_creator" {
 }
 
 resource "google_storage_bucket" "test" {
-  project                  = local.bucket
+  project                  = local.project
   name                     = local.bucket
   location                 = "us"
   public_access_prevention = "enforced"
