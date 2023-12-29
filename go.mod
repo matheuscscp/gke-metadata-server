@@ -4,7 +4,7 @@ go 1.21.5
 
 require (
 	cloud.google.com/go/storage v1.36.0
-	github.com/google/uuid v1.4.0
+	github.com/google/uuid v1.5.0
 	github.com/prometheus/client_golang v1.17.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.8.0
