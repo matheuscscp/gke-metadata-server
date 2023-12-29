@@ -237,7 +237,7 @@ func (s *Server) listPodGoogleServiceAccounts(w http.ResponseWriter, r *http.Req
 // given Pod's Service Account.
 // If there's an error this function sends the response to the client.
 func (s *Server) getPodServiceAccountToken(w http.ResponseWriter, r *http.Request,
-) (string, *http.Request, error) {
+	audience string) (string, *http.Request, error) {
 	pod, r, err := s.getPod(w, r)
 	if err != nil {
 		return "", nil, err
@@ -249,7 +249,7 @@ func (s *Server) getPodServiceAccountToken(w http.ResponseWriter, r *http.Reques
 		ServiceAccounts(pod.Namespace).
 		CreateToken(r.Context(), pod.Spec.ServiceAccountName, &authnv1.TokenRequest{
 			Spec: authnv1.TokenRequestSpec{
-				Audiences:         []string{s.workloadIdentityProviderAudience()},
+				Audiences:         []string{audience},
 				ExpirationSeconds: &expSeconds,
 			},
 		}, metav1.CreateOptions{})
@@ -278,7 +278,7 @@ func (s *Server) runWithGoogleCredentialsFromPodServiceAccountToken(
 		return
 	}
 
-	saToken, r, err := s.getPodServiceAccountToken(w, r)
+	saToken, r, err := s.getPodServiceAccountToken(w, r, s.workloadIdentityProviderAudience())
 	if err != nil {
 		return
 	}

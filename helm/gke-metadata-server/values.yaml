@@ -26,9 +26,8 @@
 #
 # !!!Attention!!! Except for the empty values, the defaults in this file are well
 # tested. If you decide to override these defaults, please make sure to test those
-# values and take responsibility. This is not an official Google product. This is
-# a project created by the open-source community. Google enterprise support is not
-# available. Use at your own risk.
+# values and take responsibility. This is not an official Google product. Google
+# enterprise support is not available. Use at your own risk.
 
 config:
   # Full name of the GCP Workload Identity Provider.

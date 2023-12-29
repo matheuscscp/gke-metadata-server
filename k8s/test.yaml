@@ -52,6 +52,9 @@ spec:
     securityContext:
       capabilities:
         add: [NET_ADMIN]
+  - name: test
+    image: GKE_METADATA_SERVER_IMAGE-test
+    imagePullPolicy: Always
   - name: test-gcloud
     image: google/cloud-sdk:457.0.0-slim
     command: [/bin/sh]
@@ -75,9 +78,3 @@ spec:
       gsutil ls gs://gke-metadata-server-test >> logs.txt 2>&1
 
       cat logs.txt
-  - name: test-go
-    image: GKE_METADATA_SERVER_IMAGE
-    imagePullPolicy: Always
-    args:
-    - test-list-objects
-    - --bucket=gke-metadata-server-test
