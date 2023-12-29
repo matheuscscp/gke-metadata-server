@@ -57,7 +57,7 @@ such Pods by IP address. Therefore, *Pods running on the host network are not su
 Steps:
 1. Configure Kubernetes DNS
 2. Configure Kubernetes ServiceAccount OIDC Discovery
-3. Configure GCP Workload Identity Federation
+3. Configure GCP Workload Identity Federation for Kubernetes
 4. Deploy `gke-metadata-server` in your cluster
 5. (Optional) Verify Supply Chain Security
 
@@ -101,35 +101,31 @@ be able to discover the authentication parameters from. For example, public GCS/
 
 The CLI of the project offers the command `publish` for automatically fetching and uploading the two required
 JSON documents to a GCS bucket. This command will try to retrieve the Kubernetes and Google credentials from
-the environment where it runs on. Example:
+the environment where it runs on, e.g. `make dev-cluster` uses the local credentials of a developer of the
+project, while `make ci-cluster` uses the kubeconfig created by KinD in the GitHub Workflow
+[`./.github/workflows/pull-request.yml`](./.github/workflows/pull-request.yml) and the Google credentials
+obtained via Workload Identity Federation for this GitHub repository
+([`./.github/workflows/bootstrap.tf`](./.github/workflows/bootstrap.tf)).
+
+Alternatively, this is how you could retrieve these two JSON documents from inside a Pod using `curl`:
 
 ```bash
-gke-metadata-server publish --bucket $BUCKET_NAME
-```
-
-Optionally, specify a prefix for the GCS object keys:
-
-```bash
-gke-metadata-server publish --bucket $BUCKET_NAME --key-prefix $KEY_PREFIX
-```
-
-Alternatively, this is how you could retrieve the documents from inside a Pod using `curl`:
-
-```bash
-curl -s --cacert /run/secrets/kubernetes.io/serviceaccount/ca.crt -H "Authorization: Bearer $(cat /run/secrets/kubernetes.io/serviceaccount/token)" "https://kubernetes.default.svc.cluster.local/.well-known/openid-configuration"
-curl -s --cacert /run/secrets/kubernetes.io/serviceaccount/ca.crt -H "Authorization: Bearer $(cat /run/secrets/kubernetes.io/serviceaccount/token)" "https://kubernetes.default.svc.cluster.local/openid/v1/jwks"
+curl -s --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" "https://kubernetes.default.svc.cluster.local/.well-known/openid-configuration"
+curl -s --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" "https://kubernetes.default.svc.cluster.local/openid/v1/jwks"
 ```
 
 Copy the outputs of the two `curl` commands above into files named respectively `openid-config.json`
-and `openid-keys.json`, and run the following commands to upload them to GCS:
+and `openid-keys.json`, then run the following commands to upload them to GCS:
 
 ```bash
 gcloud storage cp openid-config.json gs://$ISSUER_GCS_URI/.well-known/openid-configuration
 gcloud storage cp openid-keys.json   gs://$ISSUER_GCS_URI/openid/v1/jwks
 ```
 
-Where `"$ISSUER_GCS_URI"` is either just `"$BUCKET_NAME"` or `"$BUCKET_NAME/$KEY_PREFIX"`. Their public
-HTTPS URLs will be respectively:
+Where `$ISSUER_GCS_URI` is either just a GCS bucket name, or `$BUCKET_NAME/$KEY_PREFIX` where `$KEY_PREFIX`
+is a prefix for the GCS object keys, useful for example for storing multiple OIDC configurations (e.g. for
+multiple Kubernetes clusters) together in a single GCS bucket. The public HTTPS URLs of the upload objects
+will be respectively:
 
 ```bash
 echo "https://storage.googleapis.com/$ISSUER_GCS_URI/.well-known/openid-configuration"
@@ -149,7 +145,7 @@ echo "https://storage.googleapis.com/$ISSUER_GCS_URI"
 echo "https://storage.googleapis.com/$ISSUER_GCS_URI/openid/v1/jwks"
 ```
 
-### Configure GCP Workload Identity Federation
+### Configure GCP Workload Identity Federation for Kubernetes
 
 Steps:
 1. Configure Pool and Provider
@@ -159,7 +155,7 @@ Docs: [link](https://cloud.google.com/iam/docs/workload-identity-federation-with
 
 Examples for all the configurations described in this section are available here:
 [`./terraform/main.tf`](./terraform/main.tf). This is where we provision the
-infrastructure required for testing this project in CI.
+infrastructure required for testing this project in CI and development.
 
 #### Pool and Provider
 
@@ -175,12 +171,12 @@ created:
 
 `google.subject = assertion.sub`
 
-If this configuration is performed correctly, the projected value of `google.subject` mapped
-from a Kubernetes ServiceAccount Token will have the following syntax:
+If this configuration is correct, then the Subject mapped by Google from a Kubernetes ServiceAccount
+Token will have the following syntax:
 
 `system:serviceaccount:{k8s_namespace}:{k8s_sa_name}`
 
-**Attention 1**: The projected value of `google.subject` can have at most 127 characters
+**Attention 1**: A `google.subject` can have at most 127 characters
 ([docs](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/iam_workload_identity_pool_provider#google.subject)).
 
 **Attention 2**: Please make sure not to specify any *audiences*. This project uses the

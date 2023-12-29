@@ -95,6 +95,8 @@ func newPublishCommand() *cobra.Command {
 				},
 			}
 
+			fmt.Println()
+
 			const jwksURI = "openid/v1/jwks"
 			for _, key := range []string{".well-known/openid-configuration", jwksURI} {
 				// request document to control plane
@@ -140,6 +142,7 @@ func newPublishCommand() *cobra.Command {
 			fmt.Println()
 			fmt.Printf("Issuer URI (--service-account-issuer):   %s\n", bktURL)
 			fmt.Printf("JWKS URI   (--service-account-jwks-uri): %s/%s\n", bktURL, jwksURI)
+			fmt.Println()
 
 			return nil
 		},

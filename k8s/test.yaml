@@ -41,7 +41,7 @@ spec:
     hostnames: [metadata.google.internal]
   containers:
   - name: gke-metadata-proxy
-    image: matheuscscp/gke-metadata-server:dev
+    image: GKE_METADATA_SERVER_IMAGE
     imagePullPolicy: Always
     args: [sidecar]
     env:
@@ -76,7 +76,7 @@ spec:
 
       cat logs.txt
   - name: test-go
-    image: matheuscscp/gke-metadata-server:dev
+    image: GKE_METADATA_SERVER_IMAGE
     imagePullPolicy: Always
     args:
     - test-list-objects

@@ -21,7 +21,7 @@
 # SOFTWARE.
 
 .PHONY: all
-all: push-dev-image helm-upgrade
+all: dev-push helm-upgrade
 
 .PHONY: tidy
 tidy:
@@ -36,25 +36,60 @@ tidy:
 cli:
 	go build -o cli github.com/matheuscscp/gke-metadata-server/cmd
 
+DEV_IMAGE=matheuscscp/gke-metadata-server:dev
+CI_IMAGE=ghcr.io/matheuscscp/gke-metadata-server/container:ci
 .PHONY: test
 test:
+	@if [ "${IMAGE}" = "" ]; then echo "IMAGE variable is required."; exit -1; fi
 	kubectl --context kind-kind -n default delete po test || true
-	kubectl --context kind-kind apply -f k8s/test.yaml
+	sed 's|GKE_METADATA_SERVER_IMAGE|${IMAGE}|g' k8s/test.yaml | kubectl --context kind-kind apply -f -
 	sleep 6
 	kubectl --context kind-kind -n default logs test -c test-gcloud -f
 	kubectl --context kind-kind -n default logs test -c test-go -f
 
-.PHONY: push-dev-image
-push-dev-image:
-	docker build . -t matheuscscp/gke-metadata-server:dev
-	docker push matheuscscp/gke-metadata-server:dev
+.PHONY: dev-test
+dev-test:
+	make test IMAGE=${DEV_IMAGE}
 
-.PHONY: ci-cluster dev-cluster
-%-cluster: cli
+.PHONY: ci-test
+ci-test:
+	make test IMAGE=${CI_IMAGE}
+
+.PHONY: push
+push:
+	@if [ "${IMAGE}" = "" ]; then echo "IMAGE variable is required."; exit -1; fi
+	docker build . -t ${IMAGE}
+	docker push ${IMAGE}
+
+.PHONY: dev-push
+dev-push:
+	make push IMAGE=${DEV_IMAGE}
+
+.PHONY: ci-push
+ci-push:
+	docker pull ${CI_IMAGE} || true
+	make push IMAGE=${CI_IMAGE}
+
+.PHONY: cluster
+cluster:
+	@if [ "${CLUSTER_ENV}" = "" ]; then echo "CLUSTER_ENV variable is required."; exit -1; fi
+	kind create cluster --config k8s/${CLUSTER_ENV}-kind-config.yaml
+	helm -n kube-system install --wait gke-metadata-server helm/gke-metadata-server/ -f k8s/${CLUSTER_ENV}-helm-values.yaml
+	go run ./cmd publish --bucket gke-metadata-server-issuer-test --key-prefix ${CLUSTER_ENV}
+
+.PHONY: dev-cluster
+dev-cluster:
 	kind delete cluster
-	kind create cluster --config k8s/$*-kind-config.yaml
-	./cli publish --bucket gke-metadata-server-issuer-test --key-prefix $*
-	helm -n kube-system install --wait gke-metadata-server helm/gke-metadata-server/ -f k8s/$*-helm-values.yaml
+	make cluster CLUSTER_ENV=dev
+	kubens kube-system
+	helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+	helm repo update
+	helm -n prometheus install --wait prometheus prometheus-community/prometheus --create-namespace
+	@echo "\nDevelopment cluster created successfully."
+
+.PHONY: ci-cluster
+ci-cluster:
+	make cluster CLUSTER_ENV=ci
 
 .PHONY: helm-upgrade
 helm-upgrade:
