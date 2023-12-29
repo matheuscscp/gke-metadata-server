@@ -26,19 +26,18 @@
 #   https://cloud.google.com/iam/docs/workload-identity-federation-with-kubernetes
 #
 
-provider "google" {
-  project = "gke-metadata-server"
-}
-
 locals {
-  bucket = "gke-metadata-server-test"
+  project = "gke-metadata-server"
+  bucket  = "gke-metadata-server-test"
 }
 
 resource "google_iam_workload_identity_pool" "test" {
+  project                   = local.project
   workload_identity_pool_id = "test"
 }
 
 resource "google_iam_workload_identity_pool_provider" "test" {
+  project                            = local.project
   workload_identity_pool_id          = google_iam_workload_identity_pool.test.workload_identity_pool_id
   workload_identity_pool_provider_id = "kind-cluster"
   oidc {
@@ -50,6 +49,7 @@ resource "google_iam_workload_identity_pool_provider" "test" {
 }
 
 resource "google_service_account" "test" {
+  project    = local.project
   account_id = "test-sa"
 }
 
@@ -69,6 +69,7 @@ resource "google_service_account_iam_member" "openid_token_creator" {
 }
 
 resource "google_storage_bucket" "test" {
+  project                  = local.bucket
   name                     = local.bucket
   location                 = "us"
   public_access_prevention = "enforced"
