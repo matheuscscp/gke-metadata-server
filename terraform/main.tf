@@ -60,7 +60,7 @@ resource "google_iam_workload_identity_pool_provider" "test" {
   workload_identity_pool_id          = each.value.workload_identity_pool_id
   workload_identity_pool_provider_id = "test"
   oidc {
-    issuer_uri = "https://storage.googleapis.com/${local.cluster_issuer_bucket}"
+    issuer_uri = "https://storage.googleapis.com/${local.cluster_issuer_bucket}/${each.key}"
   }
   attribute_mapping = {
     "google.subject" = "assertion.sub" # system:serviceaccount:{namespace}:{name}

@@ -33,6 +33,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      packages: write
     steps:
     - uses: actions/checkout@v4
     - uses: actions/setup-go@v4
@@ -49,6 +50,12 @@ jobs:
           echo ""
           exit 1
         fi
+    - uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    - run: make ci-push
     - uses: google-github-actions/auth@v2
       with:
         project_id: gke-metadata-server
