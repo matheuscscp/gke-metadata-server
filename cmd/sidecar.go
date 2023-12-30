@@ -321,6 +321,7 @@ func (f *frontendProxy) shutdown(ctx context.Context) error {
 }
 
 func (f *frontendProxy) proxy(ctx context.Context, clientConn net.Conn) error {
+	t0 := time.Now()
 	defer clientConn.Close()
 
 	// parse ip
@@ -388,7 +389,10 @@ func (f *frontendProxy) proxy(ctx context.Context, clientConn net.Conn) error {
 	case <-done[backendToClient]:
 		event = "the backend closed the connection"
 	}
-	l.WithField("close_event", event).Info("connection proxied")
+	l.
+		WithField("close_event", event).
+		WithField("latency", time.Since(t0).String()).
+		Info("connection proxied")
 	return nil
 }
 
