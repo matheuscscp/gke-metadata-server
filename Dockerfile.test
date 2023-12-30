@@ -20,21 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-FROM google/cloud-sdk:457.0.0-slim
-
-# Install Go (adjust version as needed)
-ENV GO_VERSION=1.21.5
-RUN apt-get update && apt-get install -y --no-install-recommends wget && \
-    wget https://golang.org/dl/go${GO_VERSION}.linux-amd64.tar.gz && \
-    tar -C /usr/local -xzf go${GO_VERSION}.linux-amd64.tar.gz && \
-    rm go${GO_VERSION}.linux-amd64.tar.gz && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
-
-# Set environment variables for Go
-ENV PATH="/usr/local/go/bin:${PATH}"
-ENV GOPATH="/go"
-ENV PATH="$GOPATH/bin:$PATH"
+FROM golang:1.21.5-alpine3.19
 
 WORKDIR /app
 
@@ -44,4 +30,4 @@ RUN go mod download
 COPY ./cmd/ ./cmd/
 COPY ./internal/ ./internal/
 
-CMD [ "go", "test", "./..." ]
+CMD [ "go", "test", "-v", "./..." ]

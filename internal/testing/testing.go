@@ -23,10 +23,13 @@
 package pkgtesting
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
+	"os"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -44,14 +47,15 @@ func RequestJSON(t *testing.T, headers http.Header, url, name, expectedMetadataF
 }
 
 func RequestIDToken(t *testing.T, headers http.Header, url, name, expectedMetadataFlavor string,
-	expectedAudiences, expectedIssuers []string, expectedSub string) {
+	expectedAudience, expectedIssuer, expectedSubject string) string {
 	body := requestURL(t, headers, url, name, "application/text", expectedMetadataFlavor)
 	defer body.Close()
 	b, err := io.ReadAll(body)
 	if err != nil {
 		t.Fatalf("error reading %s response body as text: %v", name, err)
 	}
-	token, _, err := jwt.NewParser().ParseUnverified(string(b), jwt.MapClaims{})
+	rawToken := string(b)
+	token, _, err := jwt.NewParser().ParseUnverified(rawToken, jwt.MapClaims{})
 	if err != nil {
 		t.Fatalf("error parsing %s response body as jwt: %v", name, err)
 	}
@@ -62,48 +66,42 @@ func RequestIDToken(t *testing.T, headers http.Header, url, name, expectedMetada
 	if nAuds := len(aud); nAuds != 1 {
 		t.Errorf("jwt %s does not have exactly one aud claim: %v", name, nAuds)
 	} else {
-		a := aud[0]
-		var found bool
-		for _, expectedAud := range expectedAudiences {
-			if a == expectedAud {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("jwt %s aud claim '%s' does not match any in the list [%s]", name, a, strings.Join(expectedAudiences, ", "))
-		}
+		CheckRegex(t, expectedAudience, aud[0])
 	}
 	iss, err := token.Claims.GetIssuer()
 	if err != nil {
 		t.Errorf("error getting %s jwt iss claim: %v", name, err)
 	}
-	var found bool
-	for _, expectedIss := range expectedIssuers {
-		if iss == expectedIss {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Errorf("jwt %s iss claim '%s' does not match any in the list [%s]", name, iss, strings.Join(expectedIssuers, ", "))
-	}
+	CheckRegex(t, expectedIssuer, iss)
 	sub, err := token.Claims.GetSubject()
 	if err != nil {
 		t.Errorf("error getting %s jwt sub claim: %v", name, err)
 	}
-	assert.Equal(t, expectedSub, sub)
+	CheckRegex(t, expectedSubject, sub)
 	exp, err := token.Claims.GetExpirationTime()
 	if err != nil {
 		t.Errorf("error getting %s jwt exp claim: %v", name, err)
 	}
-	secs := time.Until(exp.Time).Seconds()
-	assert.True(t, 3500 <= secs && secs <= 3600)
+	secs := int(time.Until(exp.Time).Seconds())
+	AssertExpirationSeconds(t, secs)
+	return rawToken
+}
+
+func RequestText(t *testing.T, headers http.Header, url, name string) string {
+	body := requestURL(t, headers, url, name, "text/plain", "")
+	defer body.Close()
+	b, err := io.ReadAll(body)
+	if err != nil {
+		t.Fatalf("error reading %s response body as text: %v", name, err)
+	}
+	return string(b)
 }
 
 func requestURL(t *testing.T, headers http.Header, url, name, expectedContentType,
 	expectedMetadataFlavor string) io.ReadCloser {
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		t.Fatalf("error creating %s request: %v", name, err)
 	}
@@ -130,8 +128,34 @@ func requestURL(t *testing.T, headers http.Header, url, name, expectedContentTyp
 			ct, name, expectedContentType, getErr())
 	}
 	if mf := resp.Header.Get("Metadata-Flavor"); mf != expectedMetadataFlavor {
-		t.Errorf("unexpected metadata flavor %s for %s (was expecting %s). error(s): %v",
+		t.Errorf("unexpected metadata flavor %s for %s (was expecting '%s'). error(s): %v",
 			mf, name, expectedMetadataFlavor, getErr())
 	}
 	return resp.Body
+}
+
+func env() string {
+	s := strings.Split(os.Getenv("TEST_IMAGE"), ":")
+	return s[len(s)-1]
+}
+
+func ReplaceEnv(s string) string {
+	return strings.ReplaceAll(s, "TEST_ENV", env())
+}
+
+func CheckRegex(t *testing.T, pattern, value string) {
+	pattern = "^" + ReplaceEnv(pattern) + "$"
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		t.Errorf("error compiling regex %s: %v", pattern, err)
+		return
+	}
+	if !re.MatchString(value) {
+		t.Errorf("value '%s' does not match regex %s", value, pattern)
+	}
+}
+
+func AssertExpirationSeconds(t *testing.T, secs int) {
+	assert.LessOrEqual(t, 3500, secs)
+	assert.LessOrEqual(t, secs, 3600)
 }

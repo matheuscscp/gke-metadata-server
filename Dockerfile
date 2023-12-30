@@ -37,8 +37,6 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o gke-metadata-server \
 
 FROM alpine:3.19.0
 
-# Copy the binary from the builder stage
 COPY --from=builder /app/gke-metadata-server .
 
-# Set the binary as the entry point of the container
 ENTRYPOINT ["./gke-metadata-server"]

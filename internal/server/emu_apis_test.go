@@ -23,10 +23,12 @@
 package server_test
 
 import (
-	"fmt"
+	"context"
 	"net/http"
 	"testing"
+	"time"
 
+	"github.com/coreos/go-oidc/v3/oidc"
 	pkgtesting "github.com/matheuscscp/gke-metadata-server/internal/testing"
 
 	"github.com/stretchr/testify/assert"
@@ -41,7 +43,7 @@ var emuHeaders = http.Header{
 func TestEmuPodGoogleCredConfigAPI(t *testing.T) {
 	const url = "http://metadata.google.internal/gkeMetadataEmulator/v1/pod/service-account/google-cred-config"
 
-	var resp struct {
+	var respBody struct {
 		Type                           string `json:"type"`
 		Audience                       string `json:"audience"`
 		SubjectTokenType               string `json:"subject_token_type"`
@@ -61,34 +63,38 @@ func TestEmuPodGoogleCredConfigAPI(t *testing.T) {
 		} `json:"credential_source"`
 	}
 
-	pkgtesting.RequestJSON(t, emuHeaders, url, "google-cred-config", emuMetadataFlavor, &resp)
+	pkgtesting.RequestJSON(t, emuHeaders, url, "google credential config", emuMetadataFlavor, &respBody)
 
-	aud := workloadIdentityProviderAudience
-	assert.True(t, aud("ci") == resp.Audience || aud("dev") == resp.Audience)
-	assert.Equal(t, "external_account", resp.Type)
-	assert.Equal(t, "urn:ietf:params:oauth:token-type:jwt", resp.SubjectTokenType)
-	assert.Equal(t, "https://sts.googleapis.com/v1/token", resp.TokenURL)
-	assert.Equal(t, "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/test-sa@gke-metadata-server.iam.gserviceaccount.com:generateAccessToken", resp.ServiceAccountImpersonationURL)
-	assert.Equal(t, 3600, resp.ServiceAccountImpersonation.TokenLifetimeSeconds)
-	assert.Equal(t, "text", resp.CredentialSource.Format.Type)
-	assert.Equal(t, "http://metadata.google.internal/gkeMetadataEmulator/v1/pod/service-account/token", resp.CredentialSource.URL)
-	assert.Equal(t, "Emulator", resp.CredentialSource.Headers.MetadataFlavor)
+	pkgtesting.CheckRegex(t, workloadIdentityProviderAudience, respBody.Audience)
+	assert.Equal(t, "external_account", respBody.Type)
+	assert.Equal(t, "urn:ietf:params:oauth:token-type:jwt", respBody.SubjectTokenType)
+	assert.Equal(t, "https://sts.googleapis.com/v1/token", respBody.TokenURL)
+	assert.Equal(t, "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/test-sa@gke-metadata-server.iam.gserviceaccount.com:generateAccessToken", respBody.ServiceAccountImpersonationURL)
+	assert.Equal(t, 3600, respBody.ServiceAccountImpersonation.TokenLifetimeSeconds)
+	assert.Equal(t, "text", respBody.CredentialSource.Format.Type)
+	assert.Equal(t, "http://metadata.google.internal/gkeMetadataEmulator/v1/pod/service-account/token", respBody.CredentialSource.URL)
+	assert.Equal(t, "Emulator", respBody.CredentialSource.Headers.MetadataFlavor)
 }
 
 func TestEmuPodServiceAccountTokenAPI(t *testing.T) {
 	const url = "http://metadata.google.internal/gkeMetadataEmulator/v1/pod/service-account/token"
 
-	aud := workloadIdentityProviderAudience
-	iss := gcsIssuer
+	const aud = workloadIdentityProviderAudience
+	const iss = "https://storage.googleapis.com/gke-metadata-server-issuer-test/TEST_ENV"
+	const sub = "system:serviceaccount:default:test"
 
-	pkgtesting.RequestIDToken(t, emuHeaders, url, "pod-sa-token", emuMetadataFlavor,
-		[]string{aud("ci"), aud("dev")}, []string{iss("ci"), iss("dev")}, "system:serviceaccount:default:test")
+	rawToken := pkgtesting.RequestIDToken(t, emuHeaders, url, "pod serviceaccount token", emuMetadataFlavor, aud, iss, sub)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	kubernetes, err := oidc.NewProvider(ctx, pkgtesting.ReplaceEnv(iss))
+	if err != nil {
+		t.Fatalf("error creating kubernetes serviceaccount oidc provider: %v", err)
+	}
+	_, err = kubernetes.VerifierContext(ctx, &oidc.Config{ClientID: pkgtesting.ReplaceEnv(aud)}).Verify(ctx, rawToken)
+	if err != nil {
+		t.Fatalf("error verifying pod serviceaccount token: %v", err)
+	}
 }
 
-func workloadIdentityProviderAudience(env string) string {
-	return fmt.Sprintf("//iam.googleapis.com/projects/637293746831/locations/global/workloadIdentityPools/%s-kind-cluster/providers/test", env)
-}
-
-func gcsIssuer(env string) string {
-	return fmt.Sprintf("https://storage.googleapis.com/gke-metadata-server-issuer-test/%s", env)
-}
+const workloadIdentityProviderAudience = "//iam.googleapis.com/projects/637293746831/locations/global/workloadIdentityPools/TEST_ENV-kind-cluster/providers/test"

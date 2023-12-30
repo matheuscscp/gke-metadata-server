@@ -20,6 +20,11 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+# This file is not only a core part of our test automation in this project,
+# but also an example of how to configure Pods in a cluster where the emulator
+# is deployed. Use this as reference for how to configure your production Pods.
+
+# ServiceAccount configuration is the exact same of GKE Workload Identity.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -34,14 +39,22 @@ metadata:
   name: test
   namespace: default
 spec:
-  serviceAccountName: test
   restartPolicy: Never
+
+  # Use the ServiceAccount created above.
+  serviceAccountName: test
+
+  # These settings emulate the HTTP endpoint 169.254.169.254:80, hardcoded across
+  # Google libraries as the endpoint for detecting if the code is running inside
+  # a Google Cloud environment or not. The hostAliases field configures the DNS
+  # entry, and the container runs a sidecar for proxying TCP/IP connections on the
+  # endpoint to the NODE_IP
   hostAliases:
-  - ip: 169.254.169.254
-    hostnames: [metadata.google.internal]
+  - hostnames: [metadata.google.internal]
+    ip: 169.254.169.254
   containers:
   - name: gke-metadata-proxy
-    image: GKE_METADATA_SERVER_IMAGE
+    image: <GKE_METADATA_SERVER_IMAGE>
     imagePullPolicy: Always
     args: [sidecar]
     env:
@@ -52,29 +65,66 @@ spec:
     securityContext:
       capabilities:
         add: [NET_ADMIN]
+
+  # The containers below run our automatic tests. Replace them with your containers
+  # in your production Pods.
+
+  # This container demonstrates "GKE Workload Identity". The image does not have gcloud.
+  # The tests running here perform authenticated operations in GCP by just communicating
+  # with the well-known GCE/GKE Metadata APIs backed by the emulator. The custom APIs of
+  # the emulator are also tested.
   - name: test
-    image: GKE_METADATA_SERVER_IMAGE-test
+    image: <GKE_METADATA_SERVER_IMAGE>-test
     imagePullPolicy: Always
+    env:
+    - name: TEST_IMAGE
+      value: <GKE_METADATA_SERVER_IMAGE>
+
+  # This container demonstrates vanilla "Worload Identity Federation with Kubernetes".
+  # The custom API of the emulator shown below returns a (non-secret) JSON with a
+  # Google credential configuration, containiner the full name of the Workload Identity
+  # Provider resource. The "gcloud auth login" command below configures the Pod with
+  # the credentials that can be acquired by the parameters described inside this JSON
+  # file. After performing login the container uses this authentication to make calls
+  # to the GCS API via the gsutil binary from the Google CloudSDK image below. The
+  # choice of gsutil here has meaning: gsutil does not work seamlessly with GKE's
+  # native implementation of Workload Identity ("gcloud storage" does). This test
+  # demonstrates how our Google Credential Configuration API allows gsutil to work
+  # with Workload Identity. gsutil should not be used, though. Use "gcloud storage"
+  # instead.
   - name: test-gcloud
     image: google/cloud-sdk:457.0.0-slim
-    command: [/bin/sh]
+    command: [/bin/bash]
     args:
     - -c
     - |
-      set -x
+      set -ex
 
-      # test oauth 2.0 access token API
-      curl -s -i -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token?pretty" > logs.txt 2>&1
-      echo "" >> logs.txt
+      METADATA_ENDPOINT="http://metadata.google.internal"
+      CRED_CONFIG_API="/gkeMetadataEmulator/v1/pod/service-account/google-cred-config"
+      curl -s -H "Metadata-Flavor: Emulator" "${METADATA_ENDPOINT}${CRED_CONFIG_API}?pretty" > creds.json
+      cat creds.json
+      gcloud auth login --cred-file=creds.json
 
-      # test id token token API
-      curl -s -i -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity?pretty&audience=test.com" >> logs.txt 2>&1
-      echo "" >> logs.txt
+      # upload a random object to gcs
+      BUCKET="gke-metadata-server-test"
+      while :; do
+        key=$(openssl rand -hex 16)
+        value=$(openssl rand -hex 16)
+        echo -n $value > ./localfile.txt
+        output=$(gsutil cp -n ./localfile.txt gs://${BUCKET}/${key} 2>&1)
+        if [[ $output == *"Skipping existing item:"* ]]; then
+          continue
+        else
+          break
+        fi
+      done
 
-      # test gcp creds config API
-      curl -s -H "Metadata-Flavor: Emulator" "http://metadata.google.internal/gkeMetadataEmulator/v1/pod/service-account/google-cred-config?pretty" > creds.json 2>&1
-      cat creds.json >> logs.txt
-      gcloud auth login --cred-file=creds.json >> logs.txt 2>&1
-      gsutil ls gs://gke-metadata-server-test >> logs.txt 2>&1
-
-      cat logs.txt
+      # check if upload was successful
+      if [ "$(gsutil cat gs://${BUCKET}/${key})" != "$value" ]; then
+        echo "Error: Retrieved value does not match the expected value."
+        gsutil rm gs://${BUCKET}/${key}
+        exit 1
+      fi
+      echo "Retrieved value matches the expected value. Success!"
+      gsutil rm gs://${BUCKET}/${key}
