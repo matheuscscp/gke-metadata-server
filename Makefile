@@ -43,28 +43,30 @@ CI_IMAGE=ghcr.io/matheuscscp/gke-metadata-server/container:ci
 .PHONY: test
 test:
 	@if [ "${IMAGE}" == "" ]; then echo "IMAGE variable is required."; exit -1; fi
-	@if [ "${SLEEP}" == "" ]; then echo "SLEEP variable is required."; exit -1; fi
 	sed 's|GKE_METADATA_SERVER_IMAGE|${IMAGE}|g' k8s/test.yaml | tee >(kubectl --context kind-kind apply -f -)
-	sleep ${SLEEP}
+	sleep 120
+	kubectl --context kind-kind -n default logs test -c test -f
 	kubectl --context kind-kind -n kube-system describe $$(kubectl --context kind-kind -n kube-system get po -o name | grep gke)
+	kubectl --context kind-kind -n default describe po test
 	kubectl --context kind-kind -n kube-system logs ds/gke-metadata-server | jq
-	kubectl --context kind-kind -n default logs test -c test-gcloud -f
-	kubectl --context kind-kind -n default logs test -c test-go -f
+	kubectl --context kind-kind -n default logs test -c gke-metadata-proxy | jq
 
 .PHONY: dev-test
 dev-test:
 	kubectl --context kind-kind -n default delete po test || true
-	make test IMAGE=${DEV_IMAGE} SLEEP=6
+	make test IMAGE=${DEV_IMAGE}
 
 .PHONY: ci-test
 ci-test:
-	make test IMAGE=${CI_IMAGE} SLEEP=60
+	make test IMAGE=${CI_IMAGE}
 
 .PHONY: push
 push:
 	@if [ "${IMAGE}" == "" ]; then echo "IMAGE variable is required."; exit -1; fi
 	docker build . -t ${IMAGE}
 	docker push ${IMAGE}
+	docker build . -t ${IMAGE}-test -f Dockerfile.test
+	docker push ${IMAGE}-test
 
 .PHONY: dev-push
 dev-push:
@@ -73,14 +75,15 @@ dev-push:
 .PHONY: ci-push
 ci-push:
 	docker pull ${CI_IMAGE} || true
+	docker pull ${CI_IMAGE}-test || true
 	make push IMAGE=${CI_IMAGE}
 
 .PHONY: cluster
 cluster:
 	@if [ "${CLUSTER_ENV}" == "" ]; then echo "CLUSTER_ENV variable is required."; exit -1; fi
 	kind create cluster --config k8s/${CLUSTER_ENV}-kind-config.yaml
-	helm -n kube-system install --wait gke-metadata-server helm/gke-metadata-server/ -f k8s/${CLUSTER_ENV}-helm-values.yaml
 	go run ./cmd publish --bucket gke-metadata-server-issuer-test --key-prefix ${CLUSTER_ENV}
+	helm -n kube-system install --wait gke-metadata-server helm/gke-metadata-server/ -f k8s/${CLUSTER_ENV}-helm-values.yaml
 
 .PHONY: dev-cluster
 dev-cluster:

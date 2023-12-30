@@ -20,53 +20,39 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package main
+package server
 
 import (
 	"fmt"
+	"net/http"
+	"strings"
 
-	"github.com/matheuscscp/gke-metadata-server/internal/logging"
-
-	"cloud.google.com/go/storage"
-	"github.com/spf13/cobra"
-	"google.golang.org/api/iterator"
+	pkghttp "github.com/matheuscscp/gke-metadata-server/internal/http"
 )
 
-func newTestListObjectsCommand() *cobra.Command {
-	var bucket string
-
-	cmd := &cobra.Command{
-		Use:   "test-list-objects",
-		Short: "Tool for testing the project in CI",
-		RunE: func(cmd *cobra.Command, args []string) (err error) {
-			ctx := cmd.Context()
-			l := logging.FromContext(ctx)
-			defer func() {
-				if runtimeErr := err; err != nil {
-					err = nil
-					l.WithError(runtimeErr).Fatal("runtime error")
-				}
-			}()
-
-			client, err := storage.NewClient(ctx)
-			if err != nil {
-				return fmt.Errorf("error creating gcs client: %w", err)
-			}
-			defer client.Close()
-
-			it := client.Bucket(bucket).Objects(ctx, &storage.Query{})
-			for o, err := it.Next(); err != iterator.Done; o, err = it.Next() {
-				if err != nil {
-					return fmt.Errorf("error listing objects in bucket '%s': %w", bucket, err)
-				}
-				fmt.Println(o.Name)
-			}
-
-			return nil
-		},
+func (s *Server) emuPodGoogleCredConfigAPI(w http.ResponseWriter, r *http.Request) {
+	podGoogleServiceAccountEmail, r, err := s.getPodGoogleServiceAccountEmail(w, r)
+	if err != nil {
+		return
 	}
+	credConfig := s.getGoogleCredentialConfig(podGoogleServiceAccountEmail, map[string]any{
+		"format": map[string]string{"type": "text"},
+		"url":    fmt.Sprintf("http://%s%s", r.Host, emuPodServiceAccountTokenAPI),
+		"headers": map[string]string{
+			metadataFlavorHeader: metadataFlavorEmulator,
+		},
+	})
+	pkghttp.RespondJSON(w, r, http.StatusOK, credConfig)
+}
 
-	cmd.Flags().StringVar(&bucket, "bucket", "", "Bucket to be described.")
-
-	return cmd
+func (s *Server) emuPodServiceAccountTokenAPI(w http.ResponseWriter, r *http.Request) {
+	audience := strings.TrimSpace(r.URL.Query().Get("audience"))
+	if audience == "" {
+		audience = s.workloadIdentityProviderAudience()
+	}
+	saToken, r, err := s.getPodServiceAccountToken(w, r, audience)
+	if err != nil {
+		return
+	}
+	pkghttp.RespondText(w, r, http.StatusOK, saToken)
 }

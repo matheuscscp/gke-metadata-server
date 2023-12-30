@@ -1,17 +1,25 @@
 gke-metadata-server
 ===================
 
-A GKE Metadata Server *emulator* for facilitating GCP Workload Identity Federation inside non-GKE
-Kubernetes clusters, e.g. on-prem, bare-metal, managed Kubernetes from other clouds, etc. This
-implementation is heavily inspired by, and deployed in the same fashion of the Google-managed
-`gke-metadata-server` `DaemonSet` present in the `kube-system` Namespace of GKE clusters with
-GKE Workload Identity enabled. See how GKE Workload Identity
+A GKE Metadata Server *emulator* for making it easier to use GCP Workload Identity Federation
+inside non-GKE Kubernetes clusters, e.g. on-prem, bare-metal, managed Kubernetes from other
+clouds, etc. This implementation is heavily inspired by, and deployed in the same fashion of
+the Google-managed `gke-metadata-server` `DaemonSet` present in the `kube-system` Namespace of
+GKE clusters with GKE Workload Identity enabled. See how GKE Workload Identity
 [works](https://cloud.google.com/kubernetes-engine/docs/concepts/workload-identity#metadata_server).
 
-**Important:** This project was not created by Google or by anybody related to Google.
-Google enterprise support is not available, but community support is. Please feel free
-to open issues for reporting bugs or vulnerabilities, or for asking questions.
-**But use this tool at your own risk.**
+**Disclaimer 1:** This project was not created by Google or by anybody related to Google.
+Google enterprise support is not available. **Use this tool at your own risk.**
+*(Please feel free to open issues for reporting bugs or vulnerabilities, or for asking questions.)*
+
+**Disclaimer 2:** This tool is *not necessary* for using GCP Workload Identity Federation inside
+non-GKE Kubernetes clusters. This is just a facilitator. Kubernetes and GCP Workload Identity
+Federation work together by themselves. This tool just makes it so your Pods need less
+configuration to use Workload Identity Federation (some level of configuration is still required,
+but at least they don't require any particular, per-deployment input, e.g. like the full
+Workload Identity Pool Provider resource name), and the integration is closer to how native
+GKE Workload Identity works (but still not perfect, as the Service Account impersonation IAM
+settings are still slightly different).
 
 ## Limitations and Caveats
 
@@ -163,7 +171,7 @@ In order to map Kubernetes ServiceAccounts to Google Service Accounts, one must 
 a Workload Identity Pool and Provider. A Pool is a set of Subjects and a set of Providers,
 with each Subject being visible to all the Providers in the set. For enforcing a strict
 authentication system, be sure to create exactly one Provider per Pool, i.e. create a single
-Pool+PoolProvider pair for each Kubernetes cluster. This Provider must reflect the Kubernetes
+Pool + Pool Provider pair for each Kubernetes cluster. This Provider must reflect the Kubernetes
 ServiceAccounts OIDC Identity provider configured in the previous step. The Issuer URI will
 be required (e.g. the HTTPS URL of a publicly available GCS bucket containing an object at
 key `.well-known/openid-configuration`), and the following *attribute mapping* rule must be
@@ -181,7 +189,7 @@ Token will have the following syntax:
 
 **Attention 2**: Please make sure not to specify any *audiences*. This project uses the
 default audience when creating Kubernetes ServiceAccount Tokens (which contains the full
-resource name of the Provider, which is a good, strict security rule):
+resource name of the Pool Provider, which is a good, strict security rule):
 
 `//iam.googleapis.com/{pool_full_name}/providers/{pool_provider_name}`
 
