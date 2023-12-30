@@ -45,7 +45,7 @@ test:
 	@if [ "${IMAGE}" == "" ]; then echo "IMAGE variable is required."; exit -1; fi
 	sed 's|<GKE_METADATA_SERVER_IMAGE>|${IMAGE}|g' k8s/test.yaml | tee >(kubectl --context kind-kind apply -f -)
 	@while : ; do \
-		sleep 5; \
+		sleep 10; \
 		EXIT_CODE_1=$$(kubectl --context kind-kind -n default get po test -o jsonpath='{.status.containerStatuses[1].state.terminated.exitCode}'); \
 		EXIT_CODE_2=$$(kubectl --context kind-kind -n default get po test -o jsonpath='{.status.containerStatuses[2].state.terminated.exitCode}'); \
 		if [ -n "$$EXIT_CODE_1" ] && [ -n "$$EXIT_CODE_2" ]; then \
@@ -54,6 +54,7 @@ test:
 	done; \
 	echo "Container 'test'        exited with code $$EXIT_CODE_1"; \
 	echo "Container 'test-gcloud' exited with code $$EXIT_CODE_2"; \
+	kubectl --context kind-kind -n default logs test -c init-gke-metadata-proxy | jq; \
 	kubectl --context kind-kind -n default logs test -c test -f; \
 	kubectl --context kind-kind -n default logs test -c test-gcloud -f; \
 	kubectl --context kind-kind -n kube-system describe $$(kubectl --context kind-kind -n kube-system get po -o name | grep gke); \
@@ -139,7 +140,6 @@ drop-branch:
 		echo "Are you sure? You have uncommitted changes, consider using scripts/update-branch.sh."; \
 		exit 1; \
 	fi
-
 	git fetch --prune --all --force --tags
 	git update-ref refs/heads/main origin/main
 	BRANCH=$$(git branch --show-current); git checkout main; git branch -D $$BRANCH
