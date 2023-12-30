@@ -244,25 +244,27 @@ configured and `gke-metadata-server` is properly deployed in your cluster, you'r
 
 A Helm Chart is available in the following [Helm OCI Repositories](https://helm.sh/docs/topics/registries/):
 
-1. `matheuscscp/gke-metadata-server:helm-{tag}` (Docker Hub)
+1. `matheuscscp/gke-metadata-server-helm:{tag}` (Docker Hub)
 2. `ghcr.io/matheuscscp/gke-metadata-server/helm:{tag}` (GitHub Container Registry)
 
 See the Helm values API at [`./helm/gke-metadata-server/values.yaml`](./helm/gke-metadata-server/values.yaml).
 
 Alternatively, you can write your own Kubernetes manifests and consume only the container images:
 
-1. `matheuscscp/gke-metadata-server:container-{tag}` (Docker Hub)
-2. `ghcr.io/matheuscscp/gke-metadata-server/container:{tag}` (GitHub Container Registry)
+1. `matheuscscp/gke-metadata-server:{tag}` (Docker Hub)
+2. `ghcr.io/matheuscscp/gke-metadata-server:{tag}` (GitHub Container Registry)
 
-The value of `{tag}` is either a SemVer version or `latest`. Please **DO NOT USE** `dev` and `ci` tags,
-as they are not signed and do not represent official releases.
+The value of `{tag}` is always a SemVer version. Please **DO NOT USE** `dev` and `ci` tags,
+as they do not represent official releases.
 
 ### (Optional) Verify Supply Chain Authenticity
 
-Here's how you should validate the authenticity of the `gke-metadata-server` images... WIP
+Run the [`cosign`](https://github.com/sigstore/cosign) CLI tool for verifying the authenticity
+of the production images described in the previous section:
 
-* Container Image Repositories: `WIP`
-* Helm OCI Repositories: `WIP`
+```bash
+cosign verify $IMAGE_AND_TAG
+```
 
 # General Notes
 

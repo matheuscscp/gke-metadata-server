@@ -39,12 +39,12 @@ cli:
 	go build -o cli github.com/matheuscscp/gke-metadata-server/cmd
 
 DEV_IMAGE=matheuscscp/gke-metadata-server:dev
-CI_IMAGE=ghcr.io/matheuscscp/gke-metadata-server/container:ci
+CI_IMAGE=ghcr.io/matheuscscp/gke-metadata-server:ci
 .PHONY: test
 test:
 	@if [ "${IMAGE}" == "" ]; then echo "IMAGE variable is required."; exit -1; fi
 	sed 's|<GKE_METADATA_SERVER_IMAGE>|${IMAGE}|g' k8s/test.yaml | tee >(kubectl --context kind-kind apply -f -)
-	@while : ; do \
+	while : ; do \
 		sleep 10; \
 		EXIT_CODE_1=$$(kubectl --context kind-kind -n default get po test -o jsonpath='{.status.containerStatuses[1].state.terminated.exitCode}'); \
 		EXIT_CODE_2=$$(kubectl --context kind-kind -n default get po test -o jsonpath='{.status.containerStatuses[2].state.terminated.exitCode}'); \
@@ -54,12 +54,12 @@ test:
 	done; \
 	echo "Container 'test'        exited with code $$EXIT_CODE_1"; \
 	echo "Container 'test-gcloud' exited with code $$EXIT_CODE_2"; \
-	kubectl --context kind-kind -n default logs test -c init-gke-metadata-proxy | jq; \
 	kubectl --context kind-kind -n default logs test -c test -f; \
 	kubectl --context kind-kind -n default logs test -c test-gcloud -f; \
 	kubectl --context kind-kind -n kube-system describe $$(kubectl --context kind-kind -n kube-system get po -o name | grep gke); \
 	kubectl --context kind-kind -n default describe po test; \
 	kubectl --context kind-kind -n kube-system logs ds/gke-metadata-server | jq; \
+	kubectl --context kind-kind -n default logs test -c init-gke-metadata-proxy | jq; \
 	kubectl --context kind-kind -n default logs test -c gke-metadata-proxy | jq; \
 	if [ "$$EXIT_CODE_1" != "0" ] || [ "$$EXIT_CODE_2" != "0" ]; then \
 		exit 1; \

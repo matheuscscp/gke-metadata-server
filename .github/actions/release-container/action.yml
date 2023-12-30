@@ -20,23 +20,43 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-on: [pull_request]
+name: Release a new version of the container in the given repository
+inputs:
+  registry:
+    required: true
+  username:
+    required: true
+  password:
+    required: true
+  repository:
+    required: true
+  version:
+    required: true
+  github-token:
+    required: true
 
-concurrency:
-  group: continuous-integration # pull-request and release share resources
-  cancel-in-progress: false
-
-jobs:
-  pull-request:
-    runs-on: ubuntu-latest
-    environment: pull-request
-    permissions:
-      contents: read
-      id-token: write
-      packages: write
-    steps:
-    - uses: actions/checkout@v4
-    - uses: ./.github/actions/ci-checks/
-      with:
-        google-service-account-name: pull-request
-        github-token: ${{ secrets.GITHUB_TOKEN }}
+runs:
+  using: composite
+  steps:
+  - uses: docker/login-action@v3
+    with:
+      registry: ${{ inputs.registry }}
+      username: ${{ inputs.username }}
+      password: ${{ inputs.password }}
+  - run: docker tag ghcr.io/matheuscscp/gke-metadata-server:ci $IMAGE
+    shell: bash
+    env:
+      IMAGE: ${{ inputs.repository }}:${{ inputs.version }}
+  - run: docker push $IMAGE
+    shell: bash
+    env:
+      IMAGE: ${{ inputs.repository }}:${{ inputs.version }}
+  - run: cosign sign --identity-token=$GITHUB_TOKEN $IMAGE
+    shell: bash
+    env:
+      GITHUB_TOKEN: ${{ inputs.github-token }}
+      IMAGE: ${{ inputs.repository }}:${{ inputs.version }}
+  - run: cosign verify $IMAGE
+    shell: bash
+    env:
+      IMAGE: ${{ inputs.repository }}:${{ inputs.version }}
