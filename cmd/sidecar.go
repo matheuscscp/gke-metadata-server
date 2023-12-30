@@ -51,7 +51,7 @@ type frontendProxy struct {
 }
 
 func newSidecarCommand() *cobra.Command {
-	const gkeMetadataAddress = "169.254.169.254:80"
+	const gkeMetadataAddress = gkeMetadataIPAddress + ":80"
 
 	var networkPaths []string
 	var goroutinesPerFrontend int
@@ -61,25 +61,23 @@ func newSidecarCommand() *cobra.Command {
 		Short: "Start the sidecar for proxying requests to the GKE Workload Identity emulator",
 		Long: fmt.Sprintf(`
 Start the sidecar for proxying requests from inside the Pod into the
-GKE Workload Identity emulator running on the same node of the Pod.
+GKE Workload Identity emulator running on the same Node of the Pod.
 
-This proxy is actually a generic tool that supports listening on a list
-of "frontend" network addresses, each backed by its own "backend" port.
-The incoming TCP connetions are all targeted to the Kubernetes Node IP,
-but the backend port is defined by which frontend listener received the
-connection.
+This proxy is actually a more general tool that supports listening on a
+list of "frontend" network addresses, each backed by its own "backend"
+port. The incoming TCP connetions are all targeted to the IP address of
+the Kubernetes Node, but the backend port is defined by which frontend
+listener received the connection.
 
-For each IP address appearing in a frontend network address, the program
-adds this IP to the loopback interface of the current network namespace.
-The program will bind to all the frontend ports in this namespace, which
-means that there can be no collisions, i.e. the frontend ports must be
-unique among all the specified "network paths" (i.e. among all specified
+The program will bind to all the frontend ports in the current network
+namespace, which means that there can be no collisions, i.e. the frontend
+ports must be unique among all the specified "network paths", i.e. among
+all specified mappings of the form:
                    frontend_addr ---> backend_port
-mappings.
 
-The Node IP address cannot be in the set of specified frontend IP
+The Node IP address cannot be in the set of the specified frontend IP
 addresses, neither be a loopback IP address. This is for avoiding
-cycles. The Node IP is specified through the NODE_IP environment
+a loop. The Node IP is specified through the NODE_IP environment
 variable.
 
 The default list of network paths contains a single path: the one needed
@@ -102,9 +100,8 @@ metadata server port (%s).
 			}
 
 			// parse network paths
-			frontendIPs := map[string]*netlink.Addr{} // will be added to the loopback interface
-			frontendPorts := map[string]int{}         // frontend_port ---> idx in networkPaths
-			networkMap := map[string]string{}         // frontend_addr ---> backend_addr
+			frontendPorts := map[string]int{} // frontend_port ---> idx in networkPaths
+			networkMap := map[string]string{} // frontend_addr ---> backend_addr
 			for j, networkPath := range networkPaths {
 				// parse network path
 				networkPath = strings.TrimSpace(networkPath)
@@ -116,24 +113,21 @@ metadata server port (%s).
 				frontendAddr, backendPort := strings.TrimSpace(s[0]), strings.TrimSpace(s[1])
 
 				// parse frontend addr
-				frontendHost, frontendPort, err := net.SplitHostPort(frontendAddr)
+				frontendIP, frontendPort, err := net.SplitHostPort(frontendAddr)
 				if err != nil {
 					return fmt.Errorf("error splitting frontend address '%s' from network path '%s' into host-port: %w",
 						frontendAddr, networkPath, err)
 				}
-				frontendHost, frontendPort = strings.TrimSpace(frontendHost), strings.TrimSpace(frontendPort)
+				frontendIP, frontendPort = strings.TrimSpace(frontendIP), strings.TrimSpace(frontendPort)
 
 				// parse frontend ip
-				frontendIPAddr, err := netlink.ParseAddr(frontendHost + "/32")
-				if err != nil {
+				if _, err := netlink.ParseAddr(frontendIP + "/32"); err != nil {
 					return fmt.Errorf("error parsing frontend host '%s' from network path '%s' as an ip address: %w",
-						frontendHost, networkPath, err)
+						frontendIP, networkPath, err)
 				}
-				frontendIP := frontendHost
 				if nodeIP == frontendIP {
 					return fmt.Errorf("the node ip is the same ip for the frontend address in the network path '%s'", networkPath)
 				}
-				frontendIPs[frontendIP] = frontendIPAddr
 
 				// parse frontend port
 				if i, ok := frontendPorts[frontendPort]; ok {
@@ -160,37 +154,6 @@ metadata server port (%s).
 					l.WithError(runtimeErr).Fatal("runtime error")
 				}
 			}()
-
-			// add frontend IPs to the loopback interface
-			lo, err := netlink.LinkByName("lo")
-			if err != nil {
-				return fmt.Errorf("error getting the loopback interface: %w", err)
-			}
-			type loopbackIP struct {
-				ip     string
-				ipAddr *netlink.Addr
-			}
-			loopbackIPs := make([]*loopbackIP, 0, len(frontendIPs))
-			defer func() {
-				for _, loip := range loopbackIPs {
-					l := l.WithField("loopback_ip", loip.ip)
-					if err := netlink.AddrDel(lo, loip.ipAddr); err != nil {
-						l.WithError(err).Error("error deleting ip address from loopback interface")
-					} else {
-						l.Info("ip address deleted from loopback interface")
-					}
-				}
-			}()
-			for ip, ipAddr := range frontendIPs {
-				if err := netlink.AddrAdd(lo, ipAddr); err != nil {
-					return fmt.Errorf("error adding ip address '%s' to the loopback interface: %w", ip, err)
-				}
-				l.WithField("loopback_ip", ip).Info("ip address added to the loopback interface")
-				loopbackIPs = append(loopbackIPs, &loopbackIP{
-					ip:     ip,
-					ipAddr: ipAddr,
-				})
-			}
 
 			// bind to frontend ports
 			frontends := make([]*frontendProxy, 0, len(networkMap))
@@ -334,7 +297,7 @@ func (f *frontendProxy) proxy(ctx context.Context, clientConn net.Conn) error {
 		return fmt.Errorf("error parsing client address host as ip address: %w", err)
 	}
 	if ipAddr.String() != f.ip {
-		return fmt.Errorf("client ip does not match the loopback ip")
+		return fmt.Errorf("client ip does not match the frontend ip")
 	}
 	l := logging.FromContext(ctx)
 	l.Debug("connection can be trusted and will be proxied")

@@ -47,11 +47,22 @@ spec:
   # These settings emulate the HTTP endpoint 169.254.169.254:80, hardcoded across
   # Google libraries as the endpoint for detecting if the code is running inside
   # a Google Cloud environment or not. The hostAliases field configures the DNS
-  # entry, and the container runs a sidecar for proxying TCP/IP connections on the
-  # endpoint to the NODE_IP
+  # entry. The init container adds the IP address to the loopback interface of
+  # the Pod (this is why the NET_ADMIN security capability is required in this
+  # init container). The sidecar container proxies TCP/IP connections on this
+  # special endpoint to the NODE_IP:default_emulator_port network address, where
+  # the emulator will be listening, on the same Kubernetes Node of this pod.
   hostAliases:
   - hostnames: [metadata.google.internal]
     ip: 169.254.169.254
+  initContainers:
+  - name: init-gke-metadata-proxy
+    image: <GKE_METADATA_SERVER_IMAGE>
+    imagePullPolicy: Always
+    args: [init-network]
+    securityContext:
+      capabilities:
+        add: [NET_ADMIN]
   containers:
   - name: gke-metadata-proxy
     image: <GKE_METADATA_SERVER_IMAGE>
@@ -62,9 +73,6 @@ spec:
       valueFrom:
         fieldRef:
           fieldPath: status.hostIP
-    securityContext:
-      capabilities:
-        add: [NET_ADMIN]
 
   # The containers below run our automatic tests. Replace them with your containers
   # in your production Pods.

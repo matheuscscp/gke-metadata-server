@@ -33,10 +33,12 @@ import (
 
 	pkgtesting "github.com/matheuscscp/gke-metadata-server/internal/testing"
 
+	"cloud.google.com/go/compute/metadata"
 	"cloud.google.com/go/storage"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/api/googleapi"
 )
 
@@ -157,6 +159,8 @@ func TestGKEServiceAccountTokenAPIImplicitly(t *testing.T) {
 	// Here we do a GCS roundtrip using the Go library to test the
 	// GKE Service Account Token API. The Go library will internally
 	// call this API to get an Access Token for GCS operations.
+
+	require.True(t, metadata.OnGCE())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
