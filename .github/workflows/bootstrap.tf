@@ -20,6 +20,12 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+terraform {
+  backend "gcs" {
+    bucket = "gke-metadata-server-bootstrap-tf-state"
+  }
+}
+
 locals {
   wi_pool_name     = google_iam_workload_identity_pool.github_actions.name
   gh_sub_prefix    = "repo:matheuscscp/gke-metadata-server:environment"
@@ -149,8 +155,22 @@ resource "google_service_account_iam_member" "pull_request_workload_identity_use
   member             = "${local.wi_member_prefix}:pull-request"
 }
 
-resource "google_storage_bucket_iam_member" "pull_request_cluster_issuer_admin" {
+resource "google_service_account" "release" {
+  project    = google_project.gke_metadata_server.name
+  account_id = "release"
+}
+
+resource "google_service_account_iam_member" "release_workload_identity_user" {
+  service_account_id = google_service_account.release.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "${local.wi_member_prefix}:release"
+}
+
+resource "google_storage_bucket_iam_binding" "cluster_issuer_admins" {
   bucket = "gke-metadata-server-issuer-test"
   role   = "roles/storage.objectAdmin"
-  member = google_service_account.pull_request.member
+  members = [
+    google_service_account.pull_request.member,
+    google_service_account.release.member,
+  ]
 }

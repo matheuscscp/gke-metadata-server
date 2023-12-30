@@ -10,16 +10,21 @@ GKE clusters with GKE Workload Identity enabled. See how GKE Workload Identity
 
 **Disclaimer 1:** This project was not created by Google or by anybody related to Google.
 Google enterprise support is not available. **Use this tool at your own risk.**
-*(Please feel free to open issues for reporting bugs or vulnerabilities, or for asking questions.)*
+*(But please do feel free to open issues for reporting bugs or vulnerabilities, or for asking
+questions, help or requesting new features. Feel also free to
+[contribute](https://github.com/matheuscscp/gke-metadata-server/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22).)*
 
 **Disclaimer 2:** This tool is *not necessary* for using GCP Workload Identity Federation inside
 non-GKE Kubernetes clusters. This is just a facilitator. Kubernetes and GCP Workload Identity
 Federation work together by themselves. This tool just makes it so your Pods need less
 configuration to use Workload Identity Federation (some level of configuration is still required,
-but at least they don't require any particular, per-deployment input, e.g. like the full
-Workload Identity Pool Provider resource name), and the integration is closer to how native
-GKE Workload Identity works (but still not perfect, as the Service Account impersonation IAM
-settings are still slightly different).
+but, for example, the full Workload Identity Provider resource name is hidden from the
+client Pods and kept only as part of the emulator, see a full example at
+[`./k8s/test.yaml`](./k8s/test.yaml)), and the integration is closer to how native GKE Workload
+Identity works (but still not perfect, as the impersonation IAM settings are still slightly
+different, see the
+[Configure GCP Workload Identity Federation for Kubernetes](#configure-gcp-workload-identity-federation-for-kubernetes)
+section below).
 
 ## Limitations and Caveats
 
@@ -67,7 +72,7 @@ Steps:
 2. Configure Kubernetes ServiceAccount OIDC Discovery
 3. Configure GCP Workload Identity Federation for Kubernetes
 4. Deploy `gke-metadata-server` in your cluster
-5. (Optional) Verify Supply Chain Security
+5. (Optional) Verify Supply Chain Authenticity
 
 ### Configure Kubernetes DNS
 
@@ -86,7 +91,7 @@ for adding custom cluster-level DNS entries.
 
 Adding an entry to CoreDNS does not work seamlessly for all cases. Depending on how the
 application code resolves DNS, the Pod-level DNS configuration mentioned in the link
-above may be the only feasible choice. See an example at [`./k8s/test.yaml`](./k8s/test.yaml).
+above may be the only feasible choice.
 
 *(Google's Go libraries target the `169.254.169.254` IP address directly. If you are running mostly
 Go applications *authenticating through Google's Go libraries* then this DNS configuration may not
@@ -118,8 +123,12 @@ obtained via Workload Identity Federation for this GitHub repository
 Alternatively, this is how you could retrieve these two JSON documents from inside a Pod using `curl`:
 
 ```bash
-curl -s --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" "https://kubernetes.default.svc.cluster.local/.well-known/openid-configuration"
-curl -s --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" "https://kubernetes.default.svc.cluster.local/openid/v1/jwks"
+curl -s --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt \
+    -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
+    "https://kubernetes.default.svc.cluster.local/.well-known/openid-configuration"
+curl -s --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt \
+    -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
+    "https://kubernetes.default.svc.cluster.local/openid/v1/jwks"
 ```
 
 Copy the outputs of the two `curl` commands above into files named respectively `openid-config.json`
@@ -233,21 +242,33 @@ configured and `gke-metadata-server` is properly deployed in your cluster, you'r
 
 ### Deploy `gke-metadata-server` in your cluster
 
-A Helm Chart is available in the following Helm OCI Repositories:
+A Helm Chart is available in the following [Helm OCI Repositories](https://helm.sh/docs/topics/registries/):
 
-1. `matheuscscp/gke-metadata-server-helm` (Docker Hub)
-2. `ghcr.io/matheuscscp/gke-metadata-server/helm` (GitHub Container Registry)
+1. `matheuscscp/gke-metadata-server:helm-{tag}` (Docker Hub)
+2. `ghcr.io/matheuscscp/gke-metadata-server/helm:{tag}` (GitHub Container Registry)
 
 See the Helm values API at [`./helm/gke-metadata-server/values.yaml`](./helm/gke-metadata-server/values.yaml).
 
 Alternatively, you can write your own Kubernetes manifests and consume only the container images:
 
-1. `matheuscscp/gke-metadata-server` (Docker Hub)
-2. `ghcr.io/matheuscscp/gke-metadata-server/container` (GitHub Container Registry)
+1. `matheuscscp/gke-metadata-server:container-{tag}` (Docker Hub)
+2. `ghcr.io/matheuscscp/gke-metadata-server/container:{tag}` (GitHub Container Registry)
 
-### (Optional) Verify Supply Chain Security
+The value of `{tag}` is either a SemVer version or `latest`. Please **DO NOT USE** `dev` and `ci` tags,
+as they are not signed and do not represent official releases.
+
+### (Optional) Verify Supply Chain Authenticity
 
 Here's how you should validate the authenticity of the `gke-metadata-server` images... WIP
 
 * Container Image Repositories: `WIP`
 * Helm OCI Repositories: `WIP`
+
+# General Notes
+
+Only a single long-lived secret was necessary for setting up the CI infrastructure of this project:
+`DOCKER_HUB_ACCESS_TOKEN` 👀
+
+Everything else in this repository runs using GCP Workload Identity Federation or the `GITHUB_TOKEN`, both
+the automatic tests testing the Workload Identity Federation features, and the GitHub Workflows themselves
+for performing ancillary CI tasks. All the tokens involved in these cases are short-lived.

@@ -43,13 +43,26 @@ CI_IMAGE=ghcr.io/matheuscscp/gke-metadata-server/container:ci
 .PHONY: test
 test:
 	@if [ "${IMAGE}" == "" ]; then echo "IMAGE variable is required."; exit -1; fi
-	sed 's|GKE_METADATA_SERVER_IMAGE|${IMAGE}|g' k8s/test.yaml | tee >(kubectl --context kind-kind apply -f -)
-	sleep 120
-	kubectl --context kind-kind -n default logs test -c test -f
-	kubectl --context kind-kind -n kube-system describe $$(kubectl --context kind-kind -n kube-system get po -o name | grep gke)
-	kubectl --context kind-kind -n default describe po test
-	kubectl --context kind-kind -n kube-system logs ds/gke-metadata-server | jq
-	kubectl --context kind-kind -n default logs test -c gke-metadata-proxy | jq
+	sed 's|<GKE_METADATA_SERVER_IMAGE>|${IMAGE}|g' k8s/test.yaml | tee >(kubectl --context kind-kind apply -f -)
+	@while : ; do \
+		sleep 5; \
+		EXIT_CODE_1=$$(kubectl --context kind-kind -n default get po test -o jsonpath='{.status.containerStatuses[1].state.terminated.exitCode}'); \
+		EXIT_CODE_2=$$(kubectl --context kind-kind -n default get po test -o jsonpath='{.status.containerStatuses[2].state.terminated.exitCode}'); \
+		if [ -n "$$EXIT_CODE_1" ] && [ -n "$$EXIT_CODE_2" ]; then \
+			break; \
+		fi; \
+	done; \
+	echo "Container 'test'        exited with code $$EXIT_CODE_1"; \
+	echo "Container 'test-gcloud' exited with code $$EXIT_CODE_2"; \
+	kubectl --context kind-kind -n default logs test -c test -f; \
+	kubectl --context kind-kind -n default logs test -c test-gcloud -f; \
+	kubectl --context kind-kind -n kube-system describe $$(kubectl --context kind-kind -n kube-system get po -o name | grep gke); \
+	kubectl --context kind-kind -n default describe po test; \
+	kubectl --context kind-kind -n kube-system logs ds/gke-metadata-server | jq; \
+	kubectl --context kind-kind -n default logs test -c gke-metadata-proxy | jq; \
+	if [ "$$EXIT_CODE_1" != "0" ] || [ "$$EXIT_CODE_2" != "0" ]; then \
+		exit 1; \
+	fi
 
 .PHONY: dev-test
 dev-test:
@@ -65,7 +78,9 @@ push:
 	@if [ "${IMAGE}" == "" ]; then echo "IMAGE variable is required."; exit -1; fi
 	docker build . -t ${IMAGE}
 	docker push ${IMAGE}
+	mv .dockerignore .dockerignore.ignore
 	docker build . -t ${IMAGE}-test -f Dockerfile.test
+	mv .dockerignore.ignore .dockerignore
 	docker push ${IMAGE}-test
 
 .PHONY: dev-push
@@ -106,6 +121,28 @@ helm-upgrade:
 .PHONY: helm-diff
 helm-diff:
 	helm -n kube-system diff upgrade gke-metadata-server helm/gke-metadata-server/ -f k8s/dev-helm-values.yaml
+
+.PHONY: update-branch
+update-branch:
+	git add .
+	git stash
+	git fetch --prune --all --force --tags
+	git update-ref refs/heads/main origin/main
+	git rebase main
+	git stash pop
+
+.PHONY: drop-branch
+drop-branch:
+	if [ $$(git status --porcelain=v1 2>/dev/null | wc -l) -ne 0 ]; then \
+		git status; \
+		echo ""; \
+		echo "Are you sure? You have uncommitted changes, consider using scripts/update-branch.sh."; \
+		exit 1; \
+	fi
+
+	git fetch --prune --all --force --tags
+	git update-ref refs/heads/main origin/main
+	BRANCH=$$(git branch --show-current); git checkout main; git branch -D $$BRANCH
 
 .PHONY: bootstrap
 bootstrap:

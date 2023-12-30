@@ -20,16 +20,18 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-on: [pull_request]
+on:
+  push:
+    branches: [main]
 
 concurrency:
   group: continuous-integration
   cancel-in-progress: false
 
 jobs:
-  pull-request:
+  release:
     runs-on: ubuntu-latest
-    environment: pull-request
+    environment: release
     permissions:
       contents: read
       id-token: write
@@ -60,5 +62,5 @@ jobs:
       with:
         project_id: gke-metadata-server
         workload_identity_provider: projects/637293746831/locations/global/workloadIdentityPools/github-actions/providers/github-actions
-        service_account: pull-request@gke-metadata-server.iam.gserviceaccount.com
+        service_account: release@gke-metadata-server.iam.gserviceaccount.com
     - run: make ci-cluster ci-test
