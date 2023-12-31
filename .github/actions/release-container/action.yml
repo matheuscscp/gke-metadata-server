@@ -51,6 +51,7 @@ runs:
       IMAGE: ${{ inputs.repository }}:${{ inputs.version }}
   - id: get-digest
     run: echo "digest=$(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE)" >> $GITHUB_OUTPUT
+    shell: bash
     env:
       IMAGE: ${{ inputs.repository }}:${{ inputs.version }}
   - run: cosign sign --yes $IMAGE
