@@ -33,11 +33,6 @@ inputs:
 
 runs:
   using: composite
-  environment: release
-  permissions:
-    contents: read
-    id-token: write
-    packages: write
   steps:
   - uses: bsord/helm-push@v4.1.0
     with:
