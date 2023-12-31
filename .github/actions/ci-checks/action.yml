@@ -29,20 +29,28 @@ inputs:
 outputs:
   ghcr-container:
     description: Image repository in the GitHub Container Registry where to publish new versions of the container
+    value: ${{ steps.version-checks.outputs.ghcr-container }}
   ghcr-helm:
     description: Helm OCI repository in the GitHub Container Registry where to publish new versions of the Helm Chart
+    value: ${{ steps.version-checks.outputs.ghcr-helm }}
   dockerhub-container:
     description: Image repository in Docker Hub where to publish new versions of the container
+    value: ${{ steps.version-checks.outputs.dockerhub-container }}
   dockerhub-helm:
     description: Helm OCI repository in Docker Hub where to publish new versions of the Helm Chart
+    value: ${{ steps.version-checks.outputs.dockerhub-helm }}
   container-version:
     description: The SemVer version of the container
+    value: ${{ steps.version-checks.outputs.container-version }}
   helm-version:
     description: The SemVer version of the Helm Chart
+    value: ${{ steps.version-checks.outputs.helm-version }}
   release-container:
     description: Boolean (yes or no) telling whether a new version of the container must be released
+    value: ${{ steps.version-checks.outputs.release-container }}
   release-helm:
     description: Boolean (yes or no) telling whether a new version of the Helm Chart must be released
+    value: ${{ steps.version-checks.outputs.release-helm }}
 
 runs:
   using: composite
@@ -69,6 +77,7 @@ runs:
       username: ${{ github.actor }}
       password: ${{ inputs.github-token }}
   - name: Check Versions
+    id: version-checks
     shell: bash
     run: |
       GHCR_CONTAINER=ghcr.io/matheuscscp/gke-metadata-server
