@@ -33,6 +33,11 @@ inputs:
 
 runs:
   using: composite
+  environment: release
+  permissions:
+    contents: read
+    id-token: write
+    packages: write
   steps:
   - uses: bsord/helm-push@v4.1.0
     with:
@@ -41,7 +46,7 @@ runs:
       username: ${{ inputs.username }}
       access-token: ${{ inputs.access-token }}
       chart-folder: helm/gke-metadata-server
-  - run: cosign sign --identity-token=./cosign-token.txt $IMAGE
+  - run: cosign sign --yes $IMAGE
     shell: bash
     env:
       IMAGE: ${{ inputs.repository }}:${{ inputs.version }}

@@ -35,6 +35,11 @@ inputs:
 
 runs:
   using: composite
+  environment: release
+  permissions:
+    contents: read
+    id-token: write
+    packages: write
   steps:
   - uses: docker/login-action@v3
     with:
@@ -49,7 +54,7 @@ runs:
     shell: bash
     env:
       IMAGE: ${{ inputs.repository }}:${{ inputs.version }}
-  - run: cosign sign --identity-token=./cosign-token.txt $IMAGE
+  - run: cosign sign --yes $IMAGE
     shell: bash
     env:
       IMAGE: ${{ inputs.repository }}:${{ inputs.version }}
