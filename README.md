@@ -1,5 +1,6 @@
-gke-metadata-server
-===================
+# gke-metadata-server
+
+[![SLSA 2](https://slsa.dev/images/gh-badge-level2.svg)](./SLSA.md)
 
 A GKE Metadata Server *emulator* for making it easier to use GCP Workload Identity Federation
 inside non-GKE Kubernetes clusters, e.g. on-prem, bare-metal, managed Kubernetes from other
@@ -263,9 +264,10 @@ For manually verifying the images above use the [`cosign`](https://github.com/si
 CLI:
 
 ```bash
-cosign verify $IMAGE_AND_TAG \
+digest=$(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE_AND_TAG)
+cosign verify $digest -d \
     --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
-    --certificate-identity=repo:matheuscscp/gke-metadata-server:environment:release
+    --certificate-identity=https://github.com/matheuscscp/gke-metadata-server/.github/workflows/release.yml@refs/heads/main
 ```
 
 If you are using FluxCD for deploying Helm Charts, use
