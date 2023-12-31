@@ -32,8 +32,6 @@ inputs:
     required: true
   version:
     required: true
-  github-token:
-    required: true
 
 runs:
   using: composite
@@ -43,7 +41,7 @@ runs:
       registry: ${{ inputs.registry }}
       username: ${{ inputs.username }}
       password: ${{ inputs.password }}
-  - run: docker tag ghcr.io/matheuscscp/gke-metadata-server:ci $IMAGE
+  - run: docker tag ghcr.io/matheuscscp/gke-metadata-server/ci:ci $IMAGE
     shell: bash
     env:
       IMAGE: ${{ inputs.repository }}:${{ inputs.version }}
@@ -51,10 +49,9 @@ runs:
     shell: bash
     env:
       IMAGE: ${{ inputs.repository }}:${{ inputs.version }}
-  - run: cosign sign --identity-token=$GITHUB_TOKEN $IMAGE
+  - run: cosign sign --identity-token=./cosign-token.txt $IMAGE
     shell: bash
     env:
-      GITHUB_TOKEN: ${{ inputs.github-token }}
       IMAGE: ${{ inputs.repository }}:${{ inputs.version }}
   - run: |
       cosign verify $IMAGE \
