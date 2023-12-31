@@ -29,6 +29,7 @@ podAnnotations:
   prometheus.io/path: /metrics
 
 image:
+  repository: matheuscscp/gke-metadata-server-dev
   tag: dev
   pullPolicy: Always
 
