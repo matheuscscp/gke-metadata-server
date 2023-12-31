@@ -263,7 +263,9 @@ Run the [`cosign`](https://github.com/sigstore/cosign) CLI tool for verifying th
 of the production images described in the previous section:
 
 ```bash
-cosign verify $IMAGE_AND_TAG
+cosign verify $IMAGE_AND_TAG \
+    --certificate-github-workflow-repository="matheuscscp/gke-metadata-server" \
+    --certificate-github-workflow-name="release"
 ```
 
 # General Notes

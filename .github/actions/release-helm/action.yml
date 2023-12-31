@@ -48,7 +48,10 @@ runs:
     env:
       GITHUB_TOKEN: ${{ inputs.github-token }}
       IMAGE: ${{ inputs.repository }}:${{ inputs.version }}
-  - run: cosign verify $IMAGE
+  - run: |
+      cosign verify $IMAGE \
+        --certificate-github-workflow-repository="matheuscscp/gke-metadata-server" \
+        --certificate-github-workflow-name="release"
     shell: bash
     env:
       IMAGE: ${{ inputs.repository }}:${{ inputs.version }}
