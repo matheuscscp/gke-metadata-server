@@ -1,4 +1,4 @@
-cli
+gke-metadata-server-linux-amd64
 logs.txt
 .terraform*
 terraform.*

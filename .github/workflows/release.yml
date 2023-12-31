@@ -81,10 +81,6 @@ jobs:
         access-token: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
         repository: ${{ steps.ci-checks.outputs.dockerhub-helm }}
         version: ${{ steps.ci-checks.outputs.helm-version }}
-    - run: go build -o gke-metadata-server-linux-amd64 github.com/matheuscscp/gke-metadata-server/cmd
-      env:
-        GOOS: linux
-        GOARCH: amd64
     - name: Publish Release
       if: steps.ci-checks.outputs.release-container == 'yes' || steps.ci-checks.outputs.release-helm == 'yes'
       env:

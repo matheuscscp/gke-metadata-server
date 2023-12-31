@@ -34,9 +34,9 @@ tidy:
 	./scripts/license.sh
 	git status
 
-.PHONY: cli
-cli:
-	go build -o cli github.com/matheuscscp/gke-metadata-server/cmd
+.PHONY: gke-metadata-server-linux-amd64
+gke-metadata-server-linux-amd64:
+	GOOS=linux GOARCH=amd64 go build -o gke-metadata-server-linux-amd64 github.com/matheuscscp/gke-metadata-server/cmd
 
 DEV_IMAGE=matheuscscp/gke-metadata-server-dev:dev
 CI_IMAGE=ghcr.io/matheuscscp/gke-metadata-server/ci:ci
@@ -96,10 +96,10 @@ ci-push:
 	make push IMAGE=${CI_IMAGE}
 
 .PHONY: cluster
-cluster:
+cluster: gke-metadata-server-linux-amd64
 	@if [ "${CLUSTER_ENV}" == "" ]; then echo "CLUSTER_ENV variable is required."; exit -1; fi
 	kind create cluster --config k8s/${CLUSTER_ENV}-kind-config.yaml
-	go run ./cmd publish --bucket gke-metadata-server-issuer-test --key-prefix ${CLUSTER_ENV}
+	./gke-metadata-server-linux-amd64 publish --bucket gke-metadata-server-issuer-test --key-prefix ${CLUSTER_ENV}
 	helm -n kube-system install --wait gke-metadata-server helm/gke-metadata-server/ -f k8s/${CLUSTER_ENV}-helm-values.yaml
 
 .PHONY: dev-cluster
