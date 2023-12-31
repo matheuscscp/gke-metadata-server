@@ -83,18 +83,10 @@ jobs:
         repository: ${{ steps.ci-checks.outputs.dockerhub-helm }}
         version: ${{ steps.ci-checks.outputs.helm-version }}
         github-token: ${{ secrets.GITHUB_TOKEN }}
-    - name: Build Linux Binary
-      uses: ./.github/actions/release-binary/
-      with:
-        goos: linux
-    - name: Build Windows Binary
-      uses: ./.github/actions/release-binary/
-      with:
-        goos: windows
-    - name: Build Darwin Binary
-      uses: ./.github/actions/release-binary/
-      with:
-        goos: darwin
+    - run: go build -o gke-metadata-server-linux-amd64 github.com/matheuscscp/gke-metadata-server/cmd
+      env:
+        GOOS: linux
+        GOARCH: amd64
     - name: Publish Release
       if: steps.ci-checks.outputs.release-container == 'yes' || steps.ci-checks.outputs.release-helm == 'yes'
       env:
@@ -104,9 +96,6 @@ jobs:
       run: |
         gh release create "container-v${CONTAINER_VERSION}-helm-v${HELM_VERSION}" \
           gke-metadata-server-linux-amd64 \
-          gke-metadata-server-windows-amd64 \
-          gke-metadata-server-darwin-amd64 \
           --repo="$GITHUB_REPOSITORY" \
-          --title="${GITHUB_REPOSITORY#*/} ${tag#v}" \
           --generate-notes \
           --latest
