@@ -43,6 +43,7 @@ CI_IMAGE=ghcr.io/matheuscscp/gke-metadata-server:ci
 .PHONY: test
 test:
 	@if [ "${IMAGE}" == "" ]; then echo "IMAGE variable is required."; exit -1; fi
+	sleep 10
 	sed 's|<GKE_METADATA_SERVER_IMAGE>|${IMAGE}|g' k8s/test.yaml | tee >(kubectl --context kind-kind apply -f -)
 	while : ; do \
 		sleep 10; \
