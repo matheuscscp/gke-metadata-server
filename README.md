@@ -72,7 +72,7 @@ Steps:
 2. Configure Kubernetes ServiceAccount OIDC Discovery
 3. Configure GCP Workload Identity Federation for Kubernetes
 4. Deploy `gke-metadata-server` in your cluster
-5. (Optional) Verify Supply Chain Authenticity
+5. Verify Image Signatures (Supply Chain Provenance)
 
 ### Configure Kubernetes DNS
 
@@ -257,16 +257,22 @@ Alternatively, you can write your own Kubernetes manifests and consume only the 
 The value of `{tag}` is always a SemVer version. Please **DO NOT USE** `dev` and `ci` tags,
 as they do not represent official releases.
 
-### (Optional) Verify Supply Chain Authenticity
+### Verify Image Signatures (Supply Chain Provenance)
 
-Run the [`cosign`](https://github.com/sigstore/cosign) CLI tool for verifying the authenticity
-of the production images described in the previous section:
+For manually verifying the images above use the [`cosign`](https://github.com/sigstore/cosign)
+CLI:
 
 ```bash
 cosign verify $IMAGE_AND_TAG \
-    --certificate-github-workflow-repository="matheuscscp/gke-metadata-server" \
-    --certificate-github-workflow-name="release"
+    --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+    --certificate-identity=repo:matheuscscp/gke-metadata-server:environment:release
 ```
+
+If you are using FluxCD for deploying Helm Charts, use
+[Keyless Verification](https://fluxcd.io/flux/components/source/helmcharts/#keyless-verification).
+
+If you are using Kyverno for enforcing policies, use
+[Keyless Verification](https://kyverno.io/docs/writing-policies/verify-images/sigstore/#keyless-signing-and-verification).
 
 # General Notes
 

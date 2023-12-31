@@ -47,8 +47,8 @@ runs:
       IMAGE: ${{ inputs.repository }}:${{ inputs.version }}
   - run: |
       cosign verify $IMAGE \
-        --certificate-github-workflow-repository="matheuscscp/gke-metadata-server" \
-        --certificate-github-workflow-name="release"
+        --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+        --certificate-identity=repo:matheuscscp/gke-metadata-server:environment:release
     shell: bash
     env:
       IMAGE: ${{ inputs.repository }}:${{ inputs.version }}
