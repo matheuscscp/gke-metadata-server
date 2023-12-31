@@ -11,9 +11,8 @@ processes as [SLSA Level 2](https://slsa.dev/spec/v1.0/levels#build-l2-hosted-bu
 
 ### Version Control and Change Management
 
-The versions of the project are the Helm Chart version and the container image version.
-
-New versions are released via a GitOps workflow: they are retrieved from
+The versions of the project are the Helm Chart version and the container image
+version. New versions are released via a GitOps workflow: they are retrieved from
 `./helm/gke-metadata-server/Chart.yaml`, respectively `.version` and `.appVersion`.
 When a Pull Request changing those versions is merged, the new artifacts are built,
 tested, published, signed and verified (using `cosign`
@@ -30,6 +29,9 @@ do not provide Immutable Tags, e.g. like the GCP Artifact Registry.
 
 Migrating to the GCP Artifact Registry is left as future work required for
 assessing the project as SLSA Level 3.
+
+That said, the `release` workflow signs and verifies only image digests, which are
+always immutable.
 
 #### Verified History
 
@@ -48,7 +50,23 @@ WIP...
 
 ### Reproducible Builds
 
-- **Build Reproducibility**: [Explain how your builds are reproducible, including shared build scripts and environment configurations.]
+Our builds are reproducible as long as the folling dependencies are immutable:
+
+1. The base image for the `builder` stage of our container at: `golang:<go_version>-<alpine_version>`
+2. The base image for the final image of our container: `alpine:<alpine_version>`
+3. The image for running e2e tests with `gcloud` and `gsutil`: `google/cloud-sdk:<version>-slim`
+4. The GitHub Actions used by the `release` GitHub Workflow:
+    1. `actions/checkout@<version>` (Created by GitHub)
+    2. `actions/setup-go@<version>` (Created by GitHub)
+    3. `docker/login-action@<version>` (Created by Docker, Verified Creator)
+    4. `google-github-actions/auth@<version>` (Created by Google, Verified Creator)
+    5. `sigstore/cosign-installer@<version>` (Created by Sigstore, Verified Creator)
+    6. `bsord/helm-push@<version>` *(non-verified)*
+
+And as long as `go mod tidy` and `go mod download` working together bring immutable dependencies.
+
+If those upstreams can be compromised or tampered with, then the project loses the status of having fully reproducible builds and any SLSA Levels depending
+on this requirement.
 
 ### Isolated Build Environment
 
