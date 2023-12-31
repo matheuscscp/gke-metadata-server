@@ -30,8 +30,6 @@ inputs:
     required: true
   version:
     required: true
-  github-token:
-    required: true
 
 runs:
   using: composite
@@ -43,10 +41,9 @@ runs:
       username: ${{ inputs.username }}
       access-token: ${{ inputs.access-token }}
       chart-folder: helm/gke-metadata-server
-  - run: cosign sign --identity-token=$GITHUB_TOKEN $IMAGE
+  - run: cosign sign --identity-token=./cosign-token.txt $IMAGE
     shell: bash
     env:
-      GITHUB_TOKEN: ${{ inputs.github-token }}
       IMAGE: ${{ inputs.repository }}:${{ inputs.version }}
   - run: |
       cosign verify $IMAGE \

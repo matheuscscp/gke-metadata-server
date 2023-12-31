@@ -24,6 +24,6 @@ config:
   workloadIdentityProvider: projects/637293746831/locations/global/workloadIdentityPools/ci-kind-cluster/providers/test
 
 image:
-  repository: ghcr.io/matheuscscp/gke-metadata-server
+  repository: ghcr.io/matheuscscp/gke-metadata-server/ci
   tag: ci
   pullPolicy: Always

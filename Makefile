@@ -38,8 +38,8 @@ tidy:
 cli:
 	go build -o cli github.com/matheuscscp/gke-metadata-server/cmd
 
-DEV_IMAGE=matheuscscp/gke-metadata-server:dev
-CI_IMAGE=ghcr.io/matheuscscp/gke-metadata-server:ci
+DEV_IMAGE=matheuscscp/gke-metadata-server-dev:dev
+CI_IMAGE=ghcr.io/matheuscscp/gke-metadata-server/ci:ci
 .PHONY: test
 test:
 	@if [ "${IMAGE}" == "" ]; then echo "IMAGE variable is required."; exit -1; fi

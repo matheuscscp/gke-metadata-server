@@ -47,6 +47,9 @@ jobs:
         google-service-account-name: release
         github-token: ${{ secrets.GITHUB_TOKEN }}
     - uses: sigstore/cosign-installer@v3.3.0
+    - run: echo $GITHUB_TOKEN > ./cosign-token.txt
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     - name: Release container in GitHub Container Registry
       if: steps.ci-checks.outputs.release-container == 'yes'
       uses: ./.github/actions/release-container/
@@ -56,7 +59,6 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
         repository: ${{ steps.ci-checks.outputs.ghcr-container }}
         version: ${{ steps.ci-checks.outputs.container-version }}
-        github-token: ${{ secrets.GITHUB_TOKEN }}
     - name: Release container in Docker Hub
       if: steps.ci-checks.outputs.release-container == 'yes'
       uses: ./.github/actions/release-container/
@@ -66,7 +68,6 @@ jobs:
         password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
         repository: ${{ steps.ci-checks.outputs.dockerhub-container }}
         version: ${{ steps.ci-checks.outputs.container-version }}
-        github-token: ${{ secrets.GITHUB_TOKEN }}
     - name: Release Helm Chart in GitHub Container Registry
       if: steps.ci-checks.outputs.release-helm == 'yes'
       uses: ./.github/actions/release-helm/
@@ -75,7 +76,6 @@ jobs:
         access-token: ${{ secrets.GITHUB_TOKEN }}
         repository: ${{ steps.ci-checks.outputs.ghcr-helm }}
         version: ${{ steps.ci-checks.outputs.helm-version }}
-        github-token: ${{ secrets.GITHUB_TOKEN }}
     - name: Release Helm Chart in Docker Hub
       if: steps.ci-checks.outputs.release-helm == 'yes'
       uses: ./.github/actions/release-helm/
@@ -84,7 +84,6 @@ jobs:
         access-token: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
         repository: ${{ steps.ci-checks.outputs.dockerhub-helm }}
         version: ${{ steps.ci-checks.outputs.helm-version }}
-        github-token: ${{ secrets.GITHUB_TOKEN }}
     - run: go build -o gke-metadata-server-linux-amd64 github.com/matheuscscp/gke-metadata-server/cmd
       env:
         GOOS: linux
