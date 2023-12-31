@@ -23,9 +23,10 @@
 on:
   push:
     branches: [main]
+  workflow_dispatch: # for manual trigger in the UI
 
 concurrency:
-  group: continuous-integration
+  group: continuous-integration # pull-request and release share resources
   cancel-in-progress: false
 
 jobs:
@@ -38,29 +39,74 @@ jobs:
       packages: write
     steps:
     - uses: actions/checkout@v4
-    - uses: actions/setup-go@v4
+    - id: ci-checks
+      uses: ./.github/actions/ci-checks/
       with:
-        go-version: 1.21.5
-    - run: make tidy
-    - name: Fail if make tidy produced changes
-      run: |
-        if [ -n "$(git diff --name-only)" ] || [ -n "$(git status --porcelain | grep '??')" ]; then
-          git status
-          echo ""
-          echo "The command 'make tidy' produced differences."
-          echo "Please remember to run it locally before committing your changes."
-          echo ""
-          exit 1
-        fi
-    - uses: docker/login-action@v3
+        google-service-account-name: release
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+    - uses: sigstore/cosign-installer@v3.3.0
+    - name: Release container in GitHub Container Registry
+      if: steps.ci-checks.outputs.release-container == 'yes'
+      uses: ./.github/actions/release-container/
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
-    - run: make ci-push
-    - uses: google-github-actions/auth@v2
+        repository: ${{ steps.ci-checks.outputs.ghcr-container }}
+        version: ${{ steps.ci-checks.outputs.container-version }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Release container in Docker Hub
+      if: steps.ci-checks.outputs.release-container == 'yes'
+      uses: ./.github/actions/release-container/
       with:
-        project_id: gke-metadata-server
-        workload_identity_provider: projects/637293746831/locations/global/workloadIdentityPools/github-actions/providers/github-actions
-        service_account: release@gke-metadata-server.iam.gserviceaccount.com
-    - run: make ci-cluster ci-test
+        registry: registry.hub.docker.com
+        username: matheuscscp
+        password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+        repository: ${{ steps.ci-checks.outputs.dockerhub-container }}
+        version: ${{ steps.ci-checks.outputs.container-version }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Release Helm Chart in GitHub Container Registry
+      if: steps.ci-checks.outputs.release-helm == 'yes'
+      uses: ./.github/actions/release-helm/
+      with:
+        username: ${{ github.actor }}
+        access-token: ${{ secrets.GITHUB_TOKEN }}
+        repository: ${{ steps.ci-checks.outputs.ghcr-helm }}
+        version: ${{ steps.ci-checks.outputs.helm-version }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Release Helm Chart in Docker Hub
+      if: steps.ci-checks.outputs.release-helm == 'yes'
+      uses: ./.github/actions/release-helm/
+      with:
+        username: matheuscscp
+        access-token: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+        repository: ${{ steps.ci-checks.outputs.dockerhub-helm }}
+        version: ${{ steps.ci-checks.outputs.helm-version }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Build Linux Binary
+      uses: ./.github/actions/release-binary/
+      with:
+        goos: linux
+    - name: Build Windows Binary
+      uses: ./.github/actions/release-binary/
+      with:
+        goos: windows
+    - name: Build Darwin Binary
+      uses: ./.github/actions/release-binary/
+      with:
+        goos: darwin
+    - name: Publish Release
+      if: steps.ci-checks.outputs.release-container == 'yes' || steps.ci-checks.outputs.release-helm == 'yes'
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        CONTAINER_VERSION: ${{ steps.ci-checks.outputs.container-version }}
+        HELM_VERSION: ${{ steps.ci-checks.outputs.helm-version }}
+      run: |
+        gh release create "container-v${CONTAINER_VERSION}-helm-v${HELM_VERSION}" \
+          gke-metadata-server-linux-amd64 \
+          gke-metadata-server-windows-amd64 \
+          gke-metadata-server-darwin-amd64 \
+          --repo="$GITHUB_REPOSITORY" \
+          --title="${GITHUB_REPOSITORY#*/} ${tag#v}" \
+          --generate-notes \
+          --latest

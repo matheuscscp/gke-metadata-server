@@ -20,23 +20,16 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-on: [pull_request]
+name: Release a new version of the binary for the given GOOS
+inputs:
+  goos:
+    required: true
 
-concurrency:
-  group: continuous-integration # pull-request and release share resources
-  cancel-in-progress: false
-
-jobs:
-  pull-request:
-    runs-on: ubuntu-latest
-    environment: pull-request
-    permissions:
-      contents: read
-      id-token: write
-      packages: write
-    steps:
-    - uses: actions/checkout@v4
-    - uses: ./.github/actions/ci-checks/
-      with:
-        google-service-account-name: pull-request
-        github-token: ${{ secrets.GITHUB_TOKEN }}
+runs:
+  using: composite
+  steps:
+  - run: go build -o gke-metadata-server-${GOOS}-${GOARCH} github.com/matheuscscp/gke-metadata-server/cmd
+    shell: bash
+    env:
+      GOOS: ${{ inputs.goos }}
+      GOARCH: amd64
