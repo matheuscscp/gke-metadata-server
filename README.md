@@ -1,7 +1,5 @@
 # gke-metadata-server
 
-[![SLSA 2](https://slsa.dev/images/gh-badge-level2.svg)](./SLSA.md)
-
 A GKE Metadata Server *emulator* for making it easier to use GCP Workload Identity Federation
 inside non-GKE Kubernetes clusters, e.g. on-prem, bare-metal, managed Kubernetes from other
 clouds, etc. This implementation is heavily inspired by, and deployed in the same fashion of
@@ -73,7 +71,7 @@ Steps:
 2. Configure Kubernetes ServiceAccount OIDC Discovery
 3. Configure GCP Workload Identity Federation for Kubernetes
 4. Deploy `gke-metadata-server` in your cluster
-5. Verify Image Signatures (Supply Chain Provenance)
+5. Verify image signatures
 
 ### Configure Kubernetes DNS
 
@@ -246,7 +244,7 @@ configured and `gke-metadata-server` is properly deployed in your cluster, you'r
 A Helm Chart is available in the following [Helm OCI Repositories](https://helm.sh/docs/topics/registries/):
 
 1. `matheuscscp/gke-metadata-server-helm:{tag}` (Docker Hub)
-2. `ghcr.io/matheuscscp/gke-metadata-server/helm:{tag}` (GitHub Container Registry)
+2. `ghcr.io/matheuscscp/gke-metadata-server/helm/gke-metadata-server:{tag}` (GitHub Container Registry)
 
 See the Helm values API at [`./helm/gke-metadata-server/values.yaml`](./helm/gke-metadata-server/values.yaml).
 
@@ -255,17 +253,17 @@ Alternatively, you can write your own Kubernetes manifests and consume only the 
 1. `matheuscscp/gke-metadata-server:{tag}` (Docker Hub)
 2. `ghcr.io/matheuscscp/gke-metadata-server:{tag}` (GitHub Container Registry)
 
-The value of `{tag}` is always a SemVer version. Please **DO NOT USE** `dev` and `ci` tags,
-as they do not represent official releases.
+The value of `{tag}` is always a SemVer version.
 
-### Verify Image Signatures (Supply Chain Provenance)
+### Verify image signatures
 
 For manually verifying the images above use the [`cosign`](https://github.com/sigstore/cosign)
 CLI:
 
 ```bash
-digest=$(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE_AND_TAG)
-cosign verify $digest -d \
+docker pull $IMAGE_WITH_TAG; \
+IMAGE_WITH_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE_WITH_TAG); \
+cosign verify $IMAGE_WITH_DIGEST \
     --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
     --certificate-identity=https://github.com/matheuscscp/gke-metadata-server/.github/workflows/release.yml@refs/heads/main
 ```
@@ -275,12 +273,3 @@ If you are using FluxCD for deploying Helm Charts, use
 
 If you are using Kyverno for enforcing policies, use
 [Keyless Verification](https://kyverno.io/docs/writing-policies/verify-images/sigstore/#keyless-signing-and-verification).
-
-# General Notes
-
-Only a single long-lived secret was necessary for setting up the CI infrastructure of this project:
-`DOCKER_HUB_ACCESS_TOKEN` 👀
-
-Everything else in this repository runs using GCP Workload Identity Federation or the `GITHUB_TOKEN`, both
-the automatic tests testing the Workload Identity Federation features, and the GitHub Workflows themselves
-for performing ancillary CI tasks. All the tokens involved in these cases are short-lived.
