@@ -21,7 +21,7 @@
 # SOFTWARE.
 
 apiVersion: v2
-name: gke-metadata-server
+name: gke-metadata-server-helm
 description: |
   A Helm chart for Kubernetes that deploys gke-metadata-server, an add-on for enabling
   GCP Workload Identity in non-GKE clusters.

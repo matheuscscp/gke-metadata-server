@@ -20,44 +20,20 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-name: All CI Checks
 inputs:
   google-service-account-name:
     required: true
   github-token:
     required: true
-outputs:
-  ghcr-container:
-    description: Image repository in the GitHub Container Registry where to publish new versions of the container
-    value: ${{ steps.version-checks.outputs.ghcr-container }}
-  ghcr-helm:
-    description: Helm OCI repository in the GitHub Container Registry where to publish new versions of the Helm Chart
-    value: ${{ steps.version-checks.outputs.ghcr-helm }}
-  dockerhub-container:
-    description: Image repository in Docker Hub where to publish new versions of the container
-    value: ${{ steps.version-checks.outputs.dockerhub-container }}
-  dockerhub-helm:
-    description: Helm OCI repository in Docker Hub where to publish new versions of the Helm Chart
-    value: ${{ steps.version-checks.outputs.dockerhub-helm }}
-  container-version:
-    description: The SemVer version of the container
-    value: ${{ steps.version-checks.outputs.container-version }}
-  helm-version:
-    description: The SemVer version of the Helm Chart
-    value: ${{ steps.version-checks.outputs.helm-version }}
-  release-container:
-    description: Boolean (yes or no) telling whether a new version of the container must be released
-    value: ${{ steps.version-checks.outputs.release-container }}
-  release-helm:
-    description: Boolean (yes or no) telling whether a new version of the Helm Chart must be released
-    value: ${{ steps.version-checks.outputs.release-helm }}
 
 runs:
   using: composite
+
   steps:
   - uses: actions/setup-go@v4
     with:
       go-version: 1.21.5
+
   - run: make tidy
     shell: bash
   - name: Fail if make tidy produced changes
@@ -71,54 +47,24 @@ runs:
         echo ""
         exit 1
       fi
+
   - uses: docker/login-action@v3
     with:
       registry: ghcr.io
       username: ${{ github.actor }}
       password: ${{ inputs.github-token }}
-  - name: Check Versions
-    id: version-checks
+  - run: echo $password | helm registry login -u $username --password-stdin $registry
     shell: bash
-    run: |
-      GHCR_CONTAINER=ghcr.io/matheuscscp/gke-metadata-server
-      GHCR_HELM="${GHCR_CONTAINER}/helm"
-      DOCKERHUB_CONTAINER=registry.hub.docker.com/matheuscscp/gke-metadata-server
-      DOCKERHUB_HELM="${DOCKERHUB_CONTAINER}-helm"
-      echo "ghcr-container=${GHCR_CONTAINER}" >> $GITHUB_OUTPUT
-      echo "ghcr-helm=${GHCR_HELM}" >> $GITHUB_OUTPUT
-      echo "dockerhub-container=${DOCKERHUB_CONTAINER}" >> $GITHUB_OUTPUT
-      echo "dockerhub-helm=${DOCKERHUB_HELM}" >> $GITHUB_OUTPUT
-
-      CHART_PATH=./helm/gke-metadata-server/Chart.yaml
-      CONTAINER_VERSION=$(yq e '.appVersion' $CHART_PATH)
-      HELM_VERSION=$(yq e '.version' $CHART_PATH)
-      echo "container-version=${CONTAINER_VERSION}" >> $GITHUB_OUTPUT
-      echo "helm-version=${HELM_VERSION}" >> $GITHUB_OUTPUT
-
-      container_exists=$(docker manifest inspect ${GHCR_CONTAINER}:${CONTAINER_VERSION} > /dev/null && echo yes || echo no)
-      helm_exists=$(docker manifest inspect ${GHCR_HELM}/gke-metadata-server:${HELM_VERSION} > /dev/null && echo yes || echo no)
-      if [ "$helm_exists" == "yes" ] && [ "$container_exists" == "no" ]; then
-        echo "Must bump .version inside $CHART_PATH when bumping .appVersion."
-        exit 1
-      elif [ "$helm_exists" == "no" ] && [ "$container_exists" == "yes" ]; then
-        echo "Need to release new version of the Helm Chart image."
-        echo "release-container=no" >> $GITHUB_OUTPUT
-        echo "release-helm=yes" >> $GITHUB_OUTPUT
-      elif [ "$helm_exists" == "no" ] && [ "$container_exists" == "no" ]; then
-        echo "Need to release new versions for both images."
-        echo "release-container=yes" >> $GITHUB_OUTPUT
-        echo "release-helm=yes" >> $GITHUB_OUTPUT
-      else
-        echo "Both versions already exist. No release needed."
-        echo "release-container=no" >> $GITHUB_OUTPUT
-        echo "release-helm=no" >> $GITHUB_OUTPUT
-      fi
-  - run: make ci-push
-    shell: bash
+    env:
+      registry: ghcr.io
+      username: ${{ github.actor }}
+      password: ${{ inputs.github-token }}
   - uses: google-github-actions/auth@v2
     with:
       project_id: gke-metadata-server
       workload_identity_provider: projects/637293746831/locations/global/workloadIdentityPools/github-actions/providers/github-actions
       service_account: ${{ inputs.google-service-account-name }}@gke-metadata-server.iam.gserviceaccount.com
-  - run: make ci-cluster ci-test
+  - run: docker pull ghcr.io/matheuscscp/gke-metadata-server/test:go-test # speed up "go mod download"
+    shell: bash
+  - run: make ci-cluster push ci-test
     shell: bash

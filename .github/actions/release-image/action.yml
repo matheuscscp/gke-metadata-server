@@ -20,7 +20,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-name: Release a new version of the container in the given repository
 inputs:
   registry:
     required: true
@@ -28,40 +27,46 @@ inputs:
     required: true
   password:
     required: true
-  repository:
+  tested-image:
+    required: true
+  tested-digest:
+    required: true
+  image:
     required: true
   version:
     required: true
 
 runs:
   using: composite
+
   steps:
   - uses: docker/login-action@v3
     with:
       registry: ${{ inputs.registry }}
       username: ${{ inputs.username }}
       password: ${{ inputs.password }}
-  - run: docker tag ghcr.io/matheuscscp/gke-metadata-server/ci:ci $IMAGE
-    shell: bash
-    env:
-      IMAGE: ${{ inputs.repository }}:${{ inputs.version }}
-  - run: docker push $IMAGE
-    shell: bash
-    env:
-      IMAGE: ${{ inputs.repository }}:${{ inputs.version }}
-  - id: get-digest
-    run: echo "digest=$(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE | cut -d "@" -f2)" >> $GITHUB_OUTPUT
-    shell: bash
-    env:
-      IMAGE: ${{ inputs.repository }}:${{ inputs.version }}
-  - run: cosign sign --yes $IMAGE
-    shell: bash
-    env:
-      IMAGE: ${{ inputs.repository }}@${{ steps.get-digest.outputs.digest }}
+
   - run: |
-      cosign verify $IMAGE \
+      echo "IMAGE=${image}" >> $GITHUB_ENV
+      echo "IMAGE_WITH_TAG=${image}:${version}" >> $GITHUB_ENV
+      echo "IMAGE_WITH_DIGEST=${image}@${digest}" >> $GITHUB_ENV
+    shell: bash
+    env:
+      image: ${{ inputs.registry }}/${{ inputs.image }}
+      version: ${{ inputs.version }}
+      digest: ${{ inputs.tested-digest }}
+
+  - run: docker pull $tested_image && docker tag $tested_image $IMAGE_WITH_TAG
+    shell: bash
+    env:
+      tested_image: ${{ inputs.tested-image }}@${{ inputs.tested-digest }}
+
+  - run: docker push $IMAGE_WITH_TAG
+    shell: bash
+  - run: cosign sign --yes $IMAGE_WITH_DIGEST
+    shell: bash
+  - run: |
+      cosign verify $IMAGE_WITH_DIGEST \
         --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
         --certificate-identity=https://github.com/matheuscscp/gke-metadata-server/.github/workflows/release.yml@refs/heads/main
     shell: bash
-    env:
-      IMAGE: ${{ inputs.repository }}@${{ steps.get-digest.outputs.digest }}

@@ -87,11 +87,11 @@ func TestEmuPodServiceAccountTokenAPI(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	kubernetes, err := oidc.NewProvider(ctx, pkgtesting.ReplaceEnv(iss))
+	kubernetes, err := oidc.NewProvider(ctx, pkgtesting.EvalEnv(iss))
 	if err != nil {
 		t.Fatalf("error creating kubernetes serviceaccount oidc provider: %v", err)
 	}
-	_, err = kubernetes.VerifierContext(ctx, &oidc.Config{ClientID: pkgtesting.ReplaceEnv(aud)}).Verify(ctx, rawToken)
+	_, err = kubernetes.VerifierContext(ctx, &oidc.Config{ClientID: pkgtesting.EvalEnv(aud)}).Verify(ctx, rawToken)
 	if err != nil {
 		t.Fatalf("error verifying pod serviceaccount token: %v", err)
 	}

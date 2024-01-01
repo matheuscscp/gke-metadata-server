@@ -21,16 +21,8 @@
 # SOFTWARE.
 
 config:
-  workloadIdentityProvider: projects/637293746831/locations/global/workloadIdentityPools/dev-kind-cluster/providers/test
-
-podAnnotations:
-  prometheus.io/scrape: "true"
-  prometheus.io/port: "8080"
-  prometheus.io/path: /metrics
+  workloadIdentityProvider: projects/637293746831/locations/global/workloadIdentityPools/<TEST_ENV>-kind-cluster/providers/test
 
 image:
-  repository: matheuscscp/gke-metadata-server-dev
-  tag: dev
-  pullPolicy: Always
-
-timestampPodAnnotation: true
+  repository: ghcr.io/matheuscscp/gke-metadata-server/test
+  digest: <CONTAINER_DIGEST>
