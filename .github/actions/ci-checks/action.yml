@@ -96,7 +96,7 @@ runs:
       echo "helm-version=${HELM_VERSION}" >> $GITHUB_OUTPUT
 
       container_exists=$(docker manifest inspect ${GHCR_CONTAINER}:${CONTAINER_VERSION} > /dev/null && echo yes || echo no)
-      helm_exists=$(docker manifest inspect ${GHCR_HELM}:${HELM_VERSION} > /dev/null && echo yes || echo no)
+      helm_exists=$(docker manifest inspect ${GHCR_HELM}/gke-metadata-server:${HELM_VERSION} > /dev/null && echo yes || echo no)
       if [ "$helm_exists" == "yes" ] && [ "$container_exists" == "no" ]; then
         echo "Must bump .version inside $CHART_PATH when bumping .appVersion."
         exit 1

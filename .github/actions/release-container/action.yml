@@ -50,18 +50,18 @@ runs:
     env:
       IMAGE: ${{ inputs.repository }}:${{ inputs.version }}
   - id: get-digest
-    run: echo "digest=$(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE)" >> $GITHUB_OUTPUT
+    run: echo "digest=$(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE | cut -d "@" -f2)" >> $GITHUB_OUTPUT
     shell: bash
     env:
       IMAGE: ${{ inputs.repository }}:${{ inputs.version }}
   - run: cosign sign --yes $IMAGE
     shell: bash
     env:
-      IMAGE: ${{ steps.get-digest.outputs.digest }}
+      IMAGE: ${{ inputs.repository }}@${{ steps.get-digest.outputs.digest }}
   - run: |
-      cosign verify $IMAGE -d \
+      cosign verify $IMAGE \
         --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
         --certificate-identity=https://github.com/matheuscscp/gke-metadata-server/.github/workflows/release.yml@refs/heads/main
     shell: bash
     env:
-      IMAGE: ${{ steps.get-digest.outputs.digest }}
+      IMAGE: ${{ inputs.repository }}@${{ steps.get-digest.outputs.digest }}
