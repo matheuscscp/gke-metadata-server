@@ -23,7 +23,7 @@
 on: [pull_request]
 
 concurrency:
-  group: terraform-plan
+  group: terraform # additional lock for terraform state
   cancel-in-progress: false
 
 jobs:

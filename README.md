@@ -1,5 +1,6 @@
 # gke-metadata-server
 
+![release](https://img.shields.io/github/v/release/matheuscscp/gke-metadata-server?style=flat-square&color=blue)
 [![release](https://github.com/matheuscscp/gke-metadata-server/actions/workflows/release.yml/badge.svg?branch=main)](https://github.com/matheuscscp/gke-metadata-server/actions/workflows/release.yml)
 
 A GKE Metadata Server *emulator* for making it easier to use GCP Workload Identity Federation

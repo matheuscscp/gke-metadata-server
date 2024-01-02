@@ -166,6 +166,17 @@ resource "google_service_account_iam_member" "release_workload_identity_user" {
   member             = "${local.wi_member_prefix}:release"
 }
 
+resource "google_service_account" "clean_resources" {
+  project    = google_project.gke_metadata_server.name
+  account_id = "clean-resources"
+}
+
+resource "google_service_account_iam_member" "clean_resources_workload_identity_user" {
+  service_account_id = google_service_account.clean_resources.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "${local.wi_member_prefix}:clean-resources"
+}
+
 resource "google_project_iam_binding" "continuous_integration" {
   project = google_project.gke_metadata_server.name
   role    = google_project_iam_custom_role.continuous_integration.name
@@ -188,5 +199,21 @@ resource "google_storage_bucket_iam_binding" "ci_cluster_issuer_creators" {
   members = [
     google_service_account.pull_request.member,
     google_service_account.release.member,
+  ]
+}
+
+resource "google_project_iam_member" "resource_cleaner" {
+  project = google_project.gke_metadata_server.name
+  role    = google_project_iam_custom_role.resource_cleaner.name
+  member  = google_service_account.clean_resources.member
+}
+
+resource "google_project_iam_custom_role" "resource_cleaner" {
+  project = google_project.gke_metadata_server.name
+  title   = "Resource Cleaner"
+  role_id = "resourceClearner"
+  permissions = [
+    "iam.workloadIdentityPoolProviders.list",
+    "iam.workloadIdentityPoolProviders.delete",
   ]
 }

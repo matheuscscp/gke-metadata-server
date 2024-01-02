@@ -23,7 +23,7 @@
 on: [pull_request]
 
 concurrency:
-  group: continuous-integration # pull-request and release share resources
+  group: continuous-integration # lock for shared CI resources
   cancel-in-progress: false
 
 jobs:
