@@ -29,7 +29,7 @@ runs:
   steps:
   - run: |
       echo "IMAGE_WITH_TAG=${image}:$(cat container-version.txt)" >> $GITHUB_ENV
-      echo "IMAGE_WITH_DIGEST=${image}@${digest}" >> $GITHUB_ENV
+      echo "IMAGE_WITH_DIGEST=${image}@$(cat container-digest.txt)" >> $GITHUB_ENV
     shell: bash
     env:
       image: ${{ inputs.registry }}/matheuscscp/gke-metadata-server
