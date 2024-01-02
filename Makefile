@@ -72,16 +72,10 @@ push:
 
 	helm lint helm/gke-metadata-server
 	helm package helm/gke-metadata-server | tee helm-package.logs
-	helm push $$(basename $$(cat helm-package.logs | grep .tgz | awk '{print $$NF}')) oci://${BASE_IMAGE} 2>&1 | tee helm-push.logs
+	basename $$(cat helm-package.logs | grep .tgz | awk '{print $$NF}') > helm-package.txt
+	helm push $$(cat helm-package.txt) oci://${BASE_IMAGE} 2>&1 | tee helm-push.logs
 	cat helm-push.logs | grep Pushed: | awk '{print $$NF}' | cut -d ":" -f2 > helm-version.txt
 	cat helm-push.logs | grep Digest: | awk '{print $$NF}' > helm-digest.txt
-
-	helm pull ${HELM_IMAGE} --version $$(cat helm-version.txt) 2>&1 | tee helm-pull.logs
-	pull_digest=$$(cat helm-pull.logs | grep Digest: | awk '{print $$NF}'); \
-	if [ "$$(cat helm-digest.txt)" != "$$pull_digest" ]; then \
-		echo "OCI Helm Chart digests differ. Digest on push: $$(cat helm-digest.txt), Digest on pull: $$pull_digest"; \
-		exit 1; \
-	fi
 
 .PHONY: test
 test:
@@ -94,6 +88,12 @@ ci-test:
 .PHONY: run-test
 run-test:
 	@if [ "${TEST_ENV}" == "" ]; then echo "TEST_ENV variable is required."; exit -1; fi
+	helm pull ${HELM_IMAGE} --version $$(cat helm-version.txt) 2>&1 | tee helm-pull.logs
+	pull_digest=$$(cat helm-pull.logs | grep Digest: | awk '{print $$NF}'); \
+	if [ "$$(cat helm-digest.txt)" != "$$pull_digest" ]; then \
+		echo "Error: Helm OCI artifact digests are different. Digest on push: $$(cat helm-digest.txt), Digest on pull: $$pull_digest"; \
+		exit 1; \
+	fi
 	sed "s|<TEST_ENV>|${TEST_ENV}|g" k8s/test-helm-values.yaml | \
 		sed "s|<CONTAINER_DIGEST>|$$(cat container-digest.txt)|g" | \
 		tee >(helm --kube-context kind-kind -n kube-system upgrade --install --wait gke-metadata-server ${HELM_IMAGE} --version $$(cat helm-version.txt) -f -)
