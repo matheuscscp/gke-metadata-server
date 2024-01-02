@@ -43,6 +43,22 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Update README.md in Docker Hub
+      env:
+        DOCKER_HUB_ACCESS_TOKEN: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+      run: |
+        jq -n --arg desc "$(cat README.md)" '{"full_description": $desc}' > README.md.json
+        curl -X PATCH \
+          -H "Authorization: JWT ${DOCKER_HUB_ACCESS_TOKEN}" \
+          -H "Content-Type: application/json" \
+          --data @README.md.json \
+          "https://hub.docker.com/v2/repositories/matheuscscp/gke-metadata-server/"
+        curl -X PATCH \
+          -H "Authorization: JWT ${DOCKER_HUB_ACCESS_TOKEN}" \
+          -H "Content-Type: application/json" \
+          --data @README.md.json \
+          "https://hub.docker.com/v2/repositories/matheuscscp/gke-metadata-server-helm/"
+
     - name: Check new releases
       id: release-check
       run: |
@@ -72,7 +88,6 @@ jobs:
         fi
 
     - uses: ./.github/actions/ci-checks/
-      if: steps.release-check.outputs.release-container == 'yes' || steps.release-check.outputs.release-helm == 'yes'
       with:
         google-service-account-name: release
         github-token: ${{ secrets.GITHUB_TOKEN }}
