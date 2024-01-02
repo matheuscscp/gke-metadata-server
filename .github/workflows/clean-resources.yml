@@ -21,26 +21,38 @@
 # SOFTWARE.
 
 on:
-  push:
-    branches: [main]
+  schedule: # runs at 09:00 UTC every day
+  - cron:  0 9 * * *
+  workflow_dispatch: # for manual trigger in the UI
 
 concurrency:
-  group: terraform # additional lock for terraform state
+  group: continuous-integration # lock for shared CI resources
   cancel-in-progress: false
 
 jobs:
-  terraform-apply:
+  clean-resources:
     runs-on: ubuntu-latest
-    environment: terraform-apply
+    environment: clean-resources
     permissions:
-      contents: read
       id-token: write
     steps:
-    - uses: actions/checkout@v4
     - uses: google-github-actions/auth@v2
       with:
         project_id: gke-metadata-server
         workload_identity_provider: projects/637293746831/locations/global/workloadIdentityPools/github-actions/providers/github-actions
-        service_account: tf-apply@gke-metadata-server.iam.gserviceaccount.com
-    - uses: hashicorp/setup-terraform@v3
-    - run: cd terraform/ && terraform init && terraform apply -auto-approve
+        service_account: clean-resources@gke-metadata-server.iam.gserviceaccount.com
+
+    - name: Clean up Workload Identity Pool Providers
+      run: |
+        PREFIX=projects/637293746831/locations/global/workloadIdentityPools/test-kind-cluster/providers/test-
+        for provider in $(gcloud iam workload-identity-pools providers list \
+          --location="global" \
+          --workload-identity-pool="test-kind-cluster" \
+          --format="value(name)" \
+          --filter="name:$PREFIX*"); do
+          echo "Deleting provider: $provider"
+          gcloud iam workload-identity-pools providers delete $provider \
+            --location="global" \
+            --workload-identity-pool="test-kind-cluster" \
+            --quiet
+        done
