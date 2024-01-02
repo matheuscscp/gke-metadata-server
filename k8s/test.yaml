@@ -57,16 +57,14 @@ spec:
     ip: 169.254.169.254
   initContainers:
   - name: init-gke-metadata-proxy
-    image: <GKE_METADATA_SERVER_IMAGE>
-    imagePullPolicy: Always
+    image: ghcr.io/matheuscscp/gke-metadata-server/test@<CONTAINER_DIGEST>
     args: [init-network]
     securityContext:
       capabilities:
         add: [NET_ADMIN]
   containers:
   - name: gke-metadata-proxy
-    image: <GKE_METADATA_SERVER_IMAGE>
-    imagePullPolicy: Always
+    image: ghcr.io/matheuscscp/gke-metadata-server/test@<CONTAINER_DIGEST>
     args: [sidecar]
     env:
     - name: NODE_IP
@@ -82,11 +80,10 @@ spec:
   # with the well-known GCE/GKE Metadata APIs backed by the emulator. The custom APIs of
   # the emulator are also tested.
   - name: test
-    image: <GKE_METADATA_SERVER_IMAGE>-test
-    imagePullPolicy: Always
+    image: ghcr.io/matheuscscp/gke-metadata-server/test@<GO_TEST_DIGEST>
     env:
-    - name: TEST_IMAGE
-      value: <GKE_METADATA_SERVER_IMAGE>
+    - name: TEST_ENV
+      value: <TEST_ENV>
 
   # This container demonstrates vanilla "Worload Identity Federation with Kubernetes".
   # The custom API of the emulator shown below returns a (non-secret) JSON with a

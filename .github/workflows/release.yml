@@ -39,57 +39,121 @@ jobs:
       contents: read
       id-token: write
       packages: write
+
     steps:
     - uses: actions/checkout@v4
-    - id: ci-checks
-      uses: ./.github/actions/ci-checks/
+    - uses: ./.github/actions/ci-checks/
       with:
         google-service-account-name: release
         github-token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Version Release Checks
+      id: version-checks
+      run: |
+        CHART_PATH=./helm/gke-metadata-server/Chart.yaml
+        CONTAINER_VERSION=$(yq e '.appVersion' $CHART_PATH)
+        HELM_VERSION=$(yq e '.version' $CHART_PATH)
+        echo "container-version=${CONTAINER_VERSION}" >> $GITHUB_OUTPUT
+        echo "helm-version=${HELM_VERSION}" >> $GITHUB_OUTPUT
+
+        CONTAINER_IMAGE=ghcr.io/matheuscscp/gke-metadata-server:${CONTAINER_VERSION}
+        HELM_IMAGE=ghcr.io/matheuscscp/gke-metadata-server-helm:${HELM_VERSION}
+        docker pull ${CONTAINER_IMAGE} || true
+        docker pull ${HELM_IMAGE} || true
+        container_exists=$(docker manifest inspect ${CONTAINER_IMAGE} > /dev/null && echo yes || echo no)
+        helm_exists=$(docker manifest inspect ${HELM_IMAGE} > /dev/null && echo yes || echo no)
+
+        echo "tested-container=$(cat container-digest.txt)" >> $GITHUB_OUTPUT
+        echo "tested-helm=$(cat helm-digest.txt)" >> $GITHUB_OUTPUT
+
+        if [ "$helm_exists" == "yes" ] && [ "$container_exists" == "no" ]; then
+          echo "Must bump .version inside $CHART_PATH when bumping .appVersion."
+          exit 1
+        elif [ "$helm_exists" == "no" ] && [ "$container_exists" == "yes" ]; then
+          echo "Need to release new version of the Helm Chart image."
+          echo "release-container=no" >> $GITHUB_OUTPUT
+          echo "release-helm=yes" >> $GITHUB_OUTPUT
+        elif [ "$helm_exists" == "no" ] && [ "$container_exists" == "no" ]; then
+          echo "Need to release new versions for both images."
+          echo "release-container=yes" >> $GITHUB_OUTPUT
+          echo "release-helm=yes" >> $GITHUB_OUTPUT
+        else
+          echo "Both versions already exist. No release needed."
+          echo "release-container=no" >> $GITHUB_OUTPUT
+          echo "release-helm=no" >> $GITHUB_OUTPUT
+        fi
+
     - uses: sigstore/cosign-installer@v3.3.0
-    - name: Release container in GitHub Container Registry
-      if: steps.ci-checks.outputs.release-container == 'yes'
-      uses: ./.github/actions/release-container/
+      if: steps.version-checks.outputs.release-container == 'yes' || steps.version-checks.outputs.release-helm == 'yes'
+
+    - name: Release Container in GitHub Container Registry
+      if: steps.version-checks.outputs.release-container == 'yes'
+      uses: ./.github/actions/release-image/
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
-        repository: ${{ steps.ci-checks.outputs.ghcr-container }}
-        version: ${{ steps.ci-checks.outputs.container-version }}
-    - name: Release container in Docker Hub
-      if: steps.ci-checks.outputs.release-container == 'yes'
-      uses: ./.github/actions/release-container/
+        tested-image: ghcr.io/matheuscscp/gke-metadata-server/test
+        tested-digest: ${{ steps.version-checks.outputs.tested-container }}
+        image: matheuscscp/gke-metadata-server
+        version: ${{ steps.version-checks.outputs.container-version }}
+    - name: Release Container in Docker Hub
+      if: steps.version-checks.outputs.release-container == 'yes'
+      uses: ./.github/actions/release-image/
       with:
         registry: registry.hub.docker.com
         username: matheuscscp
         password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
-        repository: ${{ steps.ci-checks.outputs.dockerhub-container }}
-        version: ${{ steps.ci-checks.outputs.container-version }}
-    - name: Release Helm Chart in GitHub Container Registry
-      if: steps.ci-checks.outputs.release-helm == 'yes'
-      uses: ./.github/actions/release-helm/
-      with:
-        username: ${{ github.actor }}
-        access-token: ${{ secrets.GITHUB_TOKEN }}
-        repository: ${{ steps.ci-checks.outputs.ghcr-helm }}
-        version: ${{ steps.ci-checks.outputs.helm-version }}
-    - name: Release Helm Chart in Docker Hub
-      if: steps.ci-checks.outputs.release-helm == 'yes'
-      uses: ./.github/actions/release-helm/
-      with:
-        username: matheuscscp
-        access-token: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
-        repository: ${{ steps.ci-checks.outputs.dockerhub-helm }}
-        version: ${{ steps.ci-checks.outputs.helm-version }}
-    - name: Publish Release
-      if: steps.ci-checks.outputs.release-container == 'yes' || steps.ci-checks.outputs.release-helm == 'yes'
+        tested-image: ghcr.io/matheuscscp/gke-metadata-server/test
+        tested-digest: ${{ steps.version-checks.outputs.tested-container }}
+        image: matheuscscp/gke-metadata-server
+        version: ${{ steps.version-checks.outputs.container-version }}
+    - name: Release Container in GitHub
+      if: steps.version-checks.outputs.release-container == 'yes'
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        CONTAINER_VERSION: ${{ steps.ci-checks.outputs.container-version }}
-        HELM_VERSION: ${{ steps.ci-checks.outputs.helm-version }}
+        CONTAINER_VERSION: ${{ steps.version-checks.outputs.container-version }}
       run: |
-        gh release create "container-v${CONTAINER_VERSION}-helm-v${HELM_VERSION}" \
+        gh release create v${CONTAINER_VERSION} \
+          container-digest.txt \
           gke-metadata-server-linux-amd64 \
+          gke-metadata-server-linux-amd64.sha256sum \
           --repo="$GITHUB_REPOSITORY" \
           --generate-notes \
           --latest
+
+    - name: Release Helm Chart in GitHub Container Registry
+      if: steps.version-checks.outputs.release-helm == 'yes'
+      uses: ./.github/actions/release-image/
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+        tested-image: ghcr.io/matheuscscp/gke-metadata-server/test/gke-metadata-server-helm
+        tested-digest: ${{ steps.version-checks.outputs.tested-helm }}
+        image: matheuscscp/gke-metadata-server-helm
+        version: ${{ steps.version-checks.outputs.helm-version }}
+    - name: Release Helm Chart in Docker Hub
+      if: steps.version-checks.outputs.release-helm == 'yes'
+      uses: ./.github/actions/release-image/
+      with:
+        registry: registry.hub.docker.com
+        username: matheuscscp
+        password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+        tested-image: ghcr.io/matheuscscp/gke-metadata-server/test/gke-metadata-server-helm
+        tested-digest: ${{ steps.version-checks.outputs.tested-helm }}
+        image: matheuscscp/gke-metadata-server-helm
+        version: ${{ steps.version-checks.outputs.helm-version }}
+    - name: Release Helm Chart in GitHub
+      if: steps.version-checks.outputs.release-helm == 'yes'
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        HELM_VERSION: ${{ steps.version-checks.outputs.helm-version }}
+      run: |
+        gh release create helm-v${HELM_VERSION} \
+          helm-digest.txt \
+          gke-metadata-server-linux-amd64 \
+          gke-metadata-server-linux-amd64.sha256sum \
+          --repo="$GITHUB_REPOSITORY" \
+          --generate-notes \
+          --latest=false

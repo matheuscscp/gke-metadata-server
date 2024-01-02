@@ -134,17 +134,12 @@ func requestURL(t *testing.T, headers http.Header, url, name, expectedContentTyp
 	return resp.Body
 }
 
-func env() string {
-	s := strings.Split(os.Getenv("TEST_IMAGE"), ":")
-	return s[len(s)-1]
-}
-
-func ReplaceEnv(s string) string {
-	return strings.ReplaceAll(s, "TEST_ENV", env())
+func EvalEnv(s string) string {
+	return strings.ReplaceAll(s, "TEST_ENV", os.Getenv("TEST_ENV"))
 }
 
 func CheckRegex(t *testing.T, pattern, value string) {
-	pattern = "^" + ReplaceEnv(pattern) + "$"
+	pattern = "^" + EvalEnv(pattern) + "$"
 	re, err := regexp.Compile(pattern)
 	if err != nil {
 		t.Errorf("error compiling regex %s: %v", pattern, err)

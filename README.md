@@ -243,17 +243,21 @@ configured and `gke-metadata-server` is properly deployed in your cluster, you'r
 
 A Helm Chart is available in the following [Helm OCI Repositories](https://helm.sh/docs/topics/registries/):
 
-1. `matheuscscp/gke-metadata-server-helm:{tag}` (Docker Hub)
-2. `ghcr.io/matheuscscp/gke-metadata-server/helm/gke-metadata-server:{tag}` (GitHub Container Registry)
+1. `matheuscscp/gke-metadata-server-helm:{helm_version}` (Docker Hub)
+2. `ghcr.io/matheuscscp/gke-metadata-server-helm:{helm_version}` (GitHub Container Registry)
+
+Where `{helm_version}` is a Helm Chart SemVer, i.e. the field `.version` at
+[`./helm/gke-metadata-server/Chart.yaml`](./helm/gke-metadata-server/Chart.yaml).
 
 See the Helm values API at [`./helm/gke-metadata-server/values.yaml`](./helm/gke-metadata-server/values.yaml).
 
 Alternatively, you can write your own Kubernetes manifests and consume only the container images:
 
-1. `matheuscscp/gke-metadata-server:{tag}` (Docker Hub)
-2. `ghcr.io/matheuscscp/gke-metadata-server:{tag}` (GitHub Container Registry)
+1. `matheuscscp/gke-metadata-server:{container_version}` (Docker Hub)
+2. `ghcr.io/matheuscscp/gke-metadata-server:{container_version}` (GitHub Container Registry)
 
-The value of `{tag}` is always a SemVer version.
+Where `{container_version}` is the app version, i.e. the field `.appVersion` at
+[`./helm/gke-metadata-server/Chart.yaml`](./helm/gke-metadata-server/Chart.yaml).
 
 ### Verify image signatures
 

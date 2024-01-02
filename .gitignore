@@ -1,4 +1,6 @@
-gke-metadata-server-linux-amd64
-logs.txt
+gke-metadata-server-linux-amd64*
+*.txt
+*.logs
+*.tgz
 .terraform*
 terraform.*

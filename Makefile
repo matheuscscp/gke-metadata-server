@@ -22,8 +22,11 @@
 
 SHELL := /bin/bash
 
+BASE_IMAGE := ghcr.io/matheuscscp/gke-metadata-server/test
+HELM_IMAGE := oci://${BASE_IMAGE}/gke-metadata-server-helm
+
 .PHONY: all
-all: dev-push helm-upgrade
+all: gke-metadata-server-linux-amd64 push
 
 .PHONY: tidy
 tidy:
@@ -36,15 +39,69 @@ tidy:
 
 .PHONY: gke-metadata-server-linux-amd64
 gke-metadata-server-linux-amd64:
-	GOOS=linux GOARCH=amd64 go build -o gke-metadata-server-linux-amd64 github.com/matheuscscp/gke-metadata-server/cmd
+	GOOS=linux GOARCH=amd64 go build -o $@ github.com/matheuscscp/gke-metadata-server/cmd
+	sha256sum $@ > $@.sha256sum
 
-DEV_IMAGE=matheuscscp/gke-metadata-server-dev:dev
-CI_IMAGE=ghcr.io/matheuscscp/gke-metadata-server/ci:ci
+.PHONY: dev-cluster
+dev-cluster:
+	kind delete cluster || true
+	make cluster CLUSTER_ENV=dev
+	kubens kube-system
+
+.PHONY: ci-cluster
+ci-cluster:
+	make cluster CLUSTER_ENV=ci
+
+.PHONY: cluster
+cluster: gke-metadata-server-linux-amd64
+	@if [ "${CLUSTER_ENV}" == "" ]; then echo "CLUSTER_ENV variable is required."; exit -1; fi
+	kind create cluster --config k8s/${CLUSTER_ENV}-kind-config.yaml
+	./gke-metadata-server-linux-amd64 publish --bucket gke-metadata-server-issuer-test --key-prefix ${CLUSTER_ENV}
+
+.PHONY: push
+push:
+	docker build . -t ${BASE_IMAGE}:container
+	docker push ${BASE_IMAGE}:container | tee docker-push.logs
+	cat docker-push.logs | grep digest: | awk '{print $$3}' > container-digest.txt
+
+	mv .dockerignore .dockerignore.ignore
+	docker build . -t ${BASE_IMAGE}:go-test -f Dockerfile.test
+	mv .dockerignore.ignore .dockerignore
+	docker push ${BASE_IMAGE}:go-test | tee docker-push.logs
+	cat docker-push.logs | grep digest: | awk '{print $$3}' > go-test-digest.txt
+
+	helm lint helm/gke-metadata-server
+	helm package helm/gke-metadata-server | tee helm-package.logs
+	helm push $$(basename $$(cat helm-package.logs | grep .tgz | awk '{print $$NF}')) oci://${BASE_IMAGE} 2>&1 | tee helm-push.logs
+	cat helm-push.logs | grep Pushed: | awk '{print $$NF}' | cut -d ":" -f2 > helm-version.txt
+	cat helm-push.logs | grep Digest: | awk '{print $$NF}' > helm-digest.txt
+
+	helm pull ${HELM_IMAGE} --version $$(cat helm-version.txt) 2>&1 | tee helm-pull.logs
+	pull_digest=$$(cat helm-pull.logs | grep Digest: | awk '{print $$NF}'); \
+	if [ "$$(cat helm-digest.txt)" != "$$pull_digest" ]; then \
+		echo "OCI Helm Chart digests differ. Digest on push: $$(cat helm-digest.txt), Digest on pull: $$pull_digest"; \
+		exit 1; \
+	fi
+
 .PHONY: test
 test:
-	@if [ "${IMAGE}" == "" ]; then echo "IMAGE variable is required."; exit -1; fi
-	sleep 10
-	sed 's|<GKE_METADATA_SERVER_IMAGE>|${IMAGE}|g' k8s/test.yaml | tee >(kubectl --context kind-kind apply -f -)
+	make run-test TEST_ENV=dev
+
+.PHONY: ci-test
+ci-test:
+	make run-test TEST_ENV=ci
+
+.PHONY: run-test
+run-test:
+	@if [ "${TEST_ENV}" == "" ]; then echo "TEST_ENV variable is required."; exit -1; fi
+	sed "s|<TEST_ENV>|${TEST_ENV}|g" k8s/test-helm-values.yaml | \
+		sed "s|<CONTAINER_DIGEST>|$$(cat container-digest.txt)|g" | \
+		tee >(helm --kube-context kind-kind -n kube-system upgrade --install --wait gke-metadata-server ${HELM_IMAGE} --version $$(cat helm-version.txt) -f -)
+	kubectl --context kind-kind -n default delete po test || true
+	sed "s|<TEST_ENV>|${TEST_ENV}|g" k8s/test.yaml | \
+		sed "s|<CONTAINER_DIGEST>|$$(cat container-digest.txt)|g" | \
+		sed "s|<GO_TEST_DIGEST>|$$(cat go-test-digest.txt)|g" | \
+		tee >(kubectl --context kind-kind apply -f -)
 	while : ; do \
 		sleep 10; \
 		EXIT_CODE_1=$$(kubectl --context kind-kind -n default get po test -o jsonpath='{.status.containerStatuses[1].state.terminated.exitCode}'); \
@@ -66,63 +123,9 @@ test:
 		exit 1; \
 	fi
 
-.PHONY: dev-test
-dev-test:
-	kubectl --context kind-kind -n default delete po test || true
-	make test IMAGE=${DEV_IMAGE}
-
-.PHONY: ci-test
-ci-test:
-	make test IMAGE=${CI_IMAGE}
-
-.PHONY: push
-push:
-	@if [ "${IMAGE}" == "" ]; then echo "IMAGE variable is required."; exit -1; fi
-	docker build . -t ${IMAGE}
-	docker push ${IMAGE}
-	mv .dockerignore .dockerignore.ignore
-	docker build . -t ${IMAGE}-test -f Dockerfile.test
-	mv .dockerignore.ignore .dockerignore
-	docker push ${IMAGE}-test
-
-.PHONY: dev-push
-dev-push:
-	make push IMAGE=${DEV_IMAGE}
-
-.PHONY: ci-push
-ci-push:
-	docker pull ${CI_IMAGE} || true
-	docker pull ${CI_IMAGE}-test || true
-	make push IMAGE=${CI_IMAGE}
-
-.PHONY: cluster
-cluster: gke-metadata-server-linux-amd64
-	@if [ "${CLUSTER_ENV}" == "" ]; then echo "CLUSTER_ENV variable is required."; exit -1; fi
-	kind create cluster --config k8s/${CLUSTER_ENV}-kind-config.yaml
-	./gke-metadata-server-linux-amd64 publish --bucket gke-metadata-server-issuer-test --key-prefix ${CLUSTER_ENV}
-	helm -n kube-system install --wait gke-metadata-server helm/gke-metadata-server/ -f k8s/${CLUSTER_ENV}-helm-values.yaml
-
-.PHONY: dev-cluster
-dev-cluster:
-	kind delete cluster
-	make cluster CLUSTER_ENV=dev
-	kubens kube-system
-	helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-	helm repo update
-	helm -n prometheus install --wait prometheus prometheus-community/prometheus --create-namespace
-	@echo "\nDevelopment cluster created successfully."
-
-.PHONY: ci-cluster
-ci-cluster:
-	make cluster CLUSTER_ENV=ci
-
-.PHONY: helm-upgrade
-helm-upgrade:
-	helm -n kube-system upgrade --wait gke-metadata-server helm/gke-metadata-server/ -f k8s/dev-helm-values.yaml
-
 .PHONY: helm-diff
 helm-diff:
-	helm -n kube-system diff upgrade gke-metadata-server helm/gke-metadata-server/ -f k8s/dev-helm-values.yaml
+	sed "s|<TEST_ENV>|dev|g" k8s/test-helm-values.yaml | helm --kube-context kind-kind -n kube-system diff upgrade gke-metadata-server helm/gke-metadata-server -f -
 
 .PHONY: update-branch
 update-branch:

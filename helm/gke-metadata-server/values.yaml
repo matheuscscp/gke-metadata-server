@@ -59,8 +59,12 @@ resources: {}
 image:
   repository: matheuscscp/gke-metadata-server
   pullPolicy: IfNotPresent
+
   # Overrides the image tag whose default is the chart appVersion.
   # tag: some-tag
+
+  # Overrides the image tag whose default is the chart appVersion (stronger than tag).
+  # digest: some-digest
 
 # This is a very powerful, critical infrastructure application, granting properly configured GCP access to
 # all the workloads inside a Kubernetes cluster. It should reside in the kube-system namespace.
