@@ -66,18 +66,18 @@ func RequestIDToken(t *testing.T, headers http.Header, url, name, expectedMetada
 	if nAuds := len(aud); nAuds != 1 {
 		t.Errorf("jwt %s does not have exactly one aud claim: %v", name, nAuds)
 	} else {
-		CheckRegex(t, expectedAudience, aud[0])
+		CheckRegex(t, name, expectedAudience, aud[0])
 	}
 	iss, err := token.Claims.GetIssuer()
 	if err != nil {
 		t.Errorf("error getting %s jwt iss claim: %v", name, err)
 	}
-	CheckRegex(t, expectedIssuer, iss)
+	CheckRegex(t, name, expectedIssuer, iss)
 	sub, err := token.Claims.GetSubject()
 	if err != nil {
 		t.Errorf("error getting %s jwt sub claim: %v", name, err)
 	}
-	CheckRegex(t, expectedSubject, sub)
+	CheckRegex(t, name, expectedSubject, sub)
 	exp, err := token.Claims.GetExpirationTime()
 	if err != nil {
 		t.Errorf("error getting %s jwt exp claim: %v", name, err)
@@ -135,18 +135,18 @@ func requestURL(t *testing.T, headers http.Header, url, name, expectedContentTyp
 }
 
 func EvalEnv(s string) string {
-	return strings.ReplaceAll(s, "TEST_ENV", os.Getenv("TEST_ENV"))
+	return strings.ReplaceAll(s, "TEST_ID", os.Getenv("TEST_ID"))
 }
 
-func CheckRegex(t *testing.T, pattern, value string) {
+func CheckRegex(t *testing.T, name, pattern, value string) {
 	pattern = "^" + EvalEnv(pattern) + "$"
 	re, err := regexp.Compile(pattern)
 	if err != nil {
-		t.Errorf("error compiling regex %s: %v", pattern, err)
+		t.Errorf("error compiling regex %s for %s: %v", pattern, name, err)
 		return
 	}
 	if !re.MatchString(value) {
-		t.Errorf("value '%s' does not match regex %s", value, pattern)
+		t.Errorf("value '%s' does not match regex %s for %s", value, pattern, name)
 	}
 }
 

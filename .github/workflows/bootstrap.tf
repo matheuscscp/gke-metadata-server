@@ -166,9 +166,25 @@ resource "google_service_account_iam_member" "release_workload_identity_user" {
   member             = "${local.wi_member_prefix}:release"
 }
 
-resource "google_storage_bucket_iam_binding" "cluster_issuer_admins" {
+resource "google_project_iam_binding" "continuous_integration" {
+  project = google_project.gke_metadata_server.name
+  role    = google_project_iam_custom_role.continuous_integration.name
+  members = [
+    google_service_account.pull_request.member,
+    google_service_account.release.member,
+  ]
+}
+
+resource "google_project_iam_custom_role" "continuous_integration" {
+  project     = google_project.gke_metadata_server.name
+  title       = "Continuous Integration"
+  role_id     = "continuousIntegration"
+  permissions = ["iam.workloadIdentityPoolProviders.create"]
+}
+
+resource "google_storage_bucket_iam_binding" "ci_cluster_issuer_creators" {
   bucket = "gke-metadata-server-issuer-test"
-  role   = "roles/storage.objectAdmin"
+  role   = "roles/storage.objectCreator"
   members = [
     google_service_account.pull_request.member,
     google_service_account.release.member,

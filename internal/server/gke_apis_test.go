@@ -60,7 +60,7 @@ func TestGKEServiceAccountIdentityAPI(t *testing.T) {
 
 	rawToken := pkgtesting.RequestIDToken(t, gkeHeaders, url, "google id token", gkeMetadataFlavor, aud, iss, sub)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	google, err := oidc.NewProvider(ctx, iss)
 	if err != nil {

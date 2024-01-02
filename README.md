@@ -21,8 +21,8 @@ Federation work together by themselves. This tool just makes it so your Pods nee
 configuration to use Workload Identity Federation (some level of configuration is still required,
 but, for example, the full Workload Identity Provider resource name is hidden from the
 client Pods and kept only as part of the emulator, see a full example at
-[`./k8s/test.yaml`](./k8s/test.yaml)), and the integration is closer to how native GKE Workload
-Identity works (but still not perfect, as the impersonation IAM settings are still slightly
+[`./k8s/test-pod.yaml`](./k8s/test-pod.yaml)), and the integration is closer to how native GKE
+Workload Identity works (but still not perfect, as the impersonation IAM settings are still slightly
 different, see the
 [Configure GCP Workload Identity Federation for Kubernetes](#configure-gcp-workload-identity-federation-for-kubernetes)
 section below).
@@ -152,7 +152,7 @@ echo "https://storage.googleapis.com/$ISSUER_GCS_URI/openid/v1/jwks"
 
 Configuring the OIDC Issuer and JWKS URIs usually implies restarting the Kubernetes Control Plane for
 specifying the required API server binary arguments (e.g. see the KinD development configuration at
-[`./k8s/dev-kind-config.yaml`](./k8s/dev-kind-config.yaml)).
+[`./k8s/test-kind-config.yaml`](./k8s/test-kind-config.yaml)).
 
 ```bash
 # the --service-account-issuer k8s API server CLI flag will be the following (short URL form,

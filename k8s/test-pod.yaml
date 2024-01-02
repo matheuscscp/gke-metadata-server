@@ -82,8 +82,8 @@ spec:
   - name: test
     image: ghcr.io/matheuscscp/gke-metadata-server/test@<GO_TEST_DIGEST>
     env:
-    - name: TEST_ENV
-      value: <TEST_ENV>
+    - name: TEST_ID
+      value: <TEST_ID>
 
   # This container demonstrates vanilla "Worload Identity Federation with Kubernetes".
   # The custom API of the emulator shown below returns a (non-secret) JSON with a
