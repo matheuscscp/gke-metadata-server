@@ -43,33 +43,19 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Update README.md in Docker Hub
-      env:
-        DOCKER_HUB_ACCESS_TOKEN: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
-      run: |
-        jq -n --arg desc "$(cat README.md)" '{"full_description": $desc}' > README.md.json
-        curl -X PATCH \
-          -H "Authorization: JWT ${DOCKER_HUB_ACCESS_TOKEN}" \
-          -H "Content-Type: application/json" \
-          --data @README.md.json \
-          "https://hub.docker.com/v2/repositories/matheuscscp/gke-metadata-server/"
-        curl -X PATCH \
-          -H "Authorization: JWT ${DOCKER_HUB_ACCESS_TOKEN}" \
-          -H "Content-Type: application/json" \
-          --data @README.md.json \
-          "https://hub.docker.com/v2/repositories/matheuscscp/gke-metadata-server-helm/"
-
     - name: Check new releases
       id: release-check
       run: |
         CHART_PATH=./helm/gke-metadata-server/Chart.yaml
+
         yq e '.appVersion' $CHART_PATH > container-version.txt
         CONTAINER_IMAGE=ghcr.io/matheuscscp/gke-metadata-server:$(cat container-version.txt)
-        HELM_IMAGE=ghcr.io/matheuscscp/gke-metadata-server-helm:$(yq e '.version' $CHART_PATH)
-        docker pull ${CONTAINER_IMAGE} || true
-        docker pull ${HELM_IMAGE} || true
-        container_exists=$(docker manifest inspect ${CONTAINER_IMAGE} > /dev/null && echo yes || echo no)
-        helm_exists=$(docker manifest inspect ${HELM_IMAGE} > /dev/null && echo yes || echo no)
+
+        HELM_IMAGE=oci://ghcr.io/matheuscscp/gke-metadata-server-helm
+        HELM_VERSION=$(yq e '.version' $CHART_PATH)
+
+        container_exists=$(docker pull $CONTAINER_IMAGE > /dev/null && echo yes || echo no)
+        helm_exists=$(helm pull $HELM_IMAGE --version $HELM_VERSION > /dev/null && echo yes || echo no)
         if [ "$helm_exists" == "yes" ] && [ "$container_exists" == "no" ]; then
           echo "Must bump .version inside $CHART_PATH when bumping .appVersion."
           exit 1
@@ -95,29 +81,11 @@ jobs:
     - uses: sigstore/cosign-installer@v3.3.0
       if: steps.release-check.outputs.release-container == 'yes' || steps.release-check.outputs.release-helm == 'yes'
 
-    - uses: docker/login-action@v3
-      if: steps.release-check.outputs.release-container == 'yes' || steps.release-check.outputs.release-helm == 'yes'
-      with:
-        registry: registry.hub.docker.com
-        username: matheuscscp
-        password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
-    - run: echo $password | helm registry login -u $username --password-stdin $registry
-      if: steps.release-check.outputs.release-container == 'yes' || steps.release-check.outputs.release-helm == 'yes'
-      env:
-        registry: registry.hub.docker.com
-        username: matheuscscp
-        password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
-
     - name: Release Container in GitHub Container Registry
       if: steps.release-check.outputs.release-container == 'yes'
       uses: ./.github/actions/release-container/
       with:
         registry: ghcr.io
-    - name: Release Container in Docker Hub
-      if: steps.release-check.outputs.release-container == 'yes'
-      uses: ./.github/actions/release-container/
-      with:
-        registry: registry.hub.docker.com
     - name: Release Container in GitHub
       if: steps.release-check.outputs.release-container == 'yes'
       env:
@@ -136,11 +104,6 @@ jobs:
       uses: ./.github/actions/release-helm/
       with:
         registry: ghcr.io
-    - name: Release Helm Chart in Docker Hub
-      if: steps.release-check.outputs.release-helm == 'yes'
-      uses: ./.github/actions/release-helm/
-      with:
-        registry: registry.hub.docker.com
     - name: Release Helm Chart in GitHub
       if: steps.release-check.outputs.release-helm == 'yes'
       env:
