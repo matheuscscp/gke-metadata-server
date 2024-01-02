@@ -243,20 +243,18 @@ configured and `gke-metadata-server` is properly deployed in your cluster, you'r
 
 ### Deploy `gke-metadata-server` in your cluster
 
-A Helm Chart is available in the following [Helm OCI Repositories](https://helm.sh/docs/topics/registries/):
+A Helm Chart is available in the following [Helm OCI Repository](https://helm.sh/docs/topics/registries/):
 
-1. `matheuscscp/gke-metadata-server-helm:{helm_version}` (Docker Hub)
-2. `ghcr.io/matheuscscp/gke-metadata-server-helm:{helm_version}` (GitHub Container Registry)
+`ghcr.io/matheuscscp/gke-metadata-server-helm:{helm_version}` (GitHub Container Registry)
 
 Where `{helm_version}` is a Helm Chart SemVer, i.e. the field `.version` at
 [`./helm/gke-metadata-server/Chart.yaml`](./helm/gke-metadata-server/Chart.yaml).
 
 See the Helm values API at [`./helm/gke-metadata-server/values.yaml`](./helm/gke-metadata-server/values.yaml).
 
-Alternatively, you can write your own Kubernetes manifests and consume only the container images:
+Alternatively, you can write your own Kubernetes manifests and consume only the container image:
 
-1. `matheuscscp/gke-metadata-server:{container_version}` (Docker Hub)
-2. `ghcr.io/matheuscscp/gke-metadata-server:{container_version}` (GitHub Container Registry)
+`ghcr.io/matheuscscp/gke-metadata-server:{container_version}` (GitHub Container Registry)
 
 Where `{container_version}` is the app version, i.e. the field `.appVersion` at
 [`./helm/gke-metadata-server/Chart.yaml`](./helm/gke-metadata-server/Chart.yaml).
@@ -264,12 +262,22 @@ Where `{container_version}` is the app version, i.e. the field `.appVersion` at
 ### Verify image signatures
 
 For manually verifying the images above use the [`cosign`](https://github.com/sigstore/cosign)
-CLI:
+CLI tool.
+
+For verifying the image of a given Container GitHub Release (tags `v{container_version}`), fetch the
+digest file `container-digest.txt` attached to the release and use it with `cosign`:
 
 ```bash
-docker pull $IMAGE_WITH_TAG; \
-IMAGE_WITH_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE_WITH_TAG); \
-cosign verify $IMAGE_WITH_DIGEST \
+cosign verify ghcr.io/matheuscscp/gke-metadata-server@$(cat container-digest.txt) \
+    --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+    --certificate-identity=https://github.com/matheuscscp/gke-metadata-server/.github/workflows/release.yml@refs/heads/main
+```
+
+For verifying the image of a given Helm Chart GitHub Release (tags `helm-v{helm_version}`), fetch the
+digest file `helm-digest.txt` attached to the release and use it with `cosign`:
+
+```bash
+cosign verify ghcr.io/matheuscscp/gke-metadata-server-helm@$(cat helm-digest.txt) \
     --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
     --certificate-identity=https://github.com/matheuscscp/gke-metadata-server/.github/workflows/release.yml@refs/heads/main
 ```
