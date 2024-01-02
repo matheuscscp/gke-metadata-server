@@ -28,6 +28,10 @@ HELM_IMAGE := oci://${BASE_IMAGE}/gke-metadata-server-helm
 .PHONY: all
 all: gke-metadata-server-linux-amd64 push
 
+.PHONY: test-id.txt
+test-id.txt:
+	echo "test-$$(openssl rand -hex 12)" | tee test-id.txt
+
 .PHONY: tidy
 tidy:
 	go mod tidy
@@ -42,21 +46,24 @@ gke-metadata-server-linux-amd64:
 	GOOS=linux GOARCH=amd64 go build -o $@ github.com/matheuscscp/gke-metadata-server/cmd
 	sha256sum $@ > $@.sha256sum
 
-.PHONY: dev-cluster
-dev-cluster:
+.PHONY: cluster
+cluster: gke-metadata-server-linux-amd64
 	kind delete cluster || true
-	make cluster CLUSTER_ENV=dev
+	kind create cluster --config k8s/test-kind-config.yaml
+	./gke-metadata-server-linux-amd64 publish --bucket gke-metadata-server-issuer-test --key-prefix test
 	kubens kube-system
 
 .PHONY: ci-cluster
-ci-cluster:
-	make cluster CLUSTER_ENV=ci
-
-.PHONY: cluster
-cluster: gke-metadata-server-linux-amd64
-	@if [ "${CLUSTER_ENV}" == "" ]; then echo "CLUSTER_ENV variable is required."; exit -1; fi
-	kind create cluster --config k8s/${CLUSTER_ENV}-kind-config.yaml
-	./gke-metadata-server-linux-amd64 publish --bucket gke-metadata-server-issuer-test --key-prefix ${CLUSTER_ENV}
+ci-cluster: test-id.txt gke-metadata-server-linux-amd64
+	sed -i "s|/test|/$$(cat test-id.txt)|g" k8s/test-kind-config.yaml
+	kind create cluster --config k8s/test-kind-config.yaml
+	./gke-metadata-server-linux-amd64 publish --bucket gke-metadata-server-issuer-test --key-prefix $$(cat test-id.txt)
+	gcloud iam workload-identity-pools providers create-oidc $$(cat test-id.txt) \
+		--project=gke-metadata-server \
+		--location=global \
+		--workload-identity-pool=test-kind-cluster \
+		--issuer-uri=https://storage.googleapis.com/gke-metadata-server-issuer-test/$$(cat test-id.txt) \
+		--attribute-mapping="google.subject=assertion.sub"
 
 .PHONY: push
 push:
@@ -79,34 +86,37 @@ push:
 
 .PHONY: test
 test:
-	make run-test TEST_ENV=dev
+	make run-test TEST_ID=test
 
 .PHONY: ci-test
 ci-test:
-	make run-test TEST_ENV=ci
+	make run-test TEST_ID=$$(cat test-id.txt)
 
 .PHONY: run-test
 run-test:
-	@if [ "${TEST_ENV}" == "" ]; then echo "TEST_ENV variable is required."; exit -1; fi
+	@if [ "${TEST_ID}" == "" ]; then echo "TEST_ID variable is required."; exit -1; fi
 	helm pull ${HELM_IMAGE} --version $$(cat helm-version.txt) 2>&1 | tee helm-pull.logs
 	pull_digest=$$(cat helm-pull.logs | grep Digest: | awk '{print $$NF}'); \
 	if [ "$$(cat helm-digest.txt)" != "$$pull_digest" ]; then \
 		echo "Error: Helm OCI artifact digests are different. Digest on push: $$(cat helm-digest.txt), Digest on pull: $$pull_digest"; \
 		exit 1; \
 	fi
-	sed "s|<TEST_ENV>|${TEST_ENV}|g" k8s/test-helm-values.yaml | \
+	sed "s|<TEST_ID>|${TEST_ID}|g" k8s/test-helm-values.yaml | \
 		sed "s|<CONTAINER_DIGEST>|$$(cat container-digest.txt)|g" | \
 		tee >(helm --kube-context kind-kind -n kube-system upgrade --install --wait gke-metadata-server ${HELM_IMAGE} --version $$(cat helm-version.txt) -f -)
 	kubectl --context kind-kind -n default delete po test || true
-	sed "s|<TEST_ENV>|${TEST_ENV}|g" k8s/test.yaml | \
+	sed "s|<TEST_ID>|${TEST_ID}|g" k8s/test-pod.yaml | \
 		sed "s|<CONTAINER_DIGEST>|$$(cat container-digest.txt)|g" | \
 		sed "s|<GO_TEST_DIGEST>|$$(cat go-test-digest.txt)|g" | \
 		tee >(kubectl --context kind-kind apply -f -)
 	while : ; do \
-		sleep 10; \
+		sleep_secs=10; \
+		echo "Sleeping for $$sleep_secs secs and checking test Pod status..."; \
+		sleep $$sleep_secs; \
 		EXIT_CODE_1=$$(kubectl --context kind-kind -n default get po test -o jsonpath='{.status.containerStatuses[1].state.terminated.exitCode}'); \
 		EXIT_CODE_2=$$(kubectl --context kind-kind -n default get po test -o jsonpath='{.status.containerStatuses[2].state.terminated.exitCode}'); \
 		if [ -n "$$EXIT_CODE_1" ] && [ -n "$$EXIT_CODE_2" ]; then \
+			echo "Both containers exited"; \
 			break; \
 		fi; \
 	done; \
@@ -117,15 +127,17 @@ run-test:
 	kubectl --context kind-kind -n default logs test -c gke-metadata-proxy | jq; \
 	kubectl --context kind-kind -n default logs test -c test -f; \
 	kubectl --context kind-kind -n default logs test -c test-gcloud -f; \
-	echo "Container 'test'        exited with code $$EXIT_CODE_1"; \
-	echo "Container 'test-gcloud' exited with code $$EXIT_CODE_2"; \
+	echo "Container 'test'        exit code: $$EXIT_CODE_1"; \
+	echo "Container 'test-gcloud' exit code: $$EXIT_CODE_2"; \
 	if [ "$$EXIT_CODE_1" != "0" ] || [ "$$EXIT_CODE_2" != "0" ]; then \
+		echo "Failure."; \
 		exit 1; \
-	fi
+	fi; \
+	echo "Success."
 
 .PHONY: helm-diff
 helm-diff:
-	sed "s|<TEST_ENV>|dev|g" k8s/test-helm-values.yaml | helm --kube-context kind-kind -n kube-system diff upgrade gke-metadata-server helm/gke-metadata-server -f -
+	sed "s|<TEST_ID>|test|g" k8s/test-helm-values.yaml | helm --kube-context kind-kind -n kube-system diff upgrade gke-metadata-server helm/gke-metadata-server -f -
 
 .PHONY: update-branch
 update-branch:
@@ -151,3 +163,7 @@ drop-branch:
 .PHONY: bootstrap
 bootstrap:
 	cd .github/workflows/ && terraform init && terraform apply
+
+.PHONY: plan
+plan:
+	cd terraform/ && terraform init && terraform plan

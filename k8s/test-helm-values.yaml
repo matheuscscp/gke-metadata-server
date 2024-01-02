@@ -21,7 +21,7 @@
 # SOFTWARE.
 
 config:
-  workloadIdentityProvider: projects/637293746831/locations/global/workloadIdentityPools/<TEST_ENV>-kind-cluster/providers/test
+  workloadIdentityProvider: projects/637293746831/locations/global/workloadIdentityPools/test-kind-cluster/providers/<TEST_ID>
 
 image:
   repository: ghcr.io/matheuscscp/gke-metadata-server/test

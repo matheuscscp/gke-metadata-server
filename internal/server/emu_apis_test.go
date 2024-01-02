@@ -65,7 +65,7 @@ func TestEmuPodGoogleCredConfigAPI(t *testing.T) {
 
 	pkgtesting.RequestJSON(t, emuHeaders, url, "google credential config", emuMetadataFlavor, &respBody)
 
-	pkgtesting.CheckRegex(t, workloadIdentityProviderAudience, respBody.Audience)
+	pkgtesting.CheckRegex(t, "workload identity provider audience", workloadIdentityProviderAudience, respBody.Audience)
 	assert.Equal(t, "external_account", respBody.Type)
 	assert.Equal(t, "urn:ietf:params:oauth:token-type:jwt", respBody.SubjectTokenType)
 	assert.Equal(t, "https://sts.googleapis.com/v1/token", respBody.TokenURL)
@@ -80,7 +80,7 @@ func TestEmuPodServiceAccountTokenAPI(t *testing.T) {
 	const url = "http://metadata.google.internal/gkeMetadataEmulator/v1/pod/service-account/token"
 
 	const aud = workloadIdentityProviderAudience
-	const iss = "https://storage.googleapis.com/gke-metadata-server-issuer-test/TEST_ENV"
+	const iss = "https://storage.googleapis.com/gke-metadata-server-issuer-test/TEST_ID"
 	const sub = "system:serviceaccount:default:test"
 
 	rawToken := pkgtesting.RequestIDToken(t, emuHeaders, url, "pod serviceaccount token", emuMetadataFlavor, aud, iss, sub)
@@ -97,4 +97,4 @@ func TestEmuPodServiceAccountTokenAPI(t *testing.T) {
 	}
 }
 
-const workloadIdentityProviderAudience = "//iam.googleapis.com/projects/637293746831/locations/global/workloadIdentityPools/TEST_ENV-kind-cluster/providers/test"
+const workloadIdentityProviderAudience = "//iam.googleapis.com/projects/637293746831/locations/global/workloadIdentityPools/test-kind-cluster/providers/TEST_ID"

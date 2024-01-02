@@ -43,6 +43,11 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - uses: ./.github/actions/ci-checks/
+      with:
+        google-service-account-name: release
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+
     - name: Check new releases
       id: release-check
       run: |
@@ -72,11 +77,6 @@ jobs:
           echo "release-container=no" >> $GITHUB_OUTPUT
           echo "release-helm=no" >> $GITHUB_OUTPUT
         fi
-
-    - uses: ./.github/actions/ci-checks/
-      with:
-        google-service-account-name: release
-        github-token: ${{ secrets.GITHUB_TOKEN }}
 
     - uses: sigstore/cosign-installer@v3.3.0
       if: steps.release-check.outputs.release-container == 'yes' || steps.release-check.outputs.release-helm == 'yes'
