@@ -173,7 +173,7 @@ Steps:
 Docs: [link](https://cloud.google.com/iam/docs/workload-identity-federation-with-kubernetes).
 
 Examples for all the configurations described in this section are available here:
-[`./terraform/main.tf`](./terraform/main.tf). This is where we provision the
+[`./terraform/test.tf`](./terraform/test.tf). This is where we provision the
 infrastructure required for testing this project in CI and development.
 
 #### Pool and Provider
