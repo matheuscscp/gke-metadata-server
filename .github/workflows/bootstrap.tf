@@ -47,6 +47,11 @@ resource "google_project_service" "iam" {
   service = "iam.googleapis.com"
 }
 
+resource "google_project_service" "cloud_resource_manager" {
+  project = google_project.gke_metadata_server.name
+  service = "cloudresourcemanager.googleapis.com"
+}
+
 resource "google_service_account" "plan" {
   project    = google_project.gke_metadata_server.name
   account_id = "tf-plan"
@@ -142,78 +147,4 @@ resource "google_iam_workload_identity_pool_provider" "github_actions" {
   attribute_mapping = {
     "google.subject" = "assertion.sub" # repo:{repo_org}/{repo_name}:environment:{env_name}
   }
-}
-
-resource "google_service_account" "pull_request" {
-  project    = google_project.gke_metadata_server.name
-  account_id = "pull-request"
-}
-
-resource "google_service_account_iam_member" "pull_request_workload_identity_user" {
-  service_account_id = google_service_account.pull_request.name
-  role               = "roles/iam.workloadIdentityUser"
-  member             = "${local.wi_member_prefix}:pull-request"
-}
-
-resource "google_service_account" "release" {
-  project    = google_project.gke_metadata_server.name
-  account_id = "release"
-}
-
-resource "google_service_account_iam_member" "release_workload_identity_user" {
-  service_account_id = google_service_account.release.name
-  role               = "roles/iam.workloadIdentityUser"
-  member             = "${local.wi_member_prefix}:release"
-}
-
-resource "google_service_account" "clean_resources" {
-  project    = google_project.gke_metadata_server.name
-  account_id = "clean-resources"
-}
-
-resource "google_service_account_iam_member" "clean_resources_workload_identity_user" {
-  service_account_id = google_service_account.clean_resources.name
-  role               = "roles/iam.workloadIdentityUser"
-  member             = "${local.wi_member_prefix}:clean-resources"
-}
-
-resource "google_project_iam_binding" "continuous_integration" {
-  project = google_project.gke_metadata_server.name
-  role    = google_project_iam_custom_role.continuous_integration.name
-  members = [
-    google_service_account.pull_request.member,
-    google_service_account.release.member,
-  ]
-}
-
-resource "google_project_iam_custom_role" "continuous_integration" {
-  project     = google_project.gke_metadata_server.name
-  title       = "Continuous Integration"
-  role_id     = "continuousIntegration"
-  permissions = ["iam.workloadIdentityPoolProviders.create"]
-}
-
-resource "google_storage_bucket_iam_binding" "ci_cluster_issuer_creators" {
-  bucket = "gke-metadata-server-issuer-test"
-  role   = "roles/storage.objectCreator"
-  members = [
-    google_service_account.pull_request.member,
-    google_service_account.release.member,
-  ]
-}
-
-resource "google_project_iam_member" "resource_cleaner" {
-  project = google_project.gke_metadata_server.name
-  role    = google_project_iam_custom_role.resource_cleaner.name
-  member  = google_service_account.clean_resources.member
-}
-
-resource "google_project_iam_custom_role" "resource_cleaner" {
-  project = google_project.gke_metadata_server.name
-  title   = "Resource Cleaner"
-  role_id = "resourceClearner"
-  permissions = [
-    "iam.workloadIdentityPoolProviders.list",
-    "iam.workloadIdentityPoolProviders.delete",
-  ]
 }
