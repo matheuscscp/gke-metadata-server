@@ -25,6 +25,8 @@ inputs:
     required: true
   github-token:
     required: true
+  cache-key:
+    required: false
 
 runs:
   using: composite
@@ -64,7 +66,20 @@ runs:
       project_id: gke-metadata-server
       workload_identity_provider: projects/637293746831/locations/global/workloadIdentityPools/github-actions/providers/github-actions
       service_account: ${{ inputs.google-service-account-name }}@gke-metadata-server.iam.gserviceaccount.com
-  - run: docker pull ghcr.io/matheuscscp/gke-metadata-server/test:go-test # speed up "go mod download"
+
+  - if: ${{ inputs.cache-key != '' }}
+    run: echo "CACHE_IMAGE=ghcr.io/matheuscscp/gke-metadata-server/ci-cache/${CACHE_KEY}:go-build" >> $GITHUB_ENV
     shell: bash
+    env:
+      CACHE_KEY: ${{ inputs.cache-key }}
+
+  - if: ${{ inputs.cache-key != '' }}
+    run: docker pull $CACHE_IMAGE || true
+    shell: bash
+
   - run: make ci-cluster push ci-test
+    shell: bash
+
+  - if: ${{ inputs.cache-key != '' }}
+    run: docker build . -t $CACHE_IMAGE --target builder
     shell: bash

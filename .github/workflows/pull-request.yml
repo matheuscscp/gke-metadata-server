@@ -40,3 +40,4 @@ jobs:
       with:
         google-service-account-name: pull-request
         github-token: ${{ secrets.GITHUB_TOKEN }}
+        cache-key: pull-request-${{ github.event.pull_request.number }}
