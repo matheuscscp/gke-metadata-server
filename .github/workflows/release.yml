@@ -43,51 +43,23 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - uses: ./.github/actions/ci-checks/
+    - id: ci-checks
+      uses: ./.github/actions/ci-checks/
       with:
         google-service-account-name: release
         github-token: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Check new releases
-      id: release-check
-      run: |
-        CHART_PATH=./helm/gke-metadata-server/Chart.yaml
-
-        yq e '.appVersion' $CHART_PATH > container-version.txt
-        CONTAINER_IMAGE=ghcr.io/matheuscscp/gke-metadata-server:$(cat container-version.txt)
-
-        HELM_IMAGE=oci://ghcr.io/matheuscscp/gke-metadata-server-helm
-        HELM_VERSION=$(yq e '.version' $CHART_PATH)
-
-        container_exists=$(docker pull $CONTAINER_IMAGE > /dev/null && echo yes || echo no)
-        helm_exists=$(helm pull $HELM_IMAGE --version $HELM_VERSION > /dev/null && echo yes || echo no)
-        if [ "$helm_exists" == "yes" ] && [ "$container_exists" == "no" ]; then
-          echo "Must bump .version inside $CHART_PATH when bumping .appVersion."
-          exit 1
-        elif [ "$helm_exists" == "no" ] && [ "$container_exists" == "yes" ]; then
-          echo "Need to release new version of the Helm Chart image."
-          echo "release-container=no" >> $GITHUB_OUTPUT
-          echo "release-helm=yes" >> $GITHUB_OUTPUT
-        elif [ "$helm_exists" == "no" ] && [ "$container_exists" == "no" ]; then
-          echo "Need to release new versions for both images."
-          echo "release-container=yes" >> $GITHUB_OUTPUT
-          echo "release-helm=yes" >> $GITHUB_OUTPUT
-        else
-          echo "Both versions already exist. No release needed."
-          echo "release-container=no" >> $GITHUB_OUTPUT
-          echo "release-helm=no" >> $GITHUB_OUTPUT
-        fi
+        cache-key: release
 
     - uses: sigstore/cosign-installer@v3.3.0
-      if: steps.release-check.outputs.release-container == 'yes' || steps.release-check.outputs.release-helm == 'yes'
+      if: steps.ci-checks.outputs.release-container == 'yes' || steps.ci-checks.outputs.release-helm == 'yes'
 
     - name: Release Container in GitHub Container Registry
-      if: steps.release-check.outputs.release-container == 'yes'
+      if: steps.ci-checks.outputs.release-container == 'yes'
       uses: ./.github/actions/release-container/
       with:
         registry: ghcr.io
     - name: Release Container in GitHub
-      if: steps.release-check.outputs.release-container == 'yes'
+      if: steps.ci-checks.outputs.release-container == 'yes'
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
@@ -100,12 +72,12 @@ jobs:
           --latest
 
     - name: Release Helm Chart in GitHub Container Registry
-      if: steps.release-check.outputs.release-helm == 'yes'
+      if: steps.ci-checks.outputs.release-helm == 'yes'
       uses: ./.github/actions/release-helm/
       with:
         registry: ghcr.io
     - name: Release Helm Chart in GitHub
-      if: steps.release-check.outputs.release-helm == 'yes'
+      if: steps.ci-checks.outputs.release-helm == 'yes'
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |

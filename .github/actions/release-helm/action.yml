@@ -27,7 +27,7 @@ inputs:
 runs:
   using: composite
   steps:
-  - run: echo "IMAGE_WITH_DIGEST=${image}@$(cat helm-digest.txt)" >> $GITHUB_ENV
+  - run: echo "HELM_WITH_DIGEST=${image}@$(cat helm-digest.txt)" >> $GITHUB_ENV
     shell: bash
     env:
       image: ${{ inputs.registry }}/matheuscscp/gke-metadata-server-helm
@@ -40,10 +40,10 @@ runs:
     shell: bash
     env:
       registry: ${{ inputs.registry }}
-  - run: cosign sign --yes $IMAGE_WITH_DIGEST
+  - run: cosign sign --yes $HELM_WITH_DIGEST
     shell: bash
   - run: |
-      cosign verify $IMAGE_WITH_DIGEST \
+      cosign verify $HELM_WITH_DIGEST \
         --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
         --certificate-identity=https://github.com/matheuscscp/gke-metadata-server/.github/workflows/release.yml@refs/heads/main
     shell: bash

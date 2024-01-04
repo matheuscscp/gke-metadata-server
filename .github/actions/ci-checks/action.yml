@@ -26,7 +26,13 @@ inputs:
   github-token:
     required: true
   cache-key:
-    required: false
+    required: true
+
+outputs:
+  release-container:
+    value: ${{ steps.release-check.outputs.release-container }}
+  release-helm:
+    value: ${{ steps.release-check.outputs.release-helm }}
 
 runs:
   using: composite
@@ -67,19 +73,51 @@ runs:
       workload_identity_provider: projects/637293746831/locations/global/workloadIdentityPools/github-actions/providers/github-actions
       service_account: ${{ inputs.google-service-account-name }}@gke-metadata-server.iam.gserviceaccount.com
 
-  - if: ${{ inputs.cache-key != '' }}
-    run: echo "CACHE_IMAGE=ghcr.io/matheuscscp/gke-metadata-server/ci-cache/${CACHE_KEY}:go-build" >> $GITHUB_ENV
+  - run: |
+      ci_cache=ghcr.io/matheuscscp/gke-metadata-server/ci-cache
+      go_build_tag=go-build:latest
+      echo "CACHE_IMAGE=${ci_cache}/${CACHE_KEY}/${go_build_tag}" >> $GITHUB_ENV
+      echo "DEFAULT_CACHE_IMAGE=${ci_cache}/release/${go_build_tag}" >> $GITHUB_ENV
     shell: bash
     env:
       CACHE_KEY: ${{ inputs.cache-key }}
 
-  - if: ${{ inputs.cache-key != '' }}
-    run: docker pull $CACHE_IMAGE || true
+  - run: docker pull $CACHE_IMAGE || docker pull $DEFAULT_CACHE_IMAGE || true
     shell: bash
 
   - run: make ci-cluster push ci-test
     shell: bash
 
-  - if: ${{ inputs.cache-key != '' }}
-    run: docker build . -t $CACHE_IMAGE --target builder
+  - run: docker build . -t $CACHE_IMAGE --target builder && docker push $CACHE_IMAGE
     shell: bash
+
+  - name: Check new releases
+    id: release-check
+    shell: bash
+    run: |
+      chart_path=./helm/gke-metadata-server/Chart.yaml
+
+      yq e '.appVersion' $chart_path > container-version.txt
+      container_image=ghcr.io/matheuscscp/gke-metadata-server:$(cat container-version.txt)
+
+      helm_image=oci://ghcr.io/matheuscscp/gke-metadata-server-helm
+      helm_version=$(yq e '.version' $chart_path)
+
+      container_exists=$(docker pull $container_image > /dev/null && echo yes || echo no)
+      helm_exists=$(helm pull $helm_image --version $HELM_VERSION > /dev/null && echo yes || echo no)
+      if [ "$helm_exists" == "yes" ] && [ "$container_exists" == "no" ]; then
+        echo "Must bump .version inside $chart_path when bumping .appVersion."
+        exit 1
+      elif [ "$helm_exists" == "no" ] && [ "$container_exists" == "yes" ]; then
+        echo "Need to release new version of the Helm Chart image."
+        echo "release-container=no" >> $GITHUB_OUTPUT
+        echo "release-helm=yes" >> $GITHUB_OUTPUT
+      elif [ "$helm_exists" == "no" ] && [ "$container_exists" == "no" ]; then
+        echo "Need to release new versions for both images."
+        echo "release-container=yes" >> $GITHUB_OUTPUT
+        echo "release-helm=yes" >> $GITHUB_OUTPUT
+      else
+        echo "Both versions already exist. No release needed."
+        echo "release-container=no" >> $GITHUB_OUTPUT
+        echo "release-helm=no" >> $GITHUB_OUTPUT
+      fi
