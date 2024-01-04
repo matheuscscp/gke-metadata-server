@@ -34,10 +34,41 @@ jobs:
       contents: read
       id-token: write
       packages: write
+      pull-requests: write
     steps:
     - uses: actions/checkout@v4
-    - uses: ./.github/actions/ci-checks/
+    - id: ci-checks
+      uses: ./.github/actions/ci-checks/
       with:
         google-service-account-name: pull-request
         github-token: ${{ secrets.GITHUB_TOKEN }}
         cache-key: pull-request-${{ github.event.pull_request.number }}
+    - name: Comment new releases in the PR
+      uses: actions/github-script@v7
+      env:
+        RELEASE_CONTAINER: ${{ steps.ci-checks.outputs.release-container }}
+        RELEASE_HELM: ${{ steps.ci-checks.outputs.release-helm }}
+      with:
+        script: |
+          const fs = require('fs')
+          const containerVersion = fs.readFileSync('container-version.txt').toString().trim()
+          const helmVersion = fs.readFileSync('helm-version.txt').toString().trim()
+
+          const { RELEASE_CONTAINER, RELEASE_HELM } = process.env
+          const msgs = []
+          if (RELEASE_CONTAINER === 'yes') {
+            msgs.push(`This pull request will release version \`${containerVersion}\` of the Container.`)
+          }
+          if (RELEASE_HELM === 'yes') {
+            msgs.push(`This pull request will release version \`${helmVersion}\` of the Helm Chart.`)
+          }
+          if (msgs.length === 0) {
+            return
+          }
+
+          await github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: msgs.join('\n\n'),
+          })

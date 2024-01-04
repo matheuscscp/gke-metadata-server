@@ -27,20 +27,25 @@ inputs:
 runs:
   using: composite
   steps:
-  - run: |
-      echo "IMAGE_WITH_TAG=${image}:$(cat container-version.txt)" >> $GITHUB_ENV
-      echo "IMAGE_WITH_DIGEST=${image}@$(cat container-digest.txt)" >> $GITHUB_ENV
+  - name: Setup image names
+    run: |
+      echo "CONTAINER_WITH_DIGEST=${image}@$(cat container-digest.txt)" >> $GITHUB_ENV
+      echo "CONTAINER_WITH_TAG=${image}:$(cat container-version.txt)" >> $GITHUB_ENV
+      echo "CONTAINER_WITH_TAG_LATEST=${image}:latest" >> $GITHUB_ENV
     shell: bash
     env:
       image: ${{ inputs.registry }}/matheuscscp/gke-metadata-server
-  - run: docker tag ghcr.io/matheuscscp/gke-metadata-server/test@$(cat container-digest.txt) $IMAGE_WITH_TAG
+  - name: Create tags for tested image
+    run: |
+      docker tag ghcr.io/matheuscscp/gke-metadata-server/test@$(cat container-digest.txt) $CONTAINER_WITH_TAG
+      docker tag $CONTAINER_WITH_TAG $CONTAINER_WITH_TAG_LATEST
     shell: bash
-  - run: docker push $IMAGE_WITH_TAG
+  - run: docker push $CONTAINER_WITH_TAG && docker push $CONTAINER_WITH_TAG_LATEST
     shell: bash
-  - run: cosign sign --yes $IMAGE_WITH_DIGEST
+  - run: cosign sign --yes $CONTAINER_WITH_DIGEST
     shell: bash
   - run: |
-      cosign verify $IMAGE_WITH_DIGEST \
+      cosign verify $CONTAINER_WITH_DIGEST \
         --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
         --certificate-identity=https://github.com/matheuscscp/gke-metadata-server/.github/workflows/release.yml@refs/heads/main
     shell: bash
