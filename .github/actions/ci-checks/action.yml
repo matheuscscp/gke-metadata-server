@@ -104,7 +104,7 @@ runs:
       helm_version=$(yq e '.version' $chart_path)
 
       container_exists=$(docker pull $container_image > /dev/null && echo yes || echo no)
-      helm_exists=$(helm pull $helm_image --version $HELM_VERSION > /dev/null && echo yes || echo no)
+      helm_exists=$(helm pull $helm_image --version $helm_version > /dev/null && echo yes || echo no)
       if [ "$helm_exists" == "yes" ] && [ "$container_exists" == "no" ]; then
         echo "Must bump .version inside $chart_path when bumping .appVersion."
         exit 1

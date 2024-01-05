@@ -43,7 +43,7 @@ func NewLogger(level logrus.Level) logrus.FieldLogger {
 	logLevel = level
 	l := logrus.New()
 	l.SetFormatter(&logrus.JSONFormatter{
-		TimestampFormat: time.RFC3339,
+		TimestampFormat: time.RFC3339Nano,
 	})
 	l.SetLevel(level)
 	return l

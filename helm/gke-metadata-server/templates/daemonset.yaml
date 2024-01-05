@@ -31,10 +31,10 @@ spec:
       app: gke-metadata-server
   template:
     metadata:
-      {{- if or (.Values.timestampPodAnnotation | default false) (ne (len .Values.podAnnotations) 0) }}
+      {{- if or .Values.timestampPodAnnotation (ne (len .Values.podAnnotations) 0) }}
       annotations:
       {{- end }}
-      {{- if .Values.timestampPodAnnotation | default false }}
+      {{- if .Values.timestampPodAnnotation }}
         timestamp: {{ now | date "2006-01-02T15:04:05Z07:00" }}
       {{- end }}
       {{- with .Values.podAnnotations }}
@@ -49,17 +49,42 @@ spec:
       dnsPolicy: ClusterFirstWithHostNet
       containers:
       - name: server
-        {{- if eq (.Values.image.digest | default "") "" }}
-        image: {{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
-        {{- else }}
+        {{- if .Values.image.digest }}
         image: {{ .Values.image.repository }}@{{ .Values.image.digest }}
+        {{- else }}
+        image: {{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
         {{- end }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         args:
         - server
         - --workload-identity-provider={{ .Values.config.workloadIdentityProvider }}
+        {{- if .Values.config.serverAddr }}
         - --server-addr={{ .Values.config.serverAddr }}
+        {{- end }}
+        {{- if .Values.config.logLevel }}
         - --log-level={{ .Values.config.logLevel }}
+        {{- end }}
+        {{- if (.Values.config.watchPods | default dict).enabled }}
+        - --watch-pods
+        {{- if .Values.config.watchPods.disableFallback }}
+        - --watch-pods-disable-fallback
+        {{- end }}
+        {{- if .Values.config.watchPods.resyncPeriod }}
+        - --watch-pods-resync-period={{ .Values.config.watchPods.resyncPeriod }}
+        {{- end }}
+        {{- end }}
+        {{- if (.Values.config.watchServiceAccounts | default dict).enabled }}
+        - --watch-service-accounts
+        {{- if .Values.config.watchServiceAccounts.disableFallback }}
+        - --watch-service-accounts-disable-fallback
+        {{- end }}
+        {{- if .Values.config.watchServiceAccounts.resyncPeriod }}
+        - --watch-service-accounts-resync-period={{ .Values.config.watchServiceAccounts.resyncPeriod }}
+        {{- end }}
+        {{- end }}
+        {{- if .Values.config.cacheTokens }}
+        - --cache-tokens
+        {{- end }}
         env:
         - name: NODE_NAME
           valueFrom:

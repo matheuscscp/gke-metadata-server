@@ -34,32 +34,37 @@ import (
 	pkghttp "github.com/matheuscscp/gke-metadata-server/internal/http"
 	"github.com/matheuscscp/gke-metadata-server/internal/logging"
 	"github.com/matheuscscp/gke-metadata-server/internal/metrics"
+	"github.com/matheuscscp/gke-metadata-server/internal/pods"
+	"github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts"
+	"github.com/matheuscscp/gke-metadata-server/internal/serviceaccounttokens"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/collectors"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
-	"k8s.io/client-go/kubernetes"
 )
 
 type (
 	Server struct {
 		opts       ServerOptions
-		clientset  *kubernetes.Clientset
 		httpServer *http.Server
 		metrics    serverMetrics
 	}
 
 	ServerOptions struct {
-		NodeName                 string
-		DaemonName               string
-		DaemonNamespace          string
-		WorkloadIdentityProvider string
-		ServerAddr               string
+		TokenExpirationSeconds           int
+		NodeName                         string
+		DaemonName                       string
+		DaemonNamespace                  string
+		WorkloadIdentityProviderAudience string
+		ServerAddr                       string
+		MetricsSubsystem                 string
+		Pods                             pods.Provider
+		ServiceAccounts                  serviceaccounts.Provider
+		ServiceAccountTokens             serviceaccounttokens.Provider
+		MetricsRegistry                  *prometheus.Registry
 	}
 
 	serverMetrics struct {
-		getPodRetries *prometheus.CounterVec
+		getPodFailures *prometheus.CounterVec
 	}
 )
 
@@ -76,51 +81,33 @@ const (
 
 	// Emulator-only APIs. Even though Google tools are not aware of the two APIs below,
 	// together they make it very easy for a Pod to use the gcloud CLI. All that is
-	// required is "curl"ing the first API, storing the returned JSON somewhere, then
+	// required is "curl"ing the first API, storing the returned JSON in a file, then
 	// run "gcloud auth login --cred-file=path/to/config.json". This is how the server
 	// internally runs authenticated commands, e.g. for implementing the GCP Access and
 	// ID Token APIs.
 	emuPodGoogleCredConfigAPI    = "/gkeMetadataEmulator/v1/pod/service-account/google-cred-config"
 	emuPodServiceAccountTokenAPI = "/gkeMetadataEmulator/v1/pod/service-account/token"
-
-	metricsSubsystem = "server"
-
-	tokenExpirationSeconds = 3600 // 1h
 )
 
-var processStartTime = time.Now()
-
-func New(ctx context.Context, opts ServerOptions, clientset *kubernetes.Clientset) *Server {
-	// create metrics
-	metricsRegistry := prometheus.NewRegistry()
-	metricsRegistry.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
-	metricsRegistry.MustRegister(collectors.NewGoCollector())
-	latencyMillis := prometheus.NewHistogramVec(prometheus.HistogramOpts{
+func New(ctx context.Context, opts ServerOptions) *Server {
+	latencyMillis := metrics.NewLatencyMillis(opts.MetricsSubsystem, []string{"method", "path", "status"})
+	opts.MetricsRegistry.MustRegister(latencyMillis)
+	getPodFailures := prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: metrics.Namespace,
-		Subsystem: metricsSubsystem,
-		Name:      "request_latency_millis",
-		Buckets:   prometheus.ExponentialBuckets(1, 5, 7),
-	}, []string{"method", "path", "status"})
-	metricsRegistry.MustRegister(latencyMillis)
-	getPodRetries := prometheus.NewCounterVec(prometheus.CounterOpts{
-		Namespace: metrics.Namespace,
-		Subsystem: metricsSubsystem,
-		Name:      "get_pod_retries_exponential_total",
-		Help: "Total retries when fetching Pod objects to serve requests. " +
-			"Grows exponentially with the amount of retries in the same request, " +
-			"which is intended for emphasizing anomalies.",
+		Subsystem: opts.MetricsSubsystem,
+		Name:      "get_pod_failures_total",
+		Help:      "Total failures when looking up Pod objects to serve requests.",
 	}, []string{"client_ip"})
-	metricsRegistry.MustRegister(getPodRetries)
+	opts.MetricsRegistry.MustRegister(getPodFailures)
 
 	// create server
 	l := logging.FromContext(ctx).WithField("server_addr", opts.ServerAddr)
 	metadataDirectory := &pkghttp.DirectoryHandler{}
 	internalServeMux := http.NewServeMux()
 	s := &Server{
-		opts:      opts,
-		clientset: clientset,
+		opts: opts,
 		metrics: serverMetrics{
-			getPodRetries: getPodRetries,
+			getPodFailures: getPodFailures,
 		},
 		httpServer: &http.Server{
 			Addr: opts.ServerAddr,
@@ -196,11 +183,7 @@ func New(ctx context.Context, opts ServerOptions, clientset *kubernetes.Clientse
 	internalServeMux.Handle("/health", s.health(metadataDirectory))
 	internalServeMux.Handle("/readyz", s.health(metadataDirectory))
 	internalServeMux.Handle("/ready", s.health(metadataDirectory))
-	internalServeMux.Handle("/metrics", promhttp.HandlerFor(metricsRegistry, promhttp.HandlerOpts{
-		ErrorLog:          l,
-		EnableOpenMetrics: true,
-		ProcessStartTime:  processStartTime,
-	}))
+	internalServeMux.Handle("/metrics", metrics.HandlerFor(opts.MetricsRegistry, l))
 
 	// start server
 	go func() {

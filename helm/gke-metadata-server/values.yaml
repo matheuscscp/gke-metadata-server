@@ -23,20 +23,23 @@
 # Default values for gke-metadata-server.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
-#
-# !!!Attention!!! Except for the empty values, the defaults in this file are well
-# tested. If you decide to override these defaults, please make sure to test those
-# values and take responsibility. This is not an official Google product. Google
-# enterprise support is not available. Use at your own risk.
 
 config:
   # Full name of the GCP Workload Identity Provider.
   # This full name can be retrieved on the Google Cloud Console webpage for the provider.
   # Example: projects/12345/locations/global/workloadIdentityPools/on-prem-kubernetes/providers/this-cluster
   workloadIdentityProvider: ""
-
   serverAddr: :8080
   logLevel: info
+  watchPods:
+    enabled: true # Whether or not to watch and cache the Pods running on the same Node.
+    disableFallback: false # Whether or not to disable the simple fallback method for retrieving Pods upon cache misses.
+    resyncPeriod: 5m # How often to fully resync.
+  watchServiceAccounts:
+    enabled: true # Whether or not to watch and cache all the Service Accounts of the cluster.
+    disableFallback: false # Whether or not to disable the simple fallback method for retrieving Service Accounts upon cache misses.
+    resyncPeriod: 5m # How often to fully resync.
+  cacheTokens: true # Whether or not to proactively cache tokens for the Service Accounts used by the Pods running in the same Node.
 
 podAnnotations: {}
   # Optionally, configure Prometheus to scrape the server:
@@ -57,7 +60,7 @@ resources: {}
   #   memory: 128Mi
 
 image:
-  repository: matheuscscp/gke-metadata-server
+  repository: ghcr.io/matheuscscp/gke-metadata-server
   pullPolicy: IfNotPresent
 
   # Overrides the image tag whose default is the chart appVersion.
@@ -70,8 +73,7 @@ image:
 # all the workloads inside a Kubernetes cluster. It should reside in the kube-system namespace.
 namespace: kube-system
 
-# Pod .spec.priorityClassName. This controls how much
-# preemptible the DaemonSet pods will be.
+# Pod .spec.priorityClassName. This controls how much preemptible the DaemonSet Pods will be.
 priorityClass: system-node-critical
 
 # This Pod needs to listen on the host network, port 80.

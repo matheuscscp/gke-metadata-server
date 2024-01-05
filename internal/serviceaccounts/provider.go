@@ -20,20 +20,38 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package pkgtime
+package serviceaccounts
 
 import (
 	"context"
-	"time"
+	"fmt"
+	"regexp"
+	"strings"
+
+	corev1 "k8s.io/api/core/v1"
 )
 
-func SleepContext(ctx context.Context, d time.Duration) error {
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
+type Provider interface {
+	Get(ctx context.Context, namespace, name string) (*corev1.ServiceAccount, error)
+}
+
+const (
+	gkeAnnotation      = "iam.gke.io/gcp-service-account"
+	googleEmailPattern = `^[a-zA-Z0-9-]+@[a-zA-Z0-9-]+\.iam\.gserviceaccount\.com$`
+)
+
+var googleEmailRegex = regexp.MustCompile(googleEmailPattern)
+
+func GoogleEmail(sa *corev1.ServiceAccount) (string, error) {
+	v, ok := sa.Annotations[gkeAnnotation]
+	if !ok {
+		return "", fmt.Errorf("annotation %s is missing for service account '%s/%s'",
+			gkeAnnotation, sa.Namespace, sa.Name)
 	}
+	v = strings.TrimSpace(v)
+	if !googleEmailRegex.MatchString(v) {
+		return "", fmt.Errorf("annotation %s value '%s' does not contain a valid Google Service Account Email (%s)",
+			gkeAnnotation, v, googleEmailPattern)
+	}
+	return v, nil
 }

@@ -18,54 +18,48 @@ questions, help or requesting new features. Feel also free to
 
 **Disclaimer 2:** This tool is *not necessary* for using GCP Workload Identity Federation inside
 non-GKE Kubernetes clusters. This is just a facilitator. Kubernetes and GCP Workload Identity
-Federation work together by themselves. This tool just makes it so your Pods need less
-configuration to use Workload Identity Federation (some level of configuration is still required,
-but, for example, the full Workload Identity Provider resource name is hidden from the
-client Pods and kept only as part of the emulator, see a full example at
-[`./k8s/test-pod.yaml`](./k8s/test-pod.yaml)), and the integration is closer to how native GKE
-Workload Identity works (but still not perfect, as the impersonation IAM settings are still slightly
-different, see the
+Federation work together by themselves. This tool just makes your Pods need less configuration
+to use GCP Workload Identity Federation (some level of configuration is still required, but the
+full Workload Identity Provider resource name is hidden from the client Pods and kept only as part
+of the emulator, see a full example at [`./k8s/test-pod.yaml`](./k8s/test-pod.yaml)), and the
+integration is closer to how native GKE Workload Identity works (but still not perfect, as the
+impersonation IAM settings are still slightly different, see the section
 [Configure GCP Workload Identity Federation for Kubernetes](#configure-gcp-workload-identity-federation-for-kubernetes)
-section below).
+below).
 
 ## Limitations and Caveats
 
 ### Pod identification by IP address
 
 The server uses the source IP address reported in the HTTP request to identify the
-requesting Pod in the Kubernetes API through the following `client-go` API call:
+requesting Pod in the Kubernetes API.
 
-```go
-func (s *Server) tryGetPod(...) {
-    // clientIP is extracted and parsed from r.RemoteAddr
-    podList, err := s.clientset.CoreV1().Pods("").List(ctx, metav1.ListOptions{
-        FieldSelector: fmt.Sprintf("spec.nodeName=%s,status.podIP=%s", s.opts.NodeName, clientIP),
-    })
-    // now filter Pods with spec.hostNetwork==false (not supported in the FieldSelector above)
-    // and check if exactly one pod remains. if yes, then serve the requested credentials
-}
-```
-
-If your cluster has an easy surface for an attacker to impersonate a Pod IP address, maybe via [ARP
-spoofing](https://cloud.hacktricks.xyz/pentesting-cloud/kubernetes-security/kubernetes-network-attacks),
-then the attacker may exploit this behavior to steal credentials from the emulator.
+If an attacker can easily perform IP address impersonation attacks in your cluster, e.g.
+[ARP spoofing](https://cloud.hacktricks.xyz/pentesting-cloud/kubernetes-security/kubernetes-network-attacks),
+then they will most likely exploit this design choice to steal your credentials.
 **Please evaluate the risk of such attacks in your cluster before choosing this tool.**
 
 *(Please also note that the attack explained in the link above requires Pods configured
-with very high privileges. If you are currently
-[capable of enforcing restrictions](https://github.com/open-policy-agent/gatekeeper)
-and preventing that kind of configuration then you should be able to greatly reduce the
-attack surface.)*
+with very high privileges, which should normally not be allowed in sensitive/production
+clusters. If the security of your cluster is really important, then you should be
+[enforcing restrictions](https://github.com/open-policy-agent/gatekeeper) for preventing
+Pods from being created with such high privileges, except in special/trusted cases.)*
 
 ### Pods running on the host network
 
-In a cluster there can also be Pods running on the *host network*, i.e. Pods with the
-field `spec.hostNetwork` set to `true`. For example, the emulator itself needs to run in
-that mode in order to listen to TCP/IP connections coming from Pods running on the same
-Kubernetes Node the emulator Pod is running on. Since Pods running on the host network
-share the same IP address, i.e. the IP address of the Node itself where they are running
-on, the solution implemented here would not be able to uniquely and securely identify
-such Pods by IP address. Therefore, *Pods running on the host network are not supported*.
+In a cluster there may also be Pods running on the *host network*, i.e. Pods with the
+field `spec.hostNetwork` set to `true`. The emulator Pods themselves, for example, need
+to run on the host network in order to listen to TCP/IP connections coming from Pods
+running on the same Kubernetes Node, such that their unecrypted communication never
+leaves that Node. Because Pods running on the host network use a shared IP address, i.e.
+the IP address of the Node itself where they are running on, the solution implemented
+here is not be able to uniquely identify such Pods. Therefore, *Pods running on the host
+network are not supported*.
+
+*(Please also note that most Pods should not run on the host network in the first place,
+as there is usually no need for this. Most applications are, and should be able to fulfill
+their purposes without running on the host network. This is only required for very special
+cases, like in the case of the emulator itself.)*
 
 ## Usage
 
@@ -125,15 +119,15 @@ obtained via Workload Identity Federation for this GitHub repository
 Alternatively, this is how you could retrieve these two JSON documents from inside a Pod using `curl`:
 
 ```bash
-curl -s --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt \
+curl --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt \
     -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
     "https://kubernetes.default.svc.cluster.local/.well-known/openid-configuration"
-curl -s --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt \
+curl --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt \
     -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
     "https://kubernetes.default.svc.cluster.local/openid/v1/jwks"
 ```
 
-Copy the outputs of the two `curl` commands above into files named respectively `openid-config.json`
+Copy the JSON outputs of the two `curl` commands above into files named respectively `openid-config.json`
 and `openid-keys.json`, then run the following commands to upload them to GCS:
 
 ```bash
@@ -199,14 +193,15 @@ Token will have the following syntax:
 ([docs](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/iam_workload_identity_pool_provider#google.subject)).
 
 **Attention 2**: Please make sure not to specify any *audiences*. This project uses the
-default audience when creating Kubernetes ServiceAccount Tokens (which contains the full
-resource name of the Pool Provider, which is a good, strict security rule):
+default audience assigned by Google to a Pool Provider when creating the OIDC tokens
+for Kubernetes ServiceAccounts. This default audience contains the full resource name of
+the Pool Provider, which is a good/strict security rule:
 
-`//iam.googleapis.com/{pool_full_name}/providers/{pool_provider_name}`
+`//iam.googleapis.com/{pool_full_name}/providers/{pool_provider_short_name}`
 
-Where `{pool_full_name}` assumes the form:
+Where `{pool_full_name}` has the form:
 
-`projects/{gcp_project_number}/locations/global/workloadIdentityPools/{pool_name}`
+`projects/{gcp_project_number}/locations/global/workloadIdentityPools/{pool_short_name}`
 
 The Pool full name can be retrieved on its Google Cloud Console webpage.
 

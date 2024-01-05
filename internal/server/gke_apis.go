@@ -90,7 +90,7 @@ func (s *Server) gkeServiceAccountTokenAPI(w http.ResponseWriter, r *http.Reques
 		}
 		pkghttp.RespondJSON(w, r, http.StatusOK, map[string]any{
 			"access_token": strings.TrimSpace(tok.AccessToken),
-			"expires_in":   tokenExpirationSeconds - 10,
+			"expires_in":   s.opts.TokenExpirationSeconds - 10,
 			"token_type":   "Bearer",
 		})
 	})

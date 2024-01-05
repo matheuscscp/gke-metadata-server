@@ -1,0 +1,66 @@
+# MIT License
+#
+# Copyright (c) 2024 Matheus Pimenta
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+inputs:
+  title:
+    required: true
+  message-file:
+    required: true
+
+runs:
+  using: composite
+  steps:
+  - uses: actions/github-script@v7
+    env:
+      TITLE: ${{ inputs.title }}
+      MESSAGE_FILE: ${{ inputs.message-file }}
+    with:
+      script: |
+        const { TITLE, MESSAGE_FILE } = process.env
+        const commentIdentifier = TITLE + ':'
+        const msg = require('fs').readFileSync(MESSAGE_FILE).toString().trim()
+
+        const issue_number = context.issue.number
+        const { owner, repo } = context.repo
+        const body = commentIdentifier + '\n\n' + "```" + msg + "```"
+
+        const { data: comments } = await github.rest.issues.listComments({
+          issue_number,
+          owner,
+          repo,
+        })
+        const previousComment = comments.find(c => c.body.includes(commentIdentifier))
+        if (previousComment) {
+          await github.rest.issues.updateComment({
+            comment_id: previousComment.id,
+            owner,
+            repo,
+            body,
+          })
+        } else {
+          await github.rest.issues.createComment({
+            issue_number,
+            owner,
+            repo,
+            body,
+          })
+        }

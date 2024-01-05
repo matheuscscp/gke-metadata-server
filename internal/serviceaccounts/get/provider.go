@@ -20,20 +20,34 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package pkgtime
+package getserviceaccount
 
 import (
 	"context"
-	"time"
+
+	"github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 )
 
-func SleepContext(ctx context.Context, d time.Duration) error {
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
+type (
+	Provider struct {
+		opts ProviderOptions
 	}
+
+	ProviderOptions struct {
+		KubeClient *kubernetes.Clientset
+	}
+)
+
+func NewProvider(opts ProviderOptions) serviceaccounts.Provider {
+	return &Provider{opts}
+}
+
+func (p *Provider) Get(ctx context.Context, namespace, name string) (*corev1.ServiceAccount, error) {
+	return p.opts.KubeClient.CoreV1().
+		ServiceAccounts(namespace).
+		Get(ctx, name, metav1.GetOptions{})
 }

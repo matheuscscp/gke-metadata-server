@@ -43,17 +43,7 @@ jobs:
         service_account: tf-plan@gke-metadata-server.iam.gserviceaccount.com
     - uses: hashicorp/setup-terraform@v3
     - run: cd terraform/ && terraform init && terraform plan -no-color > plan.txt
-    - name: Comment plan if not empty
-      uses: actions/github-script@v7
+    - uses: ./.github/actions/comment-status/
       with:
-        script: |
-          const plan = require('fs').readFileSync('terraform/plan.txt').toString()
-          if (plan.includes('No changes.')) {
-            return
-          }
-          await github.rest.issues.createComment({
-            issue_number: context.issue.number,
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            body: "```" + plan + "```",
-          })
+        title: Terraform Plan
+        message-file: terraform/plan.txt

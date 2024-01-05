@@ -33,19 +33,19 @@ func (s *Server) getGoogleCredentialConfig(googleServiceAccountEmail string, cre
 
 	return map[string]any{
 		"type":                              "external_account",
-		"audience":                          s.workloadIdentityProviderAudience(),
+		"audience":                          s.opts.WorkloadIdentityProviderAudience,
 		"subject_token_type":                "urn:ietf:params:oauth:token-type:jwt",
 		"token_url":                         "https://sts.googleapis.com/v1/token",
 		"credential_source":                 credSource,
 		"service_account_impersonation_url": impersonationURL,
 		"service_account_impersonation": map[string]any{
-			"token_lifetime_seconds": tokenExpirationSeconds,
+			"token_lifetime_seconds": s.opts.TokenExpirationSeconds,
 		},
 	}
 }
 
-func (s *Server) workloadIdentityProviderAudience() string {
-	return fmt.Sprintf("//iam.googleapis.com/%s", s.opts.WorkloadIdentityProvider)
+func WorkloadIdentityProviderAudience(workloadIdentityProvider string) string {
+	return fmt.Sprintf("//iam.googleapis.com/%s", workloadIdentityProvider)
 }
 
 func gkeAccessScopes() []string {

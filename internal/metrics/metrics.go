@@ -22,4 +22,106 @@
 
 package metrics
 
-const Namespace = "gcp_workload_identity_for_k8s"
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"os"
+	"time"
+
+	"github.com/matheuscscp/gke-metadata-server/internal/logging"
+	pkgtime "github.com/matheuscscp/gke-metadata-server/internal/time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/prometheus/client_golang/prometheus/push"
+	"github.com/sirupsen/logrus"
+)
+
+const Namespace = "gke_metadata_server"
+
+var processStartTime = time.Now()
+
+func NewRegistry() *prometheus.Registry {
+	r := prometheus.NewRegistry()
+	r.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+	r.MustRegister(collectors.NewGoCollector())
+	return r
+}
+
+func HandlerFor(registry *prometheus.Registry, l promhttp.Logger) http.Handler {
+	return promhttp.HandlerFor(registry, promhttp.HandlerOpts{
+		ErrorLog:          l,
+		EnableOpenMetrics: true,
+		ProcessStartTime:  processStartTime,
+	})
+}
+
+func StartPusher(registry *prometheus.Registry, url, jobName string) (context.CancelFunc, error) {
+	namespace := os.Getenv("POD_NAMESPACE")
+	if namespace == "" {
+		return nil, fmt.Errorf("POD_NAMESPACE environment variable must be specified")
+	}
+	name := os.Getenv("POD_NAME")
+	if namespace == "" {
+		return nil, fmt.Errorf("POD_NAME environment variable must be specified")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	pusher := push.
+		New(url, jobName).
+		Gatherer(registry).
+		Grouping("namespace", namespace).
+		Grouping("name", name)
+	l := logging.
+		FromContext(ctx).
+		WithField("pushgateway_details", logrus.Fields{
+			"url":      url,
+			"job_name": jobName,
+			"groupings": logrus.Fields{
+				"namespace": namespace,
+				"name":      name,
+			},
+		})
+
+	closed := make(chan struct{})
+	go func() {
+		defer func() {
+			l.Info("metrics pusher stop requested, deleting metrics...")
+			if err := pusher.Delete(); err != nil {
+				l.WithError(err).
+					Error("error deleting metrics. applications using prometheus pushgateway must delete their metrics, " +
+						"otherwise they will remain frozen in the last state right before the application died until " +
+						"pushgateway is restarted. please check what happened and take the appropriate action")
+			}
+			l.Info("metrics pusher stopped")
+			close(closed)
+		}()
+		for {
+			if pkgtime.SleepContext(ctx, 30*time.Second) != nil {
+				return
+			}
+			if err := pusher.PushContext(ctx); err != nil {
+				if ctx.Err() != nil {
+					return
+				}
+				l.WithError(err).Error("error pushing metrics")
+			}
+		}
+	}()
+	l.Info("metrics pusher started")
+	return func() {
+		cancel()
+		<-closed
+	}, nil
+}
+
+func NewLatencyMillis(subsystem string, labelNames []string) *prometheus.HistogramVec {
+	return prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: Namespace,
+		Subsystem: subsystem,
+		Name:      "request_latency_millis",
+		Buckets:   prometheus.ExponentialBuckets(0.2, 5, 7),
+	}, labelNames)
+}
