@@ -34,27 +34,38 @@ import (
 	"time"
 
 	"github.com/matheuscscp/gke-metadata-server/internal/logging"
+	"github.com/matheuscscp/gke-metadata-server/internal/metrics"
+	"github.com/matheuscscp/gke-metadata-server/internal/retry"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"github.com/vishvananda/netlink"
 )
 
 type frontendProxy struct {
 	net.Listener
-	addr        string
-	backendAddr string
-
-	ip     string
-	close  chan struct{}
-	closed chan struct{}
+	addr                string
+	backendAddr         string
+	ip                  string
+	dialer              *net.Dialer
+	latencyMillis       prometheus.Observer
+	dialBackendFailures prometheus.Counter
+	close               chan struct{}
+	closed              chan struct{}
 }
 
 func newSidecarCommand() *cobra.Command {
-	const gkeMetadataAddress = gkeMetadataIPAddress + ":80"
+	const (
+		gkeMetadataAddress = gkeMetadataIPAddress + ":80"
+		metricsSubsystem   = "proxy_sidecar"
+		metricsJob         = metrics.Namespace + "_" + metricsSubsystem
+	)
 
-	var networkPaths []string
-	var goroutinesPerFrontend int
+	var (
+		networkPaths          []string
+		goroutinesPerFrontend int
+		pushGatewayURL        string
+	)
 
 	cmd := &cobra.Command{
 		Use:   "sidecar",
@@ -65,7 +76,7 @@ GKE Workload Identity emulator running on the same Node of the Pod.
 
 This proxy is actually a more general tool that supports listening on a
 list of "frontend" network addresses, each backed by its own "backend"
-port. The incoming TCP connetions are all targeted to the IP address of
+port. The incoming TCP connetions are all proxied to the IP address of
 the Kubernetes Node, but the backend port is defined by which frontend
 listener received the connection.
 
@@ -121,7 +132,7 @@ metadata server port (%s).
 				frontendIP, frontendPort = strings.TrimSpace(frontendIP), strings.TrimSpace(frontendPort)
 
 				// parse frontend ip
-				if _, err := netlink.ParseAddr(frontendIP + "/32"); err != nil {
+				if _, err := netip.ParseAddr(frontendIP); err != nil {
 					return fmt.Errorf("error parsing frontend host '%s' from network path '%s' as an ip address: %w",
 						frontendIP, networkPath, err)
 				}
@@ -145,6 +156,25 @@ metadata server port (%s).
 				networkMap[frontendAddr] = nodeIP + ":" + backendPort
 			}
 
+			// create metrics
+			metricsRegistry := metrics.NewRegistry()
+			if pushGatewayURL != "" {
+				stopMetricsPusher, err := metrics.StartPusher(metricsRegistry, pushGatewayURL, metricsJob)
+				if err != nil {
+					return fmt.Errorf("error starting metrics pusher: %w", err)
+				}
+				defer stopMetricsPusher()
+			}
+			latencyMillis := metrics.NewLatencyMillis(metricsSubsystem, []string{"frontend_addr", "backend_addr"})
+			metricsRegistry.MustRegister(latencyMillis)
+			dialBackendFailures := prometheus.NewCounterVec(prometheus.CounterOpts{
+				Namespace: metrics.Namespace,
+				Subsystem: metricsSubsystem,
+				Name:      "dial_backend_failures_total",
+				Help:      "Total failures when dialing TCP connections to backends.",
+			}, []string{"backend_addr"})
+			metricsRegistry.MustRegister(dialBackendFailures)
+
 			// now errors are runtime errors, not input/CLI mis-usage errors anymore
 			ctx := cmd.Context()
 			l := logging.FromContext(ctx)
@@ -162,12 +192,16 @@ metadata server port (%s).
 					frontend.Listener.Close()
 				}
 			}()
+			dialer := &net.Dialer{}
 			for frontendAddr, backendAddr := range networkMap {
 				frontendIP, _, _ := net.SplitHostPort(frontendAddr)
 				frontend := &frontendProxy{
-					ip:          frontendIP,
-					addr:        frontendAddr,
-					backendAddr: backendAddr,
+					ip:                  frontendIP,
+					addr:                frontendAddr,
+					backendAddr:         backendAddr,
+					dialer:              dialer,
+					latencyMillis:       latencyMillis.WithLabelValues(frontendAddr, backendAddr),
+					dialBackendFailures: dialBackendFailures.WithLabelValues(backendAddr),
 				}
 				frontend.Listener, err = net.Listen("tcp", frontendAddr)
 				if err != nil {
@@ -194,11 +228,12 @@ metadata server port (%s).
 		},
 	}
 
-	cmd.Flags().StringSliceVar(&networkPaths, "network-path",
-		[]string{gkeMetadataAddress + "=" + defaultServerPort},
+	cmd.Flags().StringSliceVar(&networkPaths, "network-path", []string{gkeMetadataAddress + "=" + defaultServerPort},
 		"List of network paths of the form <frontend_addr>=<backend_port>")
 	cmd.Flags().IntVar(&goroutinesPerFrontend, "goroutines-per-frontend", 5,
-		"Number of goroutines per frontend server (each connection being proxied eats up one goroutine)")
+		"Number of goroutines per frontend server (each connection being proxied uses one)")
+	cmd.Flags().StringVar(&pushGatewayURL, "pushgateway-url", "",
+		"Optional Prometheus Pushgateway URL to push metrics to")
 
 	return cmd
 }
@@ -303,9 +338,20 @@ func (f *frontendProxy) proxy(ctx context.Context, clientConn net.Conn) error {
 	l.Debug("connection can be trusted and will be proxied")
 
 	// dial new connection with the backend
-	dialCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	backendConn, err := (&net.Dialer{}).DialContext(dialCtx, "tcp", f.backendAddr)
+	var backendConn net.Conn
+	err = retry.Do(ctx, retry.Operation{
+		MaxAttempts:    -1,
+		Description:    "dial backend",
+		FailureCounter: f.dialBackendFailures,
+		Func: func() error {
+			var err error
+			backendConn, err = f.dialer.DialContext(ctx, "tcp", f.backendAddr)
+			if err != nil {
+				return fmt.Errorf("error dialing backend: %w", err)
+			}
+			return nil
+		},
+	})
 	if err != nil {
 		return fmt.Errorf("error dialing backend: %w", err)
 	}
@@ -352,9 +398,11 @@ func (f *frontendProxy) proxy(ctx context.Context, clientConn net.Conn) error {
 	case <-done[backendToClient]:
 		event = "the backend closed the connection"
 	}
+	latency := time.Since(t0)
+	f.latencyMillis.Observe(latency.Seconds() * 1000)
 	l.
 		WithField("close_event", event).
-		WithField("latency", time.Since(t0).String()).
+		WithField("latency", latency.String()).
 		Info("connection proxied")
 	return nil
 }

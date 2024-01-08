@@ -20,20 +20,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package pkgtime
+package pods
 
 import (
 	"context"
-	"time"
+
+	corev1 "k8s.io/api/core/v1"
 )
 
-func SleepContext(ctx context.Context, d time.Duration) error {
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
+type Provider interface {
+	GetByIP(ctx context.Context, ipAddr string) (*corev1.Pod, error)
 }

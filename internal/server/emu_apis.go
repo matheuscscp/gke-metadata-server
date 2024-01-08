@@ -25,7 +25,6 @@ package server
 import (
 	"fmt"
 	"net/http"
-	"strings"
 
 	pkghttp "github.com/matheuscscp/gke-metadata-server/internal/http"
 )
@@ -46,11 +45,7 @@ func (s *Server) emuPodGoogleCredConfigAPI(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *Server) emuPodServiceAccountTokenAPI(w http.ResponseWriter, r *http.Request) {
-	audience := strings.TrimSpace(r.URL.Query().Get("audience"))
-	if audience == "" {
-		audience = s.workloadIdentityProviderAudience()
-	}
-	saToken, r, err := s.getPodServiceAccountToken(w, r, audience)
+	saToken, r, err := s.getPodServiceAccountToken(w, r)
 	if err != nil {
 		return
 	}

@@ -20,36 +20,15 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: gke-metadata-server
-  namespace: {{ .Values.namespace }}
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: gke-metadata-server
-rules:
-- apiGroups: [""]
-  resources: [pods]
-  verbs: [get, list, watch]
-- apiGroups: [""]
-  resources: [serviceaccounts]
-  verbs: [get, list, watch]
-- apiGroups: [""]
-  resources: [serviceaccounts/token]
-  verbs: [create]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: gke-metadata-server
-subjects:
-- kind: ServiceAccount
-  name: gke-metadata-server
-  namespace: {{ .Values.namespace }}
-roleRef:
-  kind: ClusterRole
-  name: gke-metadata-server
-  apiGroup: rbac.authorization.k8s.io
+config:
+  workloadIdentityProvider: projects/637293746831/locations/global/workloadIdentityPools/test-kind-cluster/providers/<TEST_ID>
+  watchPods:
+    disableFallback: true
+  watchServiceAccounts:
+    disableFallback: true
+
+image:
+  repository: ghcr.io/matheuscscp/gke-metadata-server/test
+  digest: <CONTAINER_DIGEST>
+
+timestampPodAnnotation: true

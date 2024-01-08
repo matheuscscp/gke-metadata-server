@@ -107,7 +107,7 @@ spec:
 
       METADATA_ENDPOINT="http://metadata.google.internal"
       CRED_CONFIG_API="/gkeMetadataEmulator/v1/pod/service-account/google-cred-config"
-      curl -s -H "Metadata-Flavor: Emulator" "${METADATA_ENDPOINT}${CRED_CONFIG_API}?pretty" > creds.json
+      curl -H "Metadata-Flavor: Emulator" "${METADATA_ENDPOINT}${CRED_CONFIG_API}?pretty" > creds.json
       cat creds.json
       gcloud auth login --cred-file=creds.json
 

@@ -31,32 +31,21 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
-	"regexp"
-	"strings"
-	"time"
 
 	pkghttp "github.com/matheuscscp/gke-metadata-server/internal/http"
 	"github.com/matheuscscp/gke-metadata-server/internal/logging"
-	pkgtime "github.com/matheuscscp/gke-metadata-server/internal/time"
+	"github.com/matheuscscp/gke-metadata-server/internal/retry"
+	"github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts"
 
 	"github.com/google/uuid"
 	"golang.org/x/oauth2/google"
-	authnv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type (
 	podContextKey                          struct{}
 	podGoogleServiceAccountEmailContextKey struct{}
 )
-
-const (
-	kubernetesServiceAccountAnnotation = "iam.gke.io/gcp-service-account"
-	googleServiceAccountEmailPattern   = `^[a-zA-Z0-9-]+@[a-zA-Z0-9-]+\.iam\.gserviceaccount\.com$`
-)
-
-var googleServiceAccountEmailRegex = regexp.MustCompile(googleServiceAccountEmailPattern)
 
 // getPod retrieves the Pod associated with the request by
 // looking up the client IP address.
@@ -94,52 +83,29 @@ func (s *Server) getPod(w http.ResponseWriter,
 		return nil, nil, fmt.Errorf(format, r.RemoteAddr, err)
 	}
 	clientIP := clientIPAddr.String()
-	l := logging.FromRequest(r).WithField("client_ip", clientIP)
-	r = logging.IntoRequest(r, l)
-	getPodRetries := s.metrics.getPodRetries.WithLabelValues(clientIP)
+	l := logging.FromContext(ctx).WithField("client_ip", clientIP)
+	ctx = logging.IntoContext(ctx, l)
+	r = r.WithContext(ctx)
+	getPodFailures := s.metrics.getPodFailures.WithLabelValues(clientIP)
 
 	// fetch pod by ip
 	var pod *corev1.Pod
-	for i, maxAttempts := 1, 3; i <= maxAttempts; i++ {
-		var err error
-		pod, err = s.tryGetPod(ctx, clientIP)
-		if err == nil {
-			break
-		}
-
-		// it's fairly common for the first tryGetPod() call to fail for
-		// pods that were created very recently, but it cant take too long.
-		// if after a little exp. back-off the client IP is not showing up
-		// on the k8s API then yes, it could be just temporarily control
-		// plane unavailable, but it could also be a malicious DDoS attempt.
-		// in order to give some protection against this hopefully unlikely
-		// case we limit each request to only a few tryGetPod() call attempts
-		// and emphasize the potential urgency of the situation through this
-		// exponential retry counter.
-		expRetriesCount := (1 << (i + 1)) - 4 // 0, 4, 12...
-		getPodRetries.Add(float64(expRetriesCount))
-
-		// check max attempts reached
-		if i == maxAttempts {
-			const format = "reached max attempts while trying to fetch the pod associated with the request. " +
-				"last attempt error: %w"
-			pkghttp.RespondErrorf(w, r, http.StatusTooManyRequests, format, err)
-			return nil, nil, fmt.Errorf(format, err)
-		}
-
-		// exponential back-off
-		expDelay := 500 * (1 << i) * time.Millisecond // 1s, 2s...
-		logf := l.WithError(err).Warnf
-		// do not warn about the first attempt failure since it's fairly common
-		if i == 1 {
-			logf = l.WithError(err).Debugf
-		}
-		logf("error getting pod associated with the request. retrying after %v...", expDelay)
-		if err := pkgtime.SleepContext(ctx, expDelay); err != nil {
-			const format = "request context canceled while sleeping before get pod retry attempt: %w"
-			pkghttp.RespondErrorf(w, r, pkghttp.StatusClientClosedRequest, format, err)
-			return nil, nil, fmt.Errorf(format, err)
-		}
+	err = retry.Do(ctx, retry.Operation{
+		Description:    "fetch the pod associated with the request",
+		FailureCounter: getPodFailures,
+		Func: func() error {
+			var err error
+			pod, err = s.opts.Pods.GetByIP(ctx, clientIP)
+			if err != nil {
+				return fmt.Errorf("error looking up pod by ip address: %w", err)
+			}
+			return nil
+		},
+	})
+	if err != nil {
+		const format = "error getting pod associated with request: %w"
+		pkghttp.RespondErrorf(w, r, retry.HTTPStatusCode(err), format, err)
+		return nil, nil, fmt.Errorf(format, err)
 	}
 
 	// update context and logger
@@ -150,33 +116,6 @@ func (s *Server) getPod(w http.ResponseWriter,
 	return pod, r, nil
 }
 
-func (s *Server) tryGetPod(ctx context.Context, clientIP string) (*corev1.Pod, error) {
-	podList, err := s.clientset.CoreV1().Pods("").List(ctx, metav1.ListOptions{
-		FieldSelector: fmt.Sprintf("spec.nodeName=%s,status.podIP=%s", s.opts.NodeName, clientIP),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("error listing pods in the node matching the client ip address: %w", err)
-	}
-	var podsNotInTheHostNetwork []int
-	for i := range podList.Items {
-		// pods in the host network are not supported, see README.md
-		if !podList.Items[i].Spec.HostNetwork {
-			podsNotInTheHostNetwork = append(podsNotInTheHostNetwork, i)
-		}
-	}
-	if nPods := len(podsNotInTheHostNetwork); nPods != 1 {
-		podRefs := make([]string, nPods)
-		for i, podIdx := range podsNotInTheHostNetwork {
-			pod := podList.Items[podIdx]
-			podRefs[i] = fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
-		}
-		return nil, fmt.Errorf("the number of pods matching the client ip address is not exactly one: %v [%s]",
-			nPods, strings.Join(podRefs, ", "))
-	}
-	pod := podList.Items[podsNotInTheHostNetwork[0]]
-	return &pod, nil
-}
-
 // getPodGoogleServiceAccountEmail gets the Google Service Account email associated with the given pod.
 // If there's an error this function sends the response to the client.
 func (s *Server) getPodGoogleServiceAccountEmail(w http.ResponseWriter, r *http.Request) (string, *http.Request, error) {
@@ -184,43 +123,25 @@ func (s *Server) getPodGoogleServiceAccountEmail(w http.ResponseWriter, r *http.
 	if v := ctx.Value(podGoogleServiceAccountEmailContextKey{}); v != nil {
 		return v.(string), r, nil
 	}
-
-	// get pod and service account
 	pod, r, err := s.getPod(w, r)
 	if err != nil {
 		return "", nil, err
 	}
-	sa, err := s.clientset.CoreV1().
-		ServiceAccounts(pod.Namespace).
-		Get(ctx, pod.Spec.ServiceAccountName, metav1.GetOptions{})
+	sa, err := s.opts.ServiceAccounts.Get(ctx, pod.Namespace, pod.Spec.ServiceAccountName)
 	if err != nil {
 		const format = "error getting pod service account: %w"
 		pkghttp.RespondErrorf(w, r, http.StatusInternalServerError, format, err)
 		return "", nil, fmt.Errorf(format, err)
 	}
-
-	// get and parse google service account email from pod service account annotation
-	podGoogleServiceAccountEmail, ok := sa.Annotations[kubernetesServiceAccountAnnotation]
-	if !ok {
-		const format = "annotation %s is missing for pod service account"
-		pkghttp.RespondErrorf(w, r, http.StatusBadRequest, format,
-			kubernetesServiceAccountAnnotation)
-		return "", nil, fmt.Errorf(format, kubernetesServiceAccountAnnotation)
+	email, err := serviceaccounts.GoogleEmail(sa)
+	if err != nil {
+		pkghttp.RespondError(w, r, http.StatusBadRequest, err)
+		return "", nil, err
 	}
-	podGoogleServiceAccountEmail = strings.TrimSpace(podGoogleServiceAccountEmail)
-	if !googleServiceAccountEmailRegex.MatchString(podGoogleServiceAccountEmail) {
-		const format = "annotation %s does not contain a valid Google Service Account Email (%s)"
-		pkghttp.RespondErrorf(w, r, http.StatusBadRequest, format,
-			kubernetesServiceAccountAnnotation, googleServiceAccountEmailPattern)
-		return "", nil, fmt.Errorf(format, kubernetesServiceAccountAnnotation,
-			googleServiceAccountEmailPattern)
-	}
-	ctx = context.WithValue(ctx, podGoogleServiceAccountEmailContextKey{},
-		podGoogleServiceAccountEmail)
-	l := logging.FromRequest(r).WithField("pod_google_service_account_email",
-		podGoogleServiceAccountEmail)
+	ctx = context.WithValue(ctx, podGoogleServiceAccountEmailContextKey{}, email)
+	l := logging.FromRequest(r).WithField("pod_google_service_account_email", email)
 	r = logging.IntoRequest(r.WithContext(ctx), l)
-	return podGoogleServiceAccountEmail, r, nil
+	return email, r, nil
 }
 
 // listPodGoogleServiceAccounts lists the available GCP Service Accounts for the requesting Pod.
@@ -236,29 +157,18 @@ func (s *Server) listPodGoogleServiceAccounts(w http.ResponseWriter, r *http.Req
 // getPodServiceAccountToken creates a Service Account Token for the
 // given Pod's Service Account.
 // If there's an error this function sends the response to the client.
-func (s *Server) getPodServiceAccountToken(w http.ResponseWriter, r *http.Request,
-	audience string) (string, *http.Request, error) {
+func (s *Server) getPodServiceAccountToken(w http.ResponseWriter, r *http.Request) (string, *http.Request, error) {
 	pod, r, err := s.getPod(w, r)
 	if err != nil {
 		return "", nil, err
 	}
-
-	expSeconds := int64(tokenExpirationSeconds)
-	tokenResp, err := s.clientset.
-		CoreV1().
-		ServiceAccounts(pod.Namespace).
-		CreateToken(r.Context(), pod.Spec.ServiceAccountName, &authnv1.TokenRequest{
-			Spec: authnv1.TokenRequestSpec{
-				Audiences:         []string{audience},
-				ExpirationSeconds: &expSeconds,
-			},
-		}, metav1.CreateOptions{})
+	token, _, err := s.opts.ServiceAccountTokens.Create(r.Context(), pod.Namespace, pod.Spec.ServiceAccountName)
 	if err != nil {
-		const format = "error creating token for pod service account: %w"
+		const format = "error getting token for pod service account: %w"
 		pkghttp.RespondErrorf(w, r, http.StatusInternalServerError, format, err)
 		return "", nil, fmt.Errorf(format, err)
 	}
-	return tokenResp.Status.Token, r, nil
+	return token, r, nil
 }
 
 // runWithGoogleCredentialsFromPodServiceAccountToken creates
@@ -278,7 +188,7 @@ func (s *Server) runWithGoogleCredentialsFromPodServiceAccountToken(
 		return
 	}
 
-	saToken, r, err := s.getPodServiceAccountToken(w, r, s.workloadIdentityProviderAudience())
+	saToken, r, err := s.getPodServiceAccountToken(w, r)
 	if err != nil {
 		return
 	}

@@ -86,22 +86,25 @@ push:
 
 .PHONY: test
 test:
-	make run-test TEST_ID=test
+	make run-test TEST_ID=test HELM_TEST_CASE=no-watch
+	make run-test TEST_ID=test HELM_TEST_CASE=watch
 
 .PHONY: ci-test
 ci-test:
-	make run-test TEST_ID=$$(cat test-id.txt)
+	make run-test TEST_ID=$$(cat test-id.txt) HELM_TEST_CASE=no-watch
+	make run-test TEST_ID=$$(cat test-id.txt) HELM_TEST_CASE=watch
 
 .PHONY: run-test
 run-test:
 	@if [ "${TEST_ID}" == "" ]; then echo "TEST_ID variable is required."; exit -1; fi
+	@if [ "${HELM_TEST_CASE}" == "" ]; then echo "HELM_TEST_CASE variable is required."; exit -1; fi
 	helm pull ${HELM_IMAGE} --version $$(cat helm-version.txt) 2>&1 | tee helm-pull.logs
 	pull_digest=$$(cat helm-pull.logs | grep Digest: | awk '{print $$NF}'); \
 	if [ "$$(cat helm-digest.txt)" != "$$pull_digest" ]; then \
 		echo "Error: Helm OCI artifact digests are different. Digest on push: $$(cat helm-digest.txt), Digest on pull: $$pull_digest"; \
 		exit 1; \
 	fi
-	sed "s|<TEST_ID>|${TEST_ID}|g" k8s/test-helm-values.yaml | \
+	sed "s|<TEST_ID>|${TEST_ID}|g" k8s/test-helm-values-${HELM_TEST_CASE}.yaml | \
 		sed "s|<CONTAINER_DIGEST>|$$(cat container-digest.txt)|g" | \
 		tee >(helm --kube-context kind-kind -n kube-system upgrade --install --wait gke-metadata-server ${HELM_IMAGE} --version $$(cat helm-version.txt) -f -)
 	kubectl --context kind-kind -n default delete po test || true
@@ -122,9 +125,9 @@ run-test:
 	done; \
 	kubectl --context kind-kind -n kube-system describe $$(kubectl --context kind-kind -n kube-system get po -o name | grep gke); \
 	kubectl --context kind-kind -n default describe po test; \
-	kubectl --context kind-kind -n kube-system logs ds/gke-metadata-server | jq; \
-	kubectl --context kind-kind -n default logs test -c init-gke-metadata-proxy | jq; \
-	kubectl --context kind-kind -n default logs test -c gke-metadata-proxy | jq; \
+	kubectl --context kind-kind -n kube-system logs ds/gke-metadata-server; \
+	kubectl --context kind-kind -n default logs test -c init-gke-metadata-proxy; \
+	kubectl --context kind-kind -n default logs test -c gke-metadata-proxy; \
 	kubectl --context kind-kind -n default logs test -c test -f; \
 	kubectl --context kind-kind -n default logs test -c test-gcloud -f; \
 	echo "Container 'test'        exit code: $$EXIT_CODE_1"; \
@@ -137,7 +140,9 @@ run-test:
 
 .PHONY: helm-diff
 helm-diff:
-	sed "s|<TEST_ID>|test|g" k8s/test-helm-values.yaml | helm --kube-context kind-kind -n kube-system diff upgrade gke-metadata-server helm/gke-metadata-server -f -
+	sed "s|<TEST_ID>|test|g" k8s/test-helm-values-watch.yaml | \
+		sed "s|<CONTAINER_DIGEST>|$$(cat container-digest.txt)|g" | \
+		helm --kube-context kind-kind -n kube-system diff upgrade gke-metadata-server helm/gke-metadata-server -f -
 
 .PHONY: update-branch
 update-branch:

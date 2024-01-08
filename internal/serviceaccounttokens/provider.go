@@ -20,20 +20,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package pkgtime
+package serviceaccounttokens
 
 import (
 	"context"
 	"time"
 )
 
-func SleepContext(ctx context.Context, d time.Duration) error {
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
+type Provider interface {
+	Create(ctx context.Context, namespace, name string) (string, time.Duration, error)
 }

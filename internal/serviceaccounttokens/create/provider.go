@@ -20,20 +20,49 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package pkgtime
+package createserviceaccounttoken
 
 import (
 	"context"
 	"time"
+
+	"github.com/matheuscscp/gke-metadata-server/internal/serviceaccounttokens"
+
+	authnv1 "k8s.io/api/authentication/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 )
 
-func SleepContext(ctx context.Context, d time.Duration) error {
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
+type (
+	Provider struct {
+		opts ProviderOptions
 	}
+
+	ProviderOptions struct {
+		ExpirationSeconds int
+		Audience          string
+		KubeClient        *kubernetes.Clientset
+	}
+)
+
+func NewProvider(opts ProviderOptions) serviceaccounttokens.Provider {
+	return &Provider{opts}
+}
+
+func (p *Provider) Create(ctx context.Context, namespace, name string) (string, time.Duration, error) {
+	expSecs := int64(p.opts.ExpirationSeconds)
+	resp, err := p.opts.
+		KubeClient.
+		CoreV1().
+		ServiceAccounts(namespace).
+		CreateToken(ctx, name, &authnv1.TokenRequest{
+			Spec: authnv1.TokenRequestSpec{
+				Audiences:         []string{p.opts.Audience},
+				ExpirationSeconds: &expSecs,
+			},
+		}, metav1.CreateOptions{})
+	if err != nil {
+		return "", 0, err
+	}
+	return resp.Status.Token, time.Duration(expSecs) * time.Second, nil
 }

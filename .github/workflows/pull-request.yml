@@ -43,32 +43,25 @@ jobs:
         google-service-account-name: pull-request
         github-token: ${{ secrets.GITHUB_TOKEN }}
         cache-key: pull-request-${{ github.event.pull_request.number }}
-    - name: Comment new releases in the PR
-      uses: actions/github-script@v7
+    - name: Prepare release check comment
       env:
         RELEASE_CONTAINER: ${{ steps.ci-checks.outputs.release-container }}
         RELEASE_HELM: ${{ steps.ci-checks.outputs.release-helm }}
+      run: |
+        touch release-check.txt
+        if [ "$RELEASE_CONTAINER" == "yes" ]; then
+          echo "This pull request will release version $(cat container-version.txt) of the Container." >> release-check.txt
+        fi
+        if [ "$RELEASE_CONTAINER" == "yes" ] && [ "$RELEASE_HELM" == "yes" ]; then
+          echo "" >> release-check.txt
+        fi
+        if [ "$RELEASE_HELM" == "yes" ]; then
+          echo "This pull request will release version $(cat container-version.txt) of the Helm Chart." >> release-check.txt
+        fi
+        if [ "$RELEASE_CONTAINER" == "no" ] && [ "$RELEASE_HELM" == "no" ]; then
+          echo "No version releases in this pull request." >> release-check.txt
+        fi
+    - uses: ./.github/actions/comment-status/
       with:
-        script: |
-          const fs = require('fs')
-          const containerVersion = fs.readFileSync('container-version.txt').toString().trim()
-          const helmVersion = fs.readFileSync('helm-version.txt').toString().trim()
-
-          const { RELEASE_CONTAINER, RELEASE_HELM } = process.env
-          const msgs = []
-          if (RELEASE_CONTAINER === 'yes') {
-            msgs.push(`This pull request will release version \`${containerVersion}\` of the Container.`)
-          }
-          if (RELEASE_HELM === 'yes') {
-            msgs.push(`This pull request will release version \`${helmVersion}\` of the Helm Chart.`)
-          }
-          if (msgs.length === 0) {
-            return
-          }
-
-          await github.rest.issues.createComment({
-            issue_number: context.issue.number,
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            body: msgs.join('\n\n'),
-          })
+        title: Release Check
+        message-file: release-check.txt
