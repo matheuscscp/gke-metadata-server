@@ -28,5 +28,7 @@ import (
 )
 
 type Provider interface {
-	Create(ctx context.Context, namespace, name string) (string, time.Duration, error)
+	GetServiceAccountToken(ctx context.Context, namespace, name string) (string, time.Duration, error)
+	GetGoogleAccessToken(ctx context.Context, saToken, googleEmail string) (string, time.Duration, error)
+	GetGoogleIdentityToken(ctx context.Context, saToken, googleEmail, audience string) (string, time.Duration, error)
 }

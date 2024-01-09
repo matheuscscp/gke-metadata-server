@@ -24,21 +24,16 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
 	"net/netip"
-	"os"
-	"path/filepath"
 
 	pkghttp "github.com/matheuscscp/gke-metadata-server/internal/http"
 	"github.com/matheuscscp/gke-metadata-server/internal/logging"
 	"github.com/matheuscscp/gke-metadata-server/internal/retry"
 	"github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts"
 
-	"github.com/google/uuid"
-	"golang.org/x/oauth2/google"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -144,7 +139,7 @@ func (s *Server) getPodGoogleServiceAccountEmail(w http.ResponseWriter, r *http.
 	return email, r, nil
 }
 
-// listPodGoogleServiceAccounts lists the available GCP Service Accounts for the requesting Pod.
+// listPodGoogleServiceAccounts lists the available Google Service Accounts for the requesting Pod.
 // If there's an error this function sends the response to the client.
 func (s *Server) listPodGoogleServiceAccounts(w http.ResponseWriter, r *http.Request) ([]string, *http.Request, error) {
 	podGoogleServiceAccountEmail, r, err := s.getPodGoogleServiceAccountEmail(w, r)
@@ -154,89 +149,19 @@ func (s *Server) listPodGoogleServiceAccounts(w http.ResponseWriter, r *http.Req
 	return []string{"default", podGoogleServiceAccountEmail}, r, nil
 }
 
-// getPodServiceAccountToken creates a Service Account Token for the
-// given Pod's Service Account.
+// getPodServiceAccountToken creates a ServiceAccount Token for the
+// given Pod's ServiceAccount.
 // If there's an error this function sends the response to the client.
 func (s *Server) getPodServiceAccountToken(w http.ResponseWriter, r *http.Request) (string, *http.Request, error) {
 	pod, r, err := s.getPod(w, r)
 	if err != nil {
 		return "", nil, err
 	}
-	token, _, err := s.opts.ServiceAccountTokens.Create(r.Context(), pod.Namespace, pod.Spec.ServiceAccountName)
+	token, _, err := s.opts.ServiceAccountTokens.GetServiceAccountToken(r.Context(), pod.Namespace, pod.Spec.ServiceAccountName)
 	if err != nil {
 		const format = "error getting token for pod service account: %w"
 		pkghttp.RespondErrorf(w, r, http.StatusInternalServerError, format, err)
 		return "", nil, fmt.Errorf(format, err)
 	}
 	return token, r, nil
-}
-
-// runWithGoogleCredentialsFromPodServiceAccountToken creates
-// a *google.Credentials object from a Kubernetes ServiceAccount
-// Token created for the ServiceAccount currently being used by
-// the requesting Pod. The function internally writes the token
-// to a temporary file and runs the given callback f() passing
-// a *google.Credentials object configured to use this temporary
-// file. The temporary file is removed before the function
-// returns (hence why a callback is used).
-// If there's an error this function sends the response to the
-// client (and does not call the callback f()).
-func (s *Server) runWithGoogleCredentialsFromPodServiceAccountToken(
-	w http.ResponseWriter, r *http.Request, f func(*google.Credentials)) {
-	podGoogleServiceAccountEmail, r, err := s.getPodGoogleServiceAccountEmail(w, r)
-	if err != nil {
-		return
-	}
-
-	saToken, r, err := s.getPodServiceAccountToken(w, r)
-	if err != nil {
-		return
-	}
-
-	// write k8s sa token to tmp file
-	var tokenFile string
-	for {
-		tokenFile = filepath.Join(os.TempDir(), fmt.Sprintf("%s.json", uuid.NewString()))
-		file, err := os.OpenFile(tokenFile, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
-		if err != nil {
-			if os.IsExist(err) {
-				continue
-			}
-			pkghttp.RespondErrorf(w, r, http.StatusInternalServerError,
-				"error creating temporary file '%s': %w", tokenFile, err)
-			return
-		}
-		defer os.Remove(tokenFile)
-		if _, err := file.Write([]byte(saToken)); err != nil {
-			pkghttp.RespondErrorf(w, r, http.StatusInternalServerError,
-				"error writing pod sa token to temporary file '%s': %w", tokenFile, err)
-			return
-		}
-		if err := file.Close(); err != nil {
-			pkghttp.RespondErrorf(w, r, http.StatusInternalServerError,
-				"error closing pod sa token temporary file: %w", err)
-			return
-		}
-		break
-	}
-
-	// get the credential config with k8s sa token file as the credential source
-	b, err := json.Marshal(s.getGoogleCredentialConfig(podGoogleServiceAccountEmail, map[string]any{
-		"format": map[string]string{"type": "text"},
-		"file":   tokenFile,
-	}))
-	if err != nil {
-		pkghttp.RespondErrorf(w, r, http.StatusInternalServerError,
-			"error marshaling google credential config to json: %w", err)
-		return
-	}
-	creds, err := google.CredentialsFromJSON(r.Context(), b, gkeAccessScopes()...)
-	if err != nil {
-		pkghttp.RespondErrorf(w, r, http.StatusInternalServerError,
-			"error getting google credentials for pod service account token: %w", err)
-		return
-	}
-
-	// run callback with creds, then defer will remove the sa token file
-	f(creds)
 }

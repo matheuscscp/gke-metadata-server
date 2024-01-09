@@ -61,16 +61,9 @@ type (
 	}
 
 	Listener interface {
-		AddPod(pod *corev1.Pod)
-		DeletePod(pod *corev1.Pod)
+		AddPod(*corev1.Pod)
+		DeletePod(*corev1.Pod)
 	}
-
-	ListenerFuncs struct {
-		AddFunc    func(pod *corev1.Pod)
-		DeleteFunc func(pod *corev1.Pod)
-	}
-
-	listenerFuncs struct{ ListenerFuncs }
 )
 
 const ipIndex = "ip"
@@ -192,20 +185,4 @@ func (p *Provider) Close() error {
 
 func (p *Provider) AddListener(l Listener) {
 	p.listeners = append(p.listeners, l)
-}
-
-func (p *Provider) AddListenerFuncs(lf ListenerFuncs) {
-	p.AddListener(&listenerFuncs{lf})
-}
-
-func (l *listenerFuncs) AddPod(pod *corev1.Pod) {
-	if l.AddFunc != nil {
-		l.AddFunc(pod)
-	}
-}
-
-func (l *listenerFuncs) DeletePod(pod *corev1.Pod) {
-	if l.DeleteFunc != nil {
-		l.DeleteFunc(pod)
-	}
 }

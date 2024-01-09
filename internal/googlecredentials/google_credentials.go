@@ -1,6 +1,6 @@
 // MIT License
 //
-// Copyright (c) 2023 Matheus Pimenta
+// Copyright (c) 2024 Matheus Pimenta
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -20,37 +20,65 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package server
+package googlecredentials
 
 import (
 	"fmt"
+	"regexp"
 )
 
-func (s *Server) getGoogleCredentialConfig(googleServiceAccountEmail string, credSource map[string]any) any {
+type (
+	Config struct {
+		opts ConfigOptions
+	}
+
+	ConfigOptions struct {
+		TokenExpirationSeconds   int
+		WorkloadIdentityProvider string
+	}
+)
+
+const workloadIdentityProviderPattern = `^projects/\d+/locations/global/workloadIdentityPools/[^/]+/providers/[^/]+$`
+
+var workloadIdentityProviderRegex = regexp.MustCompile(workloadIdentityProviderPattern)
+
+func AccessScopes() []string {
+	return []string{
+		"https://www.googleapis.com/auth/cloud-platform",
+		"https://www.googleapis.com/auth/userinfo.email",
+	}
+}
+
+func NewConfig(opts ConfigOptions) (*Config, error) {
+	if !workloadIdentityProviderRegex.MatchString(opts.WorkloadIdentityProvider) {
+		return nil, fmt.Errorf("workload identity provider name does not match pattern %s",
+			workloadIdentityProviderPattern)
+	}
+	return &Config{opts}, nil
+}
+
+func (c *Config) Get(googleServiceAccountEmail string, credSource map[string]any) any {
 	impersonationURL := fmt.Sprintf(
 		"https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/%s:generateAccessToken",
 		googleServiceAccountEmail)
 
 	return map[string]any{
 		"type":                              "external_account",
-		"audience":                          s.opts.WorkloadIdentityProviderAudience,
+		"audience":                          c.WorkloadIdentityProviderAudience(),
 		"subject_token_type":                "urn:ietf:params:oauth:token-type:jwt",
 		"token_url":                         "https://sts.googleapis.com/v1/token",
 		"credential_source":                 credSource,
 		"service_account_impersonation_url": impersonationURL,
 		"service_account_impersonation": map[string]any{
-			"token_lifetime_seconds": s.opts.TokenExpirationSeconds,
+			"token_lifetime_seconds": c.TokenExpirationSeconds(),
 		},
 	}
 }
 
-func WorkloadIdentityProviderAudience(workloadIdentityProvider string) string {
-	return fmt.Sprintf("//iam.googleapis.com/%s", workloadIdentityProvider)
+func (c *Config) WorkloadIdentityProviderAudience() string {
+	return fmt.Sprintf("//iam.googleapis.com/%s", c.opts.WorkloadIdentityProvider)
 }
 
-func gkeAccessScopes() []string {
-	return []string{
-		"https://www.googleapis.com/auth/cloud-platform",
-		"https://www.googleapis.com/auth/userinfo.email",
-	}
+func (c *Config) TokenExpirationSeconds() int {
+	return c.opts.TokenExpirationSeconds
 }

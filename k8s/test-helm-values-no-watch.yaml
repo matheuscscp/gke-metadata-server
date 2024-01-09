@@ -26,7 +26,8 @@ config:
     enabled: false
   watchServiceAccounts:
     enabled: false
-  cacheTokens: false
+  cacheTokens:
+    enabled: false
 
 image:
   repository: ghcr.io/matheuscscp/gke-metadata-server/test
