@@ -31,6 +31,7 @@ import (
 	"net/http/httptest"
 	"time"
 
+	"github.com/matheuscscp/gke-metadata-server/internal/googlecredentials"
 	pkghttp "github.com/matheuscscp/gke-metadata-server/internal/http"
 	"github.com/matheuscscp/gke-metadata-server/internal/logging"
 	"github.com/matheuscscp/gke-metadata-server/internal/metrics"
@@ -50,17 +51,14 @@ type (
 	}
 
 	ServerOptions struct {
-		TokenExpirationSeconds           int
-		NodeName                         string
-		DaemonName                       string
-		DaemonNamespace                  string
-		WorkloadIdentityProviderAudience string
-		ServerAddr                       string
-		MetricsSubsystem                 string
-		Pods                             pods.Provider
-		ServiceAccounts                  serviceaccounts.Provider
-		ServiceAccountTokens             serviceaccounttokens.Provider
-		MetricsRegistry                  *prometheus.Registry
+		NodeName                string
+		ServerAddr              string
+		MetricsSubsystem        string
+		Pods                    pods.Provider
+		ServiceAccounts         serviceaccounts.Provider
+		ServiceAccountTokens    serviceaccounttokens.Provider
+		GoogleCredentialsConfig *googlecredentials.Config
+		MetricsRegistry         *prometheus.Registry
 	}
 
 	serverMetrics struct {

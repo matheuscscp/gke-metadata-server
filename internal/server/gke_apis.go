@@ -27,12 +27,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/matheuscscp/gke-metadata-server/internal/googlecredentials"
 	pkghttp "github.com/matheuscscp/gke-metadata-server/internal/http"
 	"github.com/matheuscscp/gke-metadata-server/internal/logging"
-
-	"golang.org/x/oauth2/google"
-	"google.golang.org/api/idtoken"
-	"google.golang.org/api/option"
 )
 
 func (s *Server) gkeNodeNameAPI(w http.ResponseWriter, r *http.Request) {
@@ -60,38 +57,45 @@ func (s *Server) gkeServiceAccountIdentityAPI(w http.ResponseWriter, r *http.Req
 		}
 		return
 	}
-
-	s.runWithGoogleCredentialsFromPodServiceAccountToken(w, r, func(creds *google.Credentials) {
-		source, err := idtoken.NewTokenSource(r.Context(), audience, option.WithCredentials(creds))
-		if err != nil {
-			pkghttp.RespondErrorf(w, r, http.StatusInternalServerError,
-				"error getting google id token source: %w", err)
-			return
-		}
-		tok, err := source.Token()
-		if err != nil {
-			respondGoogleAPIErrorf(w, r, "error getting google id token: %w", err)
-			return
-		}
-		pkghttp.RespondText(w, r, http.StatusOK, tok.AccessToken)
-	})
+	saToken, r, err := s.getPodServiceAccountToken(w, r)
+	if err != nil {
+		return
+	}
+	podGoogleServiceAccountEmail, r, err := s.getPodGoogleServiceAccountEmail(w, r)
+	if err != nil {
+		return
+	}
+	token, _, err := s.opts.ServiceAccountTokens.GetGoogleIdentityToken(
+		r.Context(), saToken, podGoogleServiceAccountEmail, audience)
+	if err != nil {
+		respondGoogleAPIErrorf(w, r, "error getting google id token: %w", err)
+		return
+	}
+	pkghttp.RespondText(w, r, http.StatusOK, token)
 }
 
 func (s *Server) gkeServiceAccountScopesAPI(w http.ResponseWriter, r *http.Request) {
-	pkghttp.RespondText(w, r, http.StatusOK, strings.Join(gkeAccessScopes(), "\n")+"\n")
+	pkghttp.RespondText(w, r, http.StatusOK, strings.Join(googlecredentials.AccessScopes(), "\n")+"\n")
 }
 
 func (s *Server) gkeServiceAccountTokenAPI(w http.ResponseWriter, r *http.Request) {
-	s.runWithGoogleCredentialsFromPodServiceAccountToken(w, r, func(creds *google.Credentials) {
-		tok, err := creds.TokenSource.Token()
-		if err != nil {
-			respondGoogleAPIErrorf(w, r, "error getting google access token: %w", err)
-			return
-		}
-		pkghttp.RespondJSON(w, r, http.StatusOK, map[string]any{
-			"access_token": strings.TrimSpace(tok.AccessToken),
-			"expires_in":   s.opts.TokenExpirationSeconds - 10,
-			"token_type":   "Bearer",
-		})
+	saToken, r, err := s.getPodServiceAccountToken(w, r)
+	if err != nil {
+		return
+	}
+	podGoogleServiceAccountEmail, r, err := s.getPodGoogleServiceAccountEmail(w, r)
+	if err != nil {
+		return
+	}
+	token, tokenDuration, err := s.opts.ServiceAccountTokens.GetGoogleAccessToken(
+		r.Context(), saToken, podGoogleServiceAccountEmail)
+	if err != nil {
+		respondGoogleAPIErrorf(w, r, "error getting google access token: %w", err)
+		return
+	}
+	pkghttp.RespondJSON(w, r, http.StatusOK, map[string]any{
+		"access_token": token,
+		"expires_in":   int(tokenDuration.Seconds()),
+		"token_type":   "Bearer",
 	})
 }

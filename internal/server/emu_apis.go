@@ -34,7 +34,7 @@ func (s *Server) emuPodGoogleCredConfigAPI(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		return
 	}
-	credConfig := s.getGoogleCredentialConfig(podGoogleServiceAccountEmail, map[string]any{
+	credConfig := s.opts.GoogleCredentialsConfig.Get(podGoogleServiceAccountEmail, map[string]any{
 		"format": map[string]string{"type": "text"},
 		"url":    fmt.Sprintf("http://%s%s", r.Host, emuPodServiceAccountTokenAPI),
 		"headers": map[string]string{

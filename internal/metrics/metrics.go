@@ -59,29 +59,29 @@ func HandlerFor(registry *prometheus.Registry, l promhttp.Logger) http.Handler {
 }
 
 func StartPusher(registry *prometheus.Registry, url, jobName string) (context.CancelFunc, error) {
+	name := os.Getenv("POD_NAME")
+	if name == "" {
+		return nil, fmt.Errorf("POD_NAME environment variable must be specified")
+	}
 	namespace := os.Getenv("POD_NAMESPACE")
 	if namespace == "" {
 		return nil, fmt.Errorf("POD_NAMESPACE environment variable must be specified")
-	}
-	name := os.Getenv("POD_NAME")
-	if namespace == "" {
-		return nil, fmt.Errorf("POD_NAME environment variable must be specified")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	pusher := push.
 		New(url, jobName).
 		Gatherer(registry).
-		Grouping("namespace", namespace).
-		Grouping("name", name)
+		Grouping("name", name).
+		Grouping("namespace", namespace)
 	l := logging.
 		FromContext(ctx).
 		WithField("pushgateway_details", logrus.Fields{
 			"url":      url,
 			"job_name": jobName,
 			"groupings": logrus.Fields{
-				"namespace": namespace,
 				"name":      name,
+				"namespace": namespace,
 			},
 		})
 

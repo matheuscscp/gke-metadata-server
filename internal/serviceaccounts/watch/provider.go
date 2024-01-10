@@ -47,6 +47,7 @@ type (
 		closeChannel       chan struct{}
 		closedChannel      chan struct{}
 		informer           cache.SharedIndexInformer
+		listeners          []Listener
 	}
 
 	ProviderOptions struct {
@@ -55,6 +56,10 @@ type (
 		KubeClient       *kubernetes.Clientset
 		MetricsRegistry  *prometheus.Registry
 		ResyncPeriod     time.Duration
+	}
+
+	Listener interface {
+		UpdateServiceAccount(*corev1.ServiceAccount)
 	}
 )
 
@@ -91,15 +96,23 @@ func NewProvider(ctx context.Context, opts ProviderOptions) *Provider {
 	}
 
 	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { numServiceAccounts.Inc() },
-		DeleteFunc: func(obj interface{}) { numServiceAccounts.Dec() },
+		AddFunc: func(obj interface{}) {
+			numServiceAccounts.Inc()
+			sa := obj.(*corev1.ServiceAccount)
+			for _, l := range p.listeners {
+				l.UpdateServiceAccount(sa)
+			}
+		},
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			sa := newObj.(*corev1.ServiceAccount)
+			for _, l := range p.listeners {
+				l.UpdateServiceAccount(sa)
+			}
+		},
+		DeleteFunc: func(obj interface{}) {
+			numServiceAccounts.Dec()
+		},
 	})
-
-	go func() {
-		informer.Run(p.closeChannel)
-		close(p.closedChannel)
-	}()
-	logging.FromContext(ctx).Info("watch service accounts started")
 
 	return p
 }
@@ -131,8 +144,20 @@ func (p *Provider) get(ctx context.Context, namespace, name string) (*corev1.Ser
 	return v.(*corev1.ServiceAccount), nil
 }
 
+func (p *Provider) Start(ctx context.Context) {
+	go func() {
+		p.informer.Run(p.closeChannel)
+		close(p.closedChannel)
+	}()
+	logging.FromContext(ctx).Info("watch service accounts started")
+}
+
 func (p *Provider) Close() error {
 	close(p.closeChannel)
 	<-p.closedChannel
 	return nil
+}
+
+func (p *Provider) AddListener(l Listener) {
+	p.listeners = append(p.listeners, l)
 }
