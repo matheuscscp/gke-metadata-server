@@ -41,7 +41,7 @@ runs:
 
         const issue_number = context.issue.number
         const { owner, repo } = context.repo
-        const body = commentIdentifier + '\n\n' + "```" + msg + "```"
+        const body = commentIdentifier + '\n\n' + "```\n" + msg + "\n```"
 
         const { data: comments } = await github.rest.issues.listComments({
           issue_number,
