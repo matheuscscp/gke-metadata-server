@@ -56,7 +56,7 @@ jobs:
           echo "" >> release-check.txt
         fi
         if [ "$RELEASE_HELM" == "yes" ]; then
-          echo "This pull request will release version $(cat container-version.txt) of the Helm Chart." >> release-check.txt
+          echo "This pull request will release version $(cat helm-version.txt) of the Helm Chart." >> release-check.txt
         fi
         if [ "$RELEASE_CONTAINER" == "no" ] && [ "$RELEASE_HELM" == "no" ]; then
           echo "No version releases in this pull request." >> release-check.txt
