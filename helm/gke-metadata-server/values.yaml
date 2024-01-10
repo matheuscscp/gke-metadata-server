@@ -80,3 +80,10 @@ priorityClass: system-node-critical
 
 # This Pod needs to listen on the host network, port 80.
 hostNetwork: true
+
+# Pod .spec.initContainers. Can be used for initializing the Node loopback interface
+# with the the Google Metadata IP address (169.254.169.254) using the CLI "init-network"
+# command (see k8s/test-pod.yaml). This allows your pods to run without the sidecar,
+# but also requires the emulator to listen on port 80 (in the host network!). Please
+# assess the risk of opening port 80 in your Nodes before choosing this approach.
+initContainers:

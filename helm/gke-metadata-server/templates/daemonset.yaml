@@ -47,6 +47,10 @@ spec:
       priorityClassName: {{ .Values.priorityClass }}
       hostNetwork: {{ .Values.hostNetwork }}
       dnsPolicy: ClusterFirstWithHostNet
+      {{- if .Values.initContainers }}
+      initContainers:
+      {{- toYaml .Values.initContainers | nindent 6 }}
+      {{- end }}
       containers:
       - name: server
         {{- if .Values.image.digest }}
