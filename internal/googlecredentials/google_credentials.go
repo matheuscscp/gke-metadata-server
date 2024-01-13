@@ -23,8 +23,12 @@
 package googlecredentials
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"regexp"
+
+	"golang.org/x/oauth2/google"
 )
 
 type (
@@ -55,6 +59,22 @@ func NewConfig(opts ConfigOptions) (*Config, error) {
 			workloadIdentityProviderPattern)
 	}
 	return &Config{opts}, nil
+}
+
+func (c *Config) GetForFile(ctx context.Context, googleServiceAccountEmail, credFile string) (*google.Credentials, error) {
+	conf := c.Get(googleServiceAccountEmail, map[string]any{
+		"format": map[string]string{"type": "text"},
+		"file":   credFile,
+	})
+	b, err := json.Marshal(conf)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling google credentials config to json: %w", err)
+	}
+	creds, err := google.CredentialsFromJSON(ctx, b, AccessScopes()...)
+	if err != nil {
+		return nil, fmt.Errorf("error creating google credentials from json: %w", err)
+	}
+	return creds, nil
 }
 
 func (c *Config) Get(googleServiceAccountEmail string, credSource map[string]any) any {

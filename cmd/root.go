@@ -90,7 +90,7 @@ func main() {
 
 // createKubernetesClient creates a Kubernetes client from the usual CLI flags:
 // --kubeconfig and --context.
-func createKubernetesClient(ctx context.Context) (*kubernetes.Clientset, *rest.Config, error) {
+func createKubernetesClient(ctx context.Context) (*kubernetes.Clientset, error) {
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		logging.
@@ -108,15 +108,15 @@ func createKubernetesClient(ctx context.Context) (*kubernetes.Clientset, *rest.C
 		)
 		config, err = loader.ClientConfig()
 		if err != nil {
-			return nil, nil, fmt.Errorf("error creating kubeconfig: %w", err)
+			return nil, fmt.Errorf("error creating kubeconfig: %w", err)
 		}
 	}
 
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		return nil, nil, fmt.Errorf("error creating client-go: %w", err)
+		return nil, fmt.Errorf("error creating client-go: %w", err)
 	}
-	return clientset, config, nil
+	return clientset, nil
 }
 
 // waitForShutdown waits for the given context to be done or for SIGINT or SIGTERM.

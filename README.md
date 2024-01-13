@@ -158,6 +158,18 @@ echo "https://storage.googleapis.com/$ISSUER_GCS_URI"
 echo "https://storage.googleapis.com/$ISSUER_GCS_URI/openid/v1/jwks"
 ```
 
+#### JWKS Rotation
+
+In case you are rotating the keys used by the ServiceAccount Issuer, the emulator has a feature
+for periodically rotating the JWKS document. This feature fetches the JWKS document from the
+Kubernetes API Server and updates it in a GCS bucket. The feature requires the configuration of
+a Google Service Account for the emulator to perform the required GCS API calls. Check the Helm
+Values API for details (see the deploy section below).
+
+When using this feature, there must be an IAM Policy binding for this Google Service Account
+granting the IAM Role `roles/iam.workloadIdentityUser` to the Kubernetes ServiceAccount used by
+the emulator Pods. The next sections gives details on how grant roles to Kubernetes ServiceAccounts.
+
 ### Configure GCP Workload Identity Federation for Kubernetes
 
 Steps:
@@ -166,7 +178,7 @@ Steps:
 
 Docs: [link](https://cloud.google.com/iam/docs/workload-identity-federation-with-kubernetes).
 
-Examples for all the configurations described in this section are available here:
+Examples for all the configuration described in this section are available here:
 [`./terraform/test.tf`](./terraform/test.tf). This is where we provision the
 infrastructure required for testing this project in CI and development.
 

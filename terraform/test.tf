@@ -43,6 +43,22 @@ resource "google_iam_workload_identity_pool" "test_kind_cluster" {
   workload_identity_pool_id = "test-kind-cluster"
 }
 
+resource "google_service_account" "server" {
+  account_id = "gke-metadata-server"
+}
+
+resource "google_service_account_iam_member" "server_workload_identity_user" {
+  service_account_id = google_service_account.server.name
+  role               = local.wi_user_role
+  member             = "principal://iam.googleapis.com/${google_iam_workload_identity_pool.test_kind_cluster.name}/subject/system:serviceaccount:kube-system:gke-metadata-server"
+}
+
+resource "google_storage_bucket_iam_member" "server_cluster_issuer_jwks_rotator" {
+  bucket = google_storage_bucket.cluster_issuer_test.name
+  role   = "roles/storage.objectUser"
+  member = google_service_account.server.member
+}
+
 resource "google_iam_workload_identity_pool_provider" "test" {
   workload_identity_pool_id          = google_iam_workload_identity_pool.test_kind_cluster.workload_identity_pool_id
   workload_identity_pool_provider_id = "test"
@@ -60,7 +76,7 @@ resource "google_service_account" "test" {
 
 resource "google_service_account_iam_member" "workload_identity_user" {
   service_account_id = google_service_account.test.name
-  role               = "roles/iam.workloadIdentityUser"
+  role               = local.wi_user_role
   member             = "principal://iam.googleapis.com/${google_iam_workload_identity_pool.test_kind_cluster.name}/subject/system:serviceaccount:default:test"
 }
 

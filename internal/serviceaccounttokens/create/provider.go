@@ -24,7 +24,6 @@ package createserviceaccounttoken
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -135,16 +134,9 @@ func (p *Provider) runWithGoogleCredentialsFromKubernetesServiceAccountToken(ctx
 	}
 
 	// get the credential config with k8s sa token file as the credential source
-	b, err := json.Marshal(p.opts.GoogleCredentialsConfig.Get(email, map[string]any{
-		"format": map[string]string{"type": "text"},
-		"file":   tokenFile,
-	}))
+	creds, err := p.opts.GoogleCredentialsConfig.GetForFile(ctx, email, tokenFile)
 	if err != nil {
-		return fmt.Errorf("error marshaling google credential config to json: %w", err)
-	}
-	creds, err := google.CredentialsFromJSON(ctx, b, googlecredentials.AccessScopes()...)
-	if err != nil {
-		return fmt.Errorf("error getting google credentials for service account token: %w", err)
+		return err
 	}
 
 	// run callback with creds, then defer will remove the sa token file
