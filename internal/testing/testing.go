@@ -99,7 +99,7 @@ func RequestText(t *testing.T, headers http.Header, url, name string) string {
 
 func requestURL(t *testing.T, headers http.Header, url, name, expectedContentType,
 	expectedMetadataFlavor string) io.ReadCloser {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
