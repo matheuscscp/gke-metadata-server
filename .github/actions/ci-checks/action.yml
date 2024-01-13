@@ -74,10 +74,9 @@ runs:
       service_account: ${{ inputs.google-service-account-name }}@gke-metadata-server.iam.gserviceaccount.com
 
   - run: |
-      ci_cache=ghcr.io/matheuscscp/gke-metadata-server/ci-cache
-      go_build_tag=go-build:latest
-      echo "CACHE_IMAGE=${ci_cache}/${CACHE_KEY}/${go_build_tag}" >> $GITHUB_ENV
-      echo "DEFAULT_CACHE_IMAGE=${ci_cache}/release/${go_build_tag}" >> $GITHUB_ENV
+      image=ghcr.io/matheuscscp/gke-metadata-server/ci-cache/go-build
+      echo "CACHE_IMAGE=${image}:${CACHE_KEY}" >> $GITHUB_ENV
+      echo "DEFAULT_CACHE_IMAGE=${image}:release" >> $GITHUB_ENV
     shell: bash
     env:
       CACHE_KEY: ${{ inputs.cache-key }}
