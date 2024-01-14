@@ -23,8 +23,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/matheuscscp/gke-metadata-server/internal/googlecredentials"
@@ -33,17 +36,24 @@ import (
 	listpods "github.com/matheuscscp/gke-metadata-server/internal/pods/list"
 	watchpods "github.com/matheuscscp/gke-metadata-server/internal/pods/watch"
 	"github.com/matheuscscp/gke-metadata-server/internal/server"
+	"github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts"
 	getserviceaccount "github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts/get"
 	watchserviceaccounts "github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts/watch"
 	cacheserviceaccounttokens "github.com/matheuscscp/gke-metadata-server/internal/serviceaccounttokens/cache"
 	createserviceaccounttoken "github.com/matheuscscp/gke-metadata-server/internal/serviceaccounttokens/create"
+	pkgtime "github.com/matheuscscp/gke-metadata-server/internal/time"
 
+	"cloud.google.com/go/storage"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"golang.org/x/oauth2/google"
+	"google.golang.org/api/option"
 )
 
 const (
-	defaultServerPort = "8080"
+	defaultServerPort       = "8080"
+	serviceAccountTokenFile = "/var/run/secrets/sts.googleapis.com/serviceaccount/token"
 )
 
 func newServerCommand() *cobra.Command {
@@ -55,6 +65,7 @@ func newServerCommand() *cobra.Command {
 	var (
 		serverAddr                          string
 		workloadIdentityProvider            string
+		googleServiceAccountEmail           string
 		watchPods                           bool
 		watchPodsResyncPeriod               time.Duration
 		watchPodsDisableFallback            bool
@@ -63,6 +74,10 @@ func newServerCommand() *cobra.Command {
 		watchServiceAccountsDisableFallback bool
 		cacheTokens                         bool
 		cacheTokensConcurrency              int
+		rotateJWKS                          bool
+		rotateJWKSPeriod                    time.Duration
+		rotateJWKSBucket                    string
+		rotateJWKSKeyPrefix                 string
 	)
 
 	cmd := &cobra.Command{
@@ -70,20 +85,40 @@ func newServerCommand() *cobra.Command {
 		Short: "Start the GKE Workload Identity emulator",
 		Long:  "Start the GKE Workload Identity emulator for serving requests locally inside each node of the Kubernes cluster",
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
+			// validate input
+			nodeName := os.Getenv("NODE_NAME")
+			if nodeName == "" {
+				return fmt.Errorf("NODE_NAME environment variable must be specified")
+			}
+			if googleServiceAccountEmail != "" {
+				if !serviceaccounts.IsGoogleEmail(googleServiceAccountEmail) {
+					return fmt.Errorf("google service account email '%s' does not match pattern '%s'",
+						googleServiceAccountEmail, serviceaccounts.GoogleEmailPattern)
+				}
+			}
+			if rotateJWKS {
+				if googleServiceAccountEmail == "" {
+					return fmt.Errorf("google service account email must be specified when rotating jwks")
+				}
+				if rotateJWKSBucket == "" {
+					return fmt.Errorf("bucket must be specified when rotating jwks")
+				}
+			}
 			googleCredentialsConfig, err := googlecredentials.NewConfig(googlecredentials.ConfigOptions{
 				TokenExpirationSeconds:   tokenExpirationSeconds,
 				WorkloadIdentityProvider: workloadIdentityProvider,
 			})
-			if err != nil { // this only returns input errors
+			if err != nil {
 				return err
 			}
-
-			nodeName := os.Getenv("NODE_NAME")
 			ctx := logging.IntoContext(cmd.Context(), logging.FromContext(cmd.Context()).WithFields(logrus.Fields{
-				"node":                       nodeName,
-				"workload_identity_provider": workloadIdentityProvider,
+				"node_name":                    nodeName,
+				"workload_identity_provider":   workloadIdentityProvider,
+				"google_service_account_email": googleServiceAccountEmail,
 			}))
 			l := logging.FromContext(ctx)
+
+			// now there are only runtime errors below
 			defer func() {
 				if runtimeErr := err; err != nil {
 					err = nil
@@ -91,9 +126,25 @@ func newServerCommand() *cobra.Command {
 				}
 			}()
 
-			kubeClient, _, err := createKubernetesClient(ctx)
+			// create clients
+			kubeClient, err := createKubernetesClient(ctx)
 			if err != nil {
 				return fmt.Errorf("error creating k8s client: %w", err)
+			}
+			var googleCreds *google.Credentials
+			if googleServiceAccountEmail != "" {
+				googleCreds, err = googleCredentialsConfig.GetForFile(ctx, googleServiceAccountEmail, serviceAccountTokenFile)
+				if err != nil {
+					return fmt.Errorf("error creating google credentials: %w", err)
+				}
+			}
+			var storageClient *storage.Client
+			if googleCreds != nil {
+				storageClient, err = storage.NewClient(ctx, option.WithCredentials(googleCreds))
+				if err != nil {
+					return fmt.Errorf("error creating gcs client: %w", err)
+				}
+				defer storageClient.Close()
 			}
 
 			metricsRegistry := metrics.NewRegistry()
@@ -165,6 +216,55 @@ func newServerCommand() *cobra.Command {
 				serviceAccountTokens = p
 			}
 
+			// start jwks rotation
+			if rotateJWKS {
+				// perform first rotation before starting server as a validation for
+				// for preventing the program from starting in an invalid state
+				publish := func() error {
+					return publishDocument(ctx, kubeClient, storageClient, rotateJWKSBucket, rotateJWKSKeyPrefix, jwksURI, io.Discard)
+				}
+				l := l.WithField("jwks_rotation", logrus.Fields{
+					"period":     rotateJWKSPeriod.String(),
+					"bucket":     rotateJWKSBucket,
+					"object_key": filepath.Join(rotateJWKSKeyPrefix, jwksURI),
+				})
+				if err := publish(); err != nil {
+					return fmt.Errorf("error rotating jwks: %w", err)
+				}
+
+				// setup observability
+				l.Info("jwks rotated")
+				errorsCounter := prometheus.NewCounter(prometheus.CounterOpts{
+					Namespace: metrics.Namespace,
+					Subsystem: metricsSubsystem,
+					Name:      "jwks_rotation_errors_total",
+					Help:      "Total errors when rotating the JWKS.",
+				})
+				metricsRegistry.MustRegister(errorsCounter)
+
+				// start goroutine
+				jwksRotationCtx, closeJWKSRotation := context.WithCancel(ctx)
+				jwksRotationClosed := make(chan struct{})
+				defer func() {
+					closeJWKSRotation()
+					<-jwksRotationClosed
+				}()
+				go func() {
+					defer close(jwksRotationClosed)
+					for {
+						if pkgtime.SleepContext(jwksRotationCtx, rotateJWKSPeriod) != nil {
+							return
+						}
+						if err := publish(); err != nil {
+							errorsCounter.Inc()
+							l.WithError(err).Error("error rotating jwks")
+						} else {
+							l.Info("jwks rotated")
+						}
+					}
+				}()
+			}
+
 			// start server
 			if wp != nil {
 				wp.Start(ctx)
@@ -196,23 +296,33 @@ func newServerCommand() *cobra.Command {
 	cmd.Flags().StringVar(&serverAddr, "server-addr", ":"+defaultServerPort,
 		"Network address where the metadata server must listen on")
 	cmd.Flags().StringVar(&workloadIdentityProvider, "workload-identity-provider", "",
-		"Fully qualified resource name (projects/<project_number>/locations/global/workloadIdentityPools/<pool_name>/providers/<provider_name>)")
+		"Mandatory fully-qualified resource name of the GCP Workload Identity Provider (projects/<project_number>/locations/global/workloadIdentityPools/<pool_name>/providers/<provider_name>)")
+	cmd.Flags().StringVar(&googleServiceAccountEmail, "google-service-account-email", "",
+		"Optional Google Service Account for performing GCP API calls (the Kubernetes ServiceAccount needs permission to impersonate)")
 	cmd.Flags().BoolVar(&watchPods, "watch-pods", false,
-		"Whether or not to watch the pods running on the same node")
+		"Whether or not to watch the pods running on the same node (default false)")
 	cmd.Flags().BoolVar(&watchPodsDisableFallback, "watch-pods-disable-fallback", false,
-		"When watching the pods running on the same node, whether or not to disable the use of a simple fallback method for retrieving pods upon cache misses")
+		"When watching the pods running on the same node, whether or not to disable the use of a simple fallback method for retrieving pods upon cache misses (default false)")
 	cmd.Flags().DurationVar(&watchPodsResyncPeriod, "watch-pods-resync-period", 10*time.Minute,
 		"When watching the pods running on the same node, how often to fully resync")
 	cmd.Flags().BoolVar(&watchServiceAccounts, "watch-service-accounts", false,
-		"Whether or not to watch all the service accounts of the cluster")
+		"Whether or not to watch all the service accounts of the cluster (default false)")
 	cmd.Flags().BoolVar(&watchServiceAccountsDisableFallback, "watch-service-accounts-disable-fallback", false,
-		"When watching service accounts, whether or not to disable the use of a simple fallback method for retrieving service accounts upon cache misses")
+		"When watching service accounts, whether or not to disable the use of a simple fallback method for retrieving service accounts upon cache misses (default false)")
 	cmd.Flags().DurationVar(&watchServiceAccountsResyncPeriod, "watch-service-accounts-resync-period", time.Hour,
 		"When watching service accounts, how often to fully resync")
 	cmd.Flags().BoolVar(&cacheTokens, "cache-tokens", false,
-		"Whether or not to proactively cache tokens for the service accounts used by the pods running on the same node")
+		"Whether or not to proactively cache tokens for the service accounts used by the pods running on the same node (default false)")
 	cmd.Flags().IntVar(&cacheTokensConcurrency, "cache-tokens-concurrency", 10,
 		"When proactively caching service account tokens, what is the maximum amount of caching operations that can happen in parallel")
+	cmd.Flags().BoolVar(&rotateJWKS, "rotate-jwks", false,
+		"Whether or not to periodically fetch the JWKS document from the Kubernetes API and upload it to a GCS bucket (default false)")
+	cmd.Flags().DurationVar(&rotateJWKSPeriod, "rotate-jwks-period", 30*time.Minute,
+		"When rotating the JWKS, how often")
+	cmd.Flags().StringVar(&rotateJWKSBucket, "rotate-jwks-bucket", "",
+		"When rotating the JWKS, which GCS bucket to upload the object to")
+	cmd.Flags().StringVar(&rotateJWKSKeyPrefix, "rotate-jwks-key-prefix", "",
+		"When rotating the JWKS, which GCS object key inside the bucket")
 
 	return cmd
 }

@@ -27,9 +27,11 @@ terraform {
 }
 
 locals {
-  wi_pool_name     = google_iam_workload_identity_pool.github_actions.name
-  gh_sub_prefix    = "repo:matheuscscp/gke-metadata-server:environment"
-  wi_member_prefix = "principal://iam.googleapis.com/${local.wi_pool_name}/subject/${local.gh_sub_prefix}"
+  project             = "gke-metadata-server"
+  wi_user_role        = "roles/iam.workloadIdentityUser"
+  gh_wi_pool_name     = google_iam_workload_identity_pool.github_actions.name
+  gh_wi_sub_prefix    = "repo:matheuscscp/gke-metadata-server:environment"
+  gh_wi_member_prefix = "principal://iam.googleapis.com/${local.gh_wi_pool_name}/subject/${local.gh_wi_sub_prefix}"
 }
 
 data "google_project" "matheuspimenta_com" {
@@ -37,8 +39,8 @@ data "google_project" "matheuspimenta_com" {
 }
 
 resource "google_project" "gke_metadata_server" {
-  name            = "gke-metadata-server"
-  project_id      = "gke-metadata-server"
+  name            = local.project
+  project_id      = local.project
   billing_account = data.google_project.matheuspimenta_com.billing_account
 }
 
@@ -59,8 +61,8 @@ resource "google_service_account" "plan" {
 
 resource "google_service_account_iam_member" "plan_workload_identity_user" {
   service_account_id = google_service_account.plan.name
-  role               = "roles/iam.workloadIdentityUser"
-  member             = "${local.wi_member_prefix}:terraform-plan"
+  role               = local.wi_user_role
+  member             = "${local.gh_wi_member_prefix}:terraform-plan"
 }
 
 resource "google_project_iam_member" "plan_project_viewer" {
@@ -82,8 +84,8 @@ resource "google_service_account" "apply" {
 
 resource "google_service_account_iam_member" "apply_workload_identity_user" {
   service_account_id = google_service_account.apply.name
-  role               = "roles/iam.workloadIdentityUser"
-  member             = "${local.wi_member_prefix}:terraform-apply"
+  role               = local.wi_user_role
+  member             = "${local.gh_wi_member_prefix}:terraform-apply"
 }
 
 resource "google_project_iam_member" "apply_project_owner" {
@@ -124,7 +126,7 @@ resource "google_storage_bucket" "terraform_state" {
 
 resource "google_storage_bucket_iam_binding" "tf_state_manager" {
   bucket = google_storage_bucket.terraform_state.name
-  role   = "roles/storage.objectAdmin"
+  role   = "roles/storage.objectUser"
   members = [
     google_service_account.plan.member,
     google_service_account.apply.member,

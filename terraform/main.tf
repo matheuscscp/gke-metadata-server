@@ -31,5 +31,6 @@ provider "google" {
 }
 
 locals {
-  project = "gke-metadata-server"
+  project      = "gke-metadata-server"
+  wi_user_role = "roles/iam.workloadIdentityUser"
 }

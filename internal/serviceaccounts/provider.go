@@ -36,11 +36,12 @@ type Provider interface {
 }
 
 const (
-	gkeAnnotation      = "iam.gke.io/gcp-service-account"
-	googleEmailPattern = `^[a-zA-Z0-9-]+@[a-zA-Z0-9-]+\.iam\.gserviceaccount\.com$`
+	GoogleEmailPattern = `^[a-zA-Z0-9-]+@[a-zA-Z0-9-]+\.iam\.gserviceaccount\.com$`
+
+	gkeAnnotation = "iam.gke.io/gcp-service-account"
 )
 
-var googleEmailRegex = regexp.MustCompile(googleEmailPattern)
+var googleEmailRegex = regexp.MustCompile(GoogleEmailPattern)
 
 func GoogleEmail(sa *corev1.ServiceAccount) (string, error) {
 	v, ok := sa.Annotations[gkeAnnotation]
@@ -49,9 +50,13 @@ func GoogleEmail(sa *corev1.ServiceAccount) (string, error) {
 			gkeAnnotation, sa.Namespace, sa.Name)
 	}
 	v = strings.TrimSpace(v)
-	if !googleEmailRegex.MatchString(v) {
-		return "", fmt.Errorf("annotation %s value '%s' does not contain a valid Google Service Account Email (%s)",
-			gkeAnnotation, v, googleEmailPattern)
+	if !IsGoogleEmail(v) {
+		return "", fmt.Errorf("annotation %s value '%s' does not match pattern '%s'",
+			gkeAnnotation, v, GoogleEmailPattern)
 	}
 	return v, nil
+}
+
+func IsGoogleEmail(s string) bool {
+	return googleEmailRegex.MatchString(s)
 }

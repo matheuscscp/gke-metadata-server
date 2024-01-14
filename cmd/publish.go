@@ -23,11 +23,11 @@
 package main
 
 import (
-	"crypto/tls"
-	"crypto/x509"
+	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
+	"io"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -35,7 +35,10 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/spf13/cobra"
+	"k8s.io/client-go/kubernetes"
 )
+
+const jwksURI = "openid/v1/jwks"
 
 func newPublishCommand() *cobra.Command {
 	var bucket string
@@ -65,79 +68,21 @@ func newPublishCommand() *cobra.Command {
 				return fmt.Errorf("error creating storage client: %w", err)
 			}
 			defer storageClient.Close()
-			bkt := storageClient.Bucket(bucket)
 
-			_, kubeConfig, err := createKubernetesClient(ctx)
+			kubeClient, err := createKubernetesClient(ctx)
 			if err != nil {
 				return fmt.Errorf("error creating k8s client: %w", err)
 			}
 
-			// create kube http client
-			var certificates []tls.Certificate
-			if len(kubeConfig.TLSClientConfig.CertData) > 0 {
-				cert, err := tls.X509KeyPair(
-					kubeConfig.TLSClientConfig.CertData,
-					kubeConfig.TLSClientConfig.KeyData,
-				)
-				if err != nil {
-					return fmt.Errorf("error creating tls cert for talking to k8s: %w", err)
-				}
-				certificates = append(certificates, cert)
-			}
-			caCertPool := x509.NewCertPool()
-			caCertPool.AppendCertsFromPEM(kubeConfig.TLSClientConfig.CAData)
-			httpClient := &http.Client{
-				Transport: &http.Transport{
-					TLSClientConfig: &tls.Config{
-						RootCAs:      caCertPool,
-						Certificates: certificates,
-					},
-				},
-			}
-
 			fmt.Println()
 
-			const jwksURI = "openid/v1/jwks"
 			for _, key := range []string{".well-known/openid-configuration", jwksURI} {
-				// request document to control plane
-				url := fmt.Sprintf("%s/%s", kubeConfig.Host, key)
-				req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-				if err != nil {
-					return fmt.Errorf("error creating request for url '%s' to k8s control plane: %w", url, err)
+				if err := publishDocument(ctx, kubeClient, storageClient, bucket, keyPrefix, key, os.Stdout); err != nil {
+					return err
 				}
-				if token := kubeConfig.BearerToken; token != "" {
-					req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-				}
-				resp, err := httpClient.Do(req)
-				if err != nil {
-					return fmt.Errorf("error performing request for url '%s' to k8s control plane: %w", url, err)
-				}
-				defer resp.Body.Close()
-				var body any
-				if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-					return fmt.Errorf("error unmarshaling response for url '%s': %w", url, err)
-				}
-				if resp.StatusCode != http.StatusOK {
-					l = l.WithField("api_error", body)
-					return fmt.Errorf("unexpected status code from k8s api server for url '%s': %w", url, err)
-				}
-
-				// upload to GCS
-				objKey := filepath.Join(keyPrefix, key)
-				w := bkt.Object(objKey).NewWriter(ctx)
-				enc := json.NewEncoder(w)
-				enc.SetIndent("", "  ")
-				if err := enc.Encode(body); err != nil {
-					return fmt.Errorf("error uploading %s to bucket %s: %w", objKey, bucket, err)
-				}
-				if err := w.Close(); err != nil {
-					return fmt.Errorf("error closing %s upload to bucket %s: %w", objKey, bucket, err)
-				}
-				fmt.Printf("Object gs://%s/%s sucessfully uploaded.\n", bucket, objKey)
 			}
 
 			bktURL := fmt.Sprintf("https://storage.googleapis.com/%s/%s", bucket, keyPrefix)
-			fmt.Println()
 			fmt.Println("Use the values below for configuring your Kubernetes API Server.")
 			fmt.Println()
 			fmt.Printf("Issuer URI (--service-account-issuer):   %s\n", bktURL)
@@ -152,4 +97,32 @@ func newPublishCommand() *cobra.Command {
 	cmd.Flags().StringVar(&keyPrefix, "key-prefix", "", "Prefix to prepend to the object keys")
 
 	return cmd
+}
+
+func publishDocument(ctx context.Context, kubeClient *kubernetes.Clientset,
+	storageClient *storage.Client, bucket, keyPrefix, key string, stdout io.Writer) error {
+	// request document to control plane
+	b, err := kubeClient.RESTClient().Get().AbsPath(key).Do(ctx).Raw()
+	if err != nil {
+		return fmt.Errorf("error requesting document '%s' to k8s control plane: %w", key, err)
+	}
+	var body any
+	if err := json.Unmarshal(b, &body); err != nil {
+		return fmt.Errorf("error unmarshaling response for document '%s': %w", key, err)
+	}
+
+	// upload to GCS
+	objKey := filepath.Join(keyPrefix, key)
+	w := storageClient.Bucket(bucket).Object(objKey).NewWriter(ctx)
+	enc := json.NewEncoder(io.MultiWriter(w, stdout))
+	enc.SetIndent("", "  ")
+	fmt.Fprintf(stdout, "Document %s successfully retrieved from the Kubernetes API Server:\n\n", key)
+	if err := enc.Encode(body); err != nil {
+		return fmt.Errorf("error uploading %s to bucket %s: %w", objKey, bucket, err)
+	}
+	if err := w.Close(); err != nil {
+		return fmt.Errorf("error closing %s upload to bucket %s: %w", objKey, bucket, err)
+	}
+	fmt.Fprintf(stdout, "\nObject gs://%s/%s sucessfully uploaded.\n\n", bucket, objKey)
+	return nil
 }

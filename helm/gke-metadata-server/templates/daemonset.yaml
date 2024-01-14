@@ -65,6 +65,9 @@ spec:
         {{- if .Values.config.serverAddr }}
         - --server-addr={{ .Values.config.serverAddr }}
         {{- end }}
+        {{- if .Values.config.googleServiceAccountEmail }}
+        - --google-service-account-email={{ .Values.config.googleServiceAccountEmail }}
+        {{- end }}
         {{- if .Values.config.logLevel }}
         - --log-level={{ .Values.config.logLevel }}
         {{- end }}
@@ -92,6 +95,18 @@ spec:
         - --cache-tokens-concurrency={{ .Values.config.cacheTokens.concurrency }}
         {{- end }}
         {{- end }}
+        {{- if (.Values.config.rotateJWKS | default dict).enabled }}
+        - --rotate-jwks
+        {{- if .Values.config.rotateJWKS.period }}
+        - --rotate-jwks-period={{ .Values.config.rotateJWKS.period }}
+        {{- end }}
+        {{- if .Values.config.rotateJWKS.bucket }}
+        - --rotate-jwks-bucket={{ .Values.config.rotateJWKS.bucket }}
+        {{- end }}
+        {{- if .Values.config.rotateJWKS.keyPrefix }}
+        - --rotate-jwks-key-prefix={{ .Values.config.rotateJWKS.keyPrefix }}
+        {{- end }}
+        {{- end }}
         env:
         - name: NODE_NAME
           valueFrom:
@@ -102,12 +117,26 @@ spec:
           containerPort: {{ index (split ":" .Values.config.serverAddr) "_1" }}
           protocol: TCP
         livenessProbe:
+          initialDelaySeconds: 10
           httpGet:
             path: /healthz
             port: http
         readinessProbe:
+          initialDelaySeconds: 10
           httpGet:
             path: /readyz
             port: http
         resources:
           {{- toYaml .Values.resources | nindent 10 }}
+        volumeMounts:
+        - name: gcp-iam-token
+          readOnly: true
+          mountPath: /var/run/secrets/sts.googleapis.com/serviceaccount
+      volumes:
+      - name: gcp-iam-token
+        projected:
+          sources:
+          - serviceAccountToken:
+              audience: //iam.googleapis.com/{{ .Values.config.workloadIdentityProvider }}
+              expirationSeconds: 3600
+              path: token

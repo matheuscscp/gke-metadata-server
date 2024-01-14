@@ -21,9 +21,9 @@
 # SOFTWARE.
 
 locals {
-  wi_pool_name     = "projects/637293746831/locations/global/workloadIdentityPools/github-actions"
-  gh_sub_prefix    = "repo:matheuscscp/gke-metadata-server:environment"
-  wi_member_prefix = "principal://iam.googleapis.com/${local.wi_pool_name}/subject/${local.gh_sub_prefix}"
+  gh_wi_pool_name     = "projects/637293746831/locations/global/workloadIdentityPools/github-actions"
+  gh_wi_sub_prefix    = "repo:matheuscscp/gke-metadata-server:environment"
+  gh_wi_member_prefix = "principal://iam.googleapis.com/${local.gh_wi_pool_name}/subject/${local.gh_wi_sub_prefix}"
 }
 
 resource "google_service_account" "pull_request" {
@@ -32,8 +32,8 @@ resource "google_service_account" "pull_request" {
 
 resource "google_service_account_iam_member" "pull_request_workload_identity_user" {
   service_account_id = google_service_account.pull_request.name
-  role               = "roles/iam.workloadIdentityUser"
-  member             = "${local.wi_member_prefix}:pull-request"
+  role               = local.wi_user_role
+  member             = "${local.gh_wi_member_prefix}:pull-request"
 }
 
 resource "google_service_account" "release" {
@@ -42,8 +42,8 @@ resource "google_service_account" "release" {
 
 resource "google_service_account_iam_member" "release_workload_identity_user" {
   service_account_id = google_service_account.release.name
-  role               = "roles/iam.workloadIdentityUser"
-  member             = "${local.wi_member_prefix}:release"
+  role               = local.wi_user_role
+  member             = "${local.gh_wi_member_prefix}:release"
 }
 
 resource "google_service_account" "clean_resources" {
@@ -52,8 +52,8 @@ resource "google_service_account" "clean_resources" {
 
 resource "google_service_account_iam_member" "clean_resources_workload_identity_user" {
   service_account_id = google_service_account.clean_resources.name
-  role               = "roles/iam.workloadIdentityUser"
-  member             = "${local.wi_member_prefix}:clean-resources"
+  role               = local.wi_user_role
+  member             = "${local.gh_wi_member_prefix}:clean-resources"
 }
 
 resource "google_project_iam_binding" "continuous_integration" {
@@ -72,7 +72,7 @@ resource "google_project_iam_custom_role" "continuous_integration" {
 }
 
 resource "google_storage_bucket_iam_binding" "ci_cluster_issuer_creators" {
-  bucket = "gke-metadata-server-issuer-test"
+  bucket = local.cluster_issuer_bucket
   role   = "roles/storage.objectCreator"
   members = [
     google_service_account.pull_request.member,
