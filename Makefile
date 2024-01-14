@@ -167,7 +167,7 @@ drop-branch:
 
 .PHONY: bootstrap
 bootstrap:
-	cd .github/workflows/ && terraform init && terraform apply
+	cd .github/workflows/ && terraform init && terraform apply && terraform plan -detailed-exitcode
 
 .PHONY: plan
 plan:
