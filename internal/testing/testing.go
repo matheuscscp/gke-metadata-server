@@ -26,6 +26,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -99,11 +100,24 @@ func RequestText(t *testing.T, headers http.Header, url, name string) string {
 
 func requestURL(t *testing.T, headers http.Header, url, name, expectedContentType,
 	expectedMetadataFlavor string) io.ReadCloser {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
+	for i := 0; ; i++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		readCloser, err := doRequestURL(ctx, headers, url, name, expectedContentType, expectedMetadataFlavor)
+		if err == nil {
+			return readCloser
+		}
+		if !errors.Is(err, context.Canceled) || i == 3 {
+			t.Fatal(err.Error())
+		}
+	}
+}
+
+func doRequestURL(ctx context.Context, headers http.Header, url, name, expectedContentType,
+	expectedMetadataFlavor string) (io.ReadCloser, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		t.Fatalf("error creating %s request: %v", name, err)
+		return nil, fmt.Errorf("error creating %s request: %w", name, err)
 	}
 	for k, v := range headers {
 		for i := range v {
@@ -112,7 +126,7 @@ func requestURL(t *testing.T, headers http.Header, url, name, expectedContentTyp
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		t.Fatalf("error requesting %s: %v", name, err)
+		return nil, fmt.Errorf("error requesting %s: %w", name, err)
 	}
 	getErr := func() error {
 		defer resp.Body.Close()
@@ -121,17 +135,17 @@ func requestURL(t *testing.T, headers http.Header, url, name, expectedContentTyp
 		return errors.Join(err, readErr)
 	}
 	if c := resp.StatusCode; c != 200 {
-		t.Fatalf("non-200 status code %v for %s. error(s): %v", c, name, getErr())
+		return nil, fmt.Errorf("non-200 status code %v for %s. error(s): %w", c, name, getErr())
 	}
 	if ct := resp.Header.Get("Content-Type"); ct != expectedContentType {
-		t.Fatalf("unexpected content type %s for %s (was expecting %s). error(s): %v",
+		return nil, fmt.Errorf("unexpected content type %s for %s (was expecting %s). error(s): %w",
 			ct, name, expectedContentType, getErr())
 	}
 	if mf := resp.Header.Get("Metadata-Flavor"); mf != expectedMetadataFlavor {
-		t.Errorf("unexpected metadata flavor %s for %s (was expecting '%s'). error(s): %v",
+		return nil, fmt.Errorf("unexpected metadata flavor %s for %s (was expecting '%s'). error(s): %w",
 			mf, name, expectedMetadataFlavor, getErr())
 	}
-	return resp.Body
+	return resp.Body, nil
 }
 
 func EvalEnv(s string) string {

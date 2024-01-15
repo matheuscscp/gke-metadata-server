@@ -24,9 +24,7 @@ package metrics
 
 import (
 	"context"
-	"fmt"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/matheuscscp/gke-metadata-server/internal/logging"
@@ -58,30 +56,21 @@ func HandlerFor(registry *prometheus.Registry, l promhttp.Logger) http.Handler {
 	})
 }
 
-func StartPusher(registry *prometheus.Registry, url, jobName string) (context.CancelFunc, error) {
-	name := os.Getenv("POD_NAME")
-	if name == "" {
-		return nil, fmt.Errorf("POD_NAME environment variable must be specified")
-	}
-	namespace := os.Getenv("POD_NAMESPACE")
-	if namespace == "" {
-		return nil, fmt.Errorf("POD_NAMESPACE environment variable must be specified")
-	}
-
+func StartPusher(registry *prometheus.Registry, url, jobName, podName, podNamespace string) context.CancelFunc {
 	ctx, cancel := context.WithCancel(context.Background())
 	pusher := push.
 		New(url, jobName).
 		Gatherer(registry).
-		Grouping("name", name).
-		Grouping("namespace", namespace)
+		Grouping("pod_name", podName).
+		Grouping("pod_namespace", podNamespace)
 	l := logging.
 		FromContext(ctx).
 		WithField("pushgateway_details", logrus.Fields{
 			"url":      url,
 			"job_name": jobName,
 			"groupings": logrus.Fields{
-				"name":      name,
-				"namespace": namespace,
+				"pod_name":      podName,
+				"pod_namespace": podNamespace,
 			},
 		})
 
@@ -114,7 +103,7 @@ func StartPusher(registry *prometheus.Registry, url, jobName string) (context.Ca
 	return func() {
 		cancel()
 		<-closed
-	}, nil
+	}
 }
 
 func NewLatencyMillis(subsystem string, labelNames []string) *prometheus.HistogramVec {
