@@ -40,6 +40,7 @@ import (
 )
 
 func RequestJSON(t *testing.T, headers http.Header, url, name, expectedMetadataFlavor string, obj any) {
+	t.Helper()
 	body := requestURL(t, headers, url, name, "application/json", expectedMetadataFlavor)
 	defer body.Close()
 	if err := json.NewDecoder(body).Decode(obj); err != nil {
@@ -49,11 +50,12 @@ func RequestJSON(t *testing.T, headers http.Header, url, name, expectedMetadataF
 
 func RequestIDToken(t *testing.T, headers http.Header, url, name, expectedMetadataFlavor string,
 	expectedAudience, expectedIssuer, expectedSubject string) string {
+	t.Helper()
 	body := requestURL(t, headers, url, name, "application/text", expectedMetadataFlavor)
 	defer body.Close()
 	b, err := io.ReadAll(body)
 	if err != nil {
-		t.Fatalf("error reading %s response body as text: %v", name, err)
+		t.Fatalf("error reading %s response body as application/text: %v", name, err)
 	}
 	rawToken := string(b)
 	token, _, err := jwt.NewParser().ParseUnverified(rawToken, jwt.MapClaims{})
@@ -89,11 +91,12 @@ func RequestIDToken(t *testing.T, headers http.Header, url, name, expectedMetada
 }
 
 func RequestText(t *testing.T, headers http.Header, url, name string) string {
+	t.Helper()
 	body := requestURL(t, headers, url, name, "text/plain", "")
 	defer body.Close()
 	b, err := io.ReadAll(body)
 	if err != nil {
-		t.Fatalf("error reading %s response body as text: %v", name, err)
+		t.Fatalf("error reading %s response body as text/plain: %v", name, err)
 	}
 	return string(b)
 }
@@ -107,8 +110,11 @@ func requestURL(t *testing.T, headers http.Header, url, name, expectedContentTyp
 		if err == nil {
 			return readCloser
 		}
-		if !errors.Is(err, context.Canceled) || i == 3 {
+		if !errors.Is(err, context.Canceled) {
 			t.Fatal(err.Error())
+		}
+		if i == 3 {
+			t.Fatalf("max retries reached requesting url '%s' for %s: %v", url, name, err)
 		}
 	}
 }
@@ -153,6 +159,7 @@ func EvalEnv(s string) string {
 }
 
 func CheckRegex(t *testing.T, name, pattern, value string) {
+	t.Helper()
 	pattern = "^" + EvalEnv(pattern) + "$"
 	re, err := regexp.Compile(pattern)
 	if err != nil {
@@ -165,6 +172,7 @@ func CheckRegex(t *testing.T, name, pattern, value string) {
 }
 
 func AssertExpirationSeconds(t *testing.T, secs int) {
+	t.Helper()
 	assert.LessOrEqual(t, 3500, secs)
 	assert.LessOrEqual(t, secs, 3600)
 }
