@@ -171,7 +171,7 @@ this Google Service Account. Because of that, this Google Service Account needs 
 binds the IAM Role `roles/iam.workloadIdentityUser` to the Kubernetes ServiceAccount. When using
 the Helm Chart, the Kubernetes ServiceAccount is created with the name `gke-metadata-server`, and
 the namespace (where both the DaemonSet and the ServiceAccount are created) is defined via the Helm
-Values (default: `kube-system`). The next sections gives details on how to grant roles to the
+Values (default: `kube-system`). The next section gives details on how to grant roles to the
 federated Kubernetes ServiceAccounts.
 
 ### Configure GCP Workload Identity Federation for Kubernetes
