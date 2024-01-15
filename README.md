@@ -160,15 +160,19 @@ echo "https://storage.googleapis.com/$ISSUER_GCS_URI/openid/v1/jwks"
 
 #### JWKS Rotation
 
-In case you are rotating the keys used by the ServiceAccount Issuer, the emulator has a feature
-for periodically rotating the JWKS document. This feature fetches the JWKS document from the
-Kubernetes API Server and updates it in a GCS bucket. The feature requires the configuration of
-a Google Service Account for the emulator to perform the required GCS API calls. Check the Helm
-Values API for details (see the deploy section below).
+In case you are rotating the keys used by the Kubernetes ServiceAccount Issuer, the emulator has a
+feature for periodically rotating the JWKS document in a GCS bucket. This feature fetches the JWKS
+document from the Kubernetes API Server and updates it in the bucket. It requires the configuration
+of a Google Service Account for the emulator to perform the required GCS API calls. Check the Helm
+Values API for details (see the deploy section further below).
 
-When using this feature, there must be an IAM Policy binding for this Google Service Account
-granting the IAM Role `roles/iam.workloadIdentityUser` to the Kubernetes ServiceAccount used by
-the emulator Pods. The next sections gives details on how grant roles to Kubernetes ServiceAccounts.
+The emulator will also use a federated token for its own Kubernetes ServiceAccount in order to use
+this Google Service Account. Because of that, this Google Service Account needs an IAM Policy that
+binds the IAM Role `roles/iam.workloadIdentityUser` to the Kubernetes ServiceAccount. When using
+the Helm Chart, the Kubernetes ServiceAccount is created with the name `gke-metadata-server`, and
+the namespace (where both the DaemonSet and the ServiceAccount are created) is defined via the Helm
+Values (default: `kube-system`). The next sections gives details on how to grant roles to the
+federated Kubernetes ServiceAccounts.
 
 ### Configure GCP Workload Identity Federation for Kubernetes
 

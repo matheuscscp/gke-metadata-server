@@ -97,6 +97,18 @@ metadata server port (%s).
 
 `, gkeMetadataAddress, defaultServerPort),
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
+			// validate input required for metrics
+			podName := os.Getenv("POD_NAME")
+			podNamespace := os.Getenv("POD_NAMESPACE")
+			if pushGatewayURL != "" {
+				if podName == "" {
+					return fmt.Errorf("POD_NAME environment variable must be specified when pushing metrics")
+				}
+				if podNamespace == "" {
+					return fmt.Errorf("POD_NAMESPACE environment variable must be specified when pushing metrics")
+				}
+			}
+
 			// parse node ip. here we prefer an env var because
 			// we have to mount an env var from the status.hostIP
 			// field ref in the pod container anyways, so no point
@@ -156,13 +168,20 @@ metadata server port (%s).
 				networkMap[frontendAddr] = nodeIP + ":" + backendPort
 			}
 
+			// now errors are runtime errors, not input/CLI mis-usage errors anymore
+			ctx := cmd.Context()
+			l := logging.FromContext(ctx)
+			defer func() {
+				if runtimeErr := err; err != nil {
+					err = nil
+					l.WithError(runtimeErr).Fatal("runtime error")
+				}
+			}()
+
 			// create metrics
 			metricsRegistry := metrics.NewRegistry()
 			if pushGatewayURL != "" {
-				stopMetricsPusher, err := metrics.StartPusher(metricsRegistry, pushGatewayURL, metricsJob)
-				if err != nil {
-					return fmt.Errorf("error starting metrics pusher: %w", err)
-				}
+				stopMetricsPusher := metrics.StartPusher(metricsRegistry, pushGatewayURL, metricsJob, podName, podNamespace)
 				defer stopMetricsPusher()
 			}
 			latencyMillis := metrics.NewLatencyMillis(metricsSubsystem, []string{"frontend_addr", "backend_addr"})
@@ -174,16 +193,6 @@ metadata server port (%s).
 				Help:      "Total failures when dialing TCP connections to backends.",
 			}, []string{"backend_addr"})
 			metricsRegistry.MustRegister(dialBackendFailures)
-
-			// now errors are runtime errors, not input/CLI mis-usage errors anymore
-			ctx := cmd.Context()
-			l := logging.FromContext(ctx)
-			defer func() {
-				if runtimeErr := err; err != nil {
-					err = nil
-					l.WithError(runtimeErr).Fatal("runtime error")
-				}
-			}()
 
 			// bind to frontend ports
 			frontends := make([]*frontendProxy, 0, len(networkMap))
