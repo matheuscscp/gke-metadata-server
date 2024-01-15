@@ -26,7 +26,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -40,22 +39,17 @@ import (
 )
 
 func RequestJSON(t *testing.T, headers http.Header, url, name, expectedMetadataFlavor string, obj any) {
+	t.Helper()
 	body := requestURL(t, headers, url, name, "application/json", expectedMetadataFlavor)
-	defer body.Close()
-	if err := json.NewDecoder(body).Decode(obj); err != nil {
-		t.Fatalf("error decoding %s response body as json: %v", name, err)
+	if err := json.Unmarshal([]byte(body), obj); err != nil {
+		t.Fatalf("error unmarshaling %s response body as json: %v", name, err)
 	}
 }
 
 func RequestIDToken(t *testing.T, headers http.Header, url, name, expectedMetadataFlavor string,
 	expectedAudience, expectedIssuer, expectedSubject string) string {
-	body := requestURL(t, headers, url, name, "application/text", expectedMetadataFlavor)
-	defer body.Close()
-	b, err := io.ReadAll(body)
-	if err != nil {
-		t.Fatalf("error reading %s response body as text: %v", name, err)
-	}
-	rawToken := string(b)
+	t.Helper()
+	rawToken := requestURL(t, headers, url, name, "application/text", expectedMetadataFlavor)
 	token, _, err := jwt.NewParser().ParseUnverified(rawToken, jwt.MapClaims{})
 	if err != nil {
 		t.Fatalf("error parsing %s response body as jwt: %v", name, err)
@@ -89,35 +83,17 @@ func RequestIDToken(t *testing.T, headers http.Header, url, name, expectedMetada
 }
 
 func RequestText(t *testing.T, headers http.Header, url, name string) string {
-	body := requestURL(t, headers, url, name, "text/plain", "")
-	defer body.Close()
-	b, err := io.ReadAll(body)
-	if err != nil {
-		t.Fatalf("error reading %s response body as text: %v", name, err)
-	}
-	return string(b)
+	t.Helper()
+	return requestURL(t, headers, url, name, "text/plain", "")
 }
 
 func requestURL(t *testing.T, headers http.Header, url, name, expectedContentType,
-	expectedMetadataFlavor string) io.ReadCloser {
-	for i := 0; ; i++ {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		readCloser, err := doRequestURL(ctx, headers, url, name, expectedContentType, expectedMetadataFlavor)
-		if err == nil {
-			return readCloser
-		}
-		if !errors.Is(err, context.Canceled) || i == 3 {
-			t.Fatal(err.Error())
-		}
-	}
-}
-
-func doRequestURL(ctx context.Context, headers http.Header, url, name, expectedContentType,
-	expectedMetadataFlavor string) (io.ReadCloser, error) {
+	expectedMetadataFlavor string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("error creating %s request: %w", name, err)
+		t.Fatalf("error creating %s request: %v", name, err)
 	}
 	for k, v := range headers {
 		for i := range v {
@@ -126,8 +102,9 @@ func doRequestURL(ctx context.Context, headers http.Header, url, name, expectedC
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("error requesting %s: %w", name, err)
+		t.Fatalf("error requesting %s: %v", name, err)
 	}
+	defer resp.Body.Close()
 	getErr := func() error {
 		defer resp.Body.Close()
 		b, readErr := io.ReadAll(resp.Body)
@@ -135,17 +112,21 @@ func doRequestURL(ctx context.Context, headers http.Header, url, name, expectedC
 		return errors.Join(err, readErr)
 	}
 	if c := resp.StatusCode; c != 200 {
-		return nil, fmt.Errorf("non-200 status code %v for %s. error(s): %w", c, name, getErr())
+		t.Fatalf("non-200 status code %v for %s. error(s): %v", c, name, getErr())
 	}
 	if ct := resp.Header.Get("Content-Type"); ct != expectedContentType {
-		return nil, fmt.Errorf("unexpected content type %s for %s (was expecting %s). error(s): %w",
+		t.Fatalf("unexpected content type %s for %s (was expecting %s). error(s): %v",
 			ct, name, expectedContentType, getErr())
 	}
 	if mf := resp.Header.Get("Metadata-Flavor"); mf != expectedMetadataFlavor {
-		return nil, fmt.Errorf("unexpected metadata flavor %s for %s (was expecting '%s'). error(s): %w",
+		t.Fatalf("unexpected metadata flavor %s for %s (was expecting '%s'). error(s): %v",
 			mf, name, expectedMetadataFlavor, getErr())
 	}
-	return resp.Body, nil
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("error reading %s response: %v", name, err)
+	}
+	return string(b)
 }
 
 func EvalEnv(s string) string {
@@ -153,6 +134,7 @@ func EvalEnv(s string) string {
 }
 
 func CheckRegex(t *testing.T, name, pattern, value string) {
+	t.Helper()
 	pattern = "^" + EvalEnv(pattern) + "$"
 	re, err := regexp.Compile(pattern)
 	if err != nil {
@@ -165,6 +147,7 @@ func CheckRegex(t *testing.T, name, pattern, value string) {
 }
 
 func AssertExpirationSeconds(t *testing.T, secs int) {
+	t.Helper()
 	assert.LessOrEqual(t, 3500, secs)
 	assert.LessOrEqual(t, secs, 3600)
 }

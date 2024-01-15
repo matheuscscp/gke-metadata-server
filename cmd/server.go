@@ -218,22 +218,24 @@ func newServerCommand() *cobra.Command {
 
 			// start jwks rotation
 			if rotateJWKS {
+				l := l.WithField("jwks_rotation", logrus.Fields{
+					"period":         rotateJWKSPeriod.String(),
+					"gcs_bucket":     rotateJWKSBucket,
+					"gcs_object_key": filepath.Join(rotateJWKSKeyPrefix, jwksURI),
+				})
+
 				// perform first rotation before starting server as a validation for
 				// for preventing the program from starting in an invalid state
 				publish := func() error {
 					return publishDocument(ctx, kubeClient, storageClient, rotateJWKSBucket, rotateJWKSKeyPrefix, jwksURI, io.Discard)
 				}
-				l := l.WithField("jwks_rotation", logrus.Fields{
-					"period":     rotateJWKSPeriod.String(),
-					"bucket":     rotateJWKSBucket,
-					"object_key": filepath.Join(rotateJWKSKeyPrefix, jwksURI),
-				})
+				l.Info("rotating jwks...")
 				if err := publish(); err != nil {
 					return fmt.Errorf("error rotating jwks: %w", err)
 				}
-
-				// setup observability
 				l.Info("jwks rotated")
+
+				// create an error counter
 				errorsCounter := prometheus.NewCounter(prometheus.CounterOpts{
 					Namespace: metrics.Namespace,
 					Subsystem: metricsSubsystem,
