@@ -1,4 +1,5 @@
 gke-metadata-server-linux-amd64*
+*.json
 *.txt
 *.logs
 *.tgz
