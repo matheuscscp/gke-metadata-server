@@ -63,6 +63,7 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
+        make gke-metadata-server-linux-amd64
         gh release create v$(cat container-version.txt) \
           container-digest.txt \
           gke-metadata-server-linux-amd64 \
