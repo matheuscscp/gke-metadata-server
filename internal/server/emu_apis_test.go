@@ -28,9 +28,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/coreos/go-oidc/v3/oidc"
 	pkgtesting "github.com/matheuscscp/gke-metadata-server/internal/testing"
 
+	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -80,14 +80,18 @@ func TestEmuPodServiceAccountTokenAPI(t *testing.T) {
 	const url = "http://metadata.google.internal/gkeMetadataEmulator/v1/pod/service-account/token"
 
 	const aud = workloadIdentityProviderAudience
-	const iss = "https://storage.googleapis.com/gke-metadata-server-issuer-test/TEST_ID"
+	const iss = "https://kubernetes.default.svc.cluster.local"
 	const sub = "system:serviceaccount:default:test"
 
 	rawToken := pkgtesting.RequestIDToken(t, emuHeaders, url, "pod serviceaccount token", emuMetadataFlavor, aud, iss, sub)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	kubernetes, err := oidc.NewProvider(ctx, pkgtesting.EvalEnv(iss))
+
+	http.DefaultTransport.(*http.Transport).TLSClientConfig.InsecureSkipVerify = true
+	defer func() { http.DefaultTransport.(*http.Transport).TLSClientConfig.InsecureSkipVerify = false }()
+
+	kubernetes, err := oidc.NewProvider(ctx, iss)
 	if err != nil {
 		t.Fatalf("error creating kubernetes serviceaccount oidc provider: %v", err)
 	}

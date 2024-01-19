@@ -71,7 +71,6 @@ func main() {
 		},
 	}
 
-	rootCmd.AddCommand(newPublishCommand())
 	rootCmd.AddCommand(newServerCommand())
 	rootCmd.AddCommand(newSidecarCommand())
 	rootCmd.AddCommand(newInitNetworkCommand())

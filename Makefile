@@ -46,24 +46,30 @@ gke-metadata-server-linux-amd64:
 	GOOS=linux GOARCH=amd64 go build -o $@ github.com/matheuscscp/gke-metadata-server/cmd
 	sha256sum $@ > $@.sha256sum
 
-.PHONY: cluster
-cluster: gke-metadata-server-linux-amd64
-	kind delete cluster || true
+.PHONY: kind-cluster
+kind-cluster:
+	@if [ "${TEST_ID}" == "" ]; then echo "TEST_ID variable is required."; exit -1; fi
+	@if [ "${PROVIDER_COMMAND}" == "" ]; then echo "PROVIDER_COMMAND variable is required."; exit -1; fi
 	kind create cluster --config k8s/test-kind-config.yaml
-	./gke-metadata-server-linux-amd64 publish --bucket gke-metadata-server-issuer-test --key-prefix test
-	kubens kube-system
-
-.PHONY: ci-cluster
-ci-cluster: test-id.txt gke-metadata-server-linux-amd64
-	sed -i "s|/test|/$$(cat test-id.txt)|g" k8s/test-kind-config.yaml
-	kind create cluster --config k8s/test-kind-config.yaml
-	./gke-metadata-server-linux-amd64 publish --bucket gke-metadata-server-issuer-test --key-prefix $$(cat test-id.txt)
-	gcloud iam workload-identity-pools providers create-oidc $$(cat test-id.txt) \
+	kubectl --context kind-kind apply -f k8s/test-anon-oidc-rbac.yaml
+	kubectl --context kind-kind get --raw /openid/v1/jwks > jwks.json
+	gcloud iam workload-identity-pools providers ${PROVIDER_COMMAND}-oidc ${TEST_ID} \
 		--project=gke-metadata-server \
 		--location=global \
 		--workload-identity-pool=test-kind-cluster \
-		--issuer-uri=https://storage.googleapis.com/gke-metadata-server-issuer-test/$$(cat test-id.txt) \
-		--attribute-mapping="google.subject=assertion.sub"
+		--issuer-uri=$$(kubectl --context kind-kind get --raw /.well-known/openid-configuration | jq -r .issuer) \
+		--attribute-mapping=google.subject=assertion.sub \
+		--jwk-json-path=jwks.json
+
+.PHONY: cluster
+cluster:
+	kind delete cluster || true
+	make kind-cluster TEST_ID=test PROVIDER_COMMAND=update
+	kubens kube-system
+
+.PHONY: ci-cluster
+ci-cluster: test-id.txt
+	make kind-cluster TEST_ID=$$(cat test-id.txt) PROVIDER_COMMAND=create
 
 .PHONY: push
 push:

@@ -31,11 +31,6 @@ config:
   # This full name can be retrieved on the Google Cloud Console webpage for the provider.
   # Must match the pattern: projects/<gcp_project_number>/locations/global/workloadIdentityPools/<pool_name>/providers/<provider_name>
   workloadIdentityProvider: ""
-  # Optional Google Service Account for making GCP API calls.
-  # Required when enabling features that require GCP API calls.
-  # The subject "system:serviceaccount:{namespace}:gke-metadata-server" must have permission to impersonate this Google Service Account.
-  # Must match the pattern: <name>@<gcp_project_id>.iam.gserviceaccount.com
-  googleServiceAccountEmail: ""
   watchPods:
     enabled: true # Whether or not to watch and cache the Pods running on the same Node.
     disableFallback: false # Whether or not to disable the simple fallback method for retrieving Pods upon cache misses.
@@ -47,11 +42,6 @@ config:
   cacheTokens:
     enabled: true # Whether or not to proactively cache tokens for the Service Accounts used by the Pods running in the same Node.
     concurrency: 10 # Maximum parallel caching operations.
-  rotateJWKS:
-    enabled: false # Whether or not to periodically rotate the JWKS of the Kubernetes ServiceAccount issuer.
-    period: 30m # How often to rotate.
-    bucket: "" # Mandatory GCS bucket to where the JWKS must be uploaded.
-    keyPrefix: "" # Optional key prefix to join as a file path with "openid/v1/jwks" for creating the GCS object key.
 
 podAnnotations: {}
   # Optionally, configure Prometheus to scrape the server:

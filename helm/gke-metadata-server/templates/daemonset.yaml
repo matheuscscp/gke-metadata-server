@@ -65,9 +65,6 @@ spec:
         {{- if .Values.config.serverAddr }}
         - --server-addr={{ .Values.config.serverAddr }}
         {{- end }}
-        {{- if .Values.config.googleServiceAccountEmail }}
-        - --google-service-account-email={{ .Values.config.googleServiceAccountEmail }}
-        {{- end }}
         {{- if .Values.config.logLevel }}
         - --log-level={{ .Values.config.logLevel }}
         {{- end }}
@@ -93,18 +90,6 @@ spec:
         - --cache-tokens
         {{- if .Values.config.cacheTokens.concurrency }}
         - --cache-tokens-concurrency={{ .Values.config.cacheTokens.concurrency }}
-        {{- end }}
-        {{- end }}
-        {{- if (.Values.config.rotateJWKS | default dict).enabled }}
-        - --rotate-jwks
-        {{- if .Values.config.rotateJWKS.period }}
-        - --rotate-jwks-period={{ .Values.config.rotateJWKS.period }}
-        {{- end }}
-        {{- if .Values.config.rotateJWKS.bucket }}
-        - --rotate-jwks-bucket={{ .Values.config.rotateJWKS.bucket }}
-        {{- end }}
-        {{- if .Values.config.rotateJWKS.keyPrefix }}
-        - --rotate-jwks-key-prefix={{ .Values.config.rotateJWKS.keyPrefix }}
         {{- end }}
         {{- end }}
         env:

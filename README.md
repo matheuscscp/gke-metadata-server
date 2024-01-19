@@ -65,10 +65,9 @@ cases, like in the case of the emulator itself.)*
 
 Steps:
 1. Configure Kubernetes DNS
-2. Configure Kubernetes ServiceAccount OIDC Discovery
-3. Configure GCP Workload Identity Federation for Kubernetes
-4. Deploy `gke-metadata-server` in your cluster
-5. Verify image signatures
+2. Configure GCP Workload Identity Federation for Kubernetes
+3. Deploy `gke-metadata-server` in your cluster
+4. Verify supply chain authenticity
 
 ### Configure Kubernetes DNS
 
@@ -93,125 +92,42 @@ above may be the only feasible choice.
 Go applications *authenticating through Google's Go libraries* then this DNS configuration may not
 be required. Test it!)*
 
-### Configure Kubernetes ServiceAccount OIDC Discovery
-
-Kubernetes supports configuring the OIDC discovery endpoints for the ServiceAccount OIDC Identity Provider
-([docs](https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#service-account-issuer-discovery)).
-
-A relying party interested in validating ID tokens for Kubernetes ServiceAccounts (e.g. `sts.googleapis.com`)
-first requests the OIDC configuration from `$ISSUER_URI/.well-known/openid-configuration`. The returned JSON
-has a field called `jwks_uri` containing a URI for the *JSON Web Key Sets* document, usually of the form
-`$ISSUER_URI/openid/v1/jwks`. This second JSON document has the public cryptographic keys that must be used
-for verifying the signatures of ServiceAccount Tokens issued by Kubernetes.
-
-The Kubernetes API serves these two documents, but since both can be publicly available it's much safer
-to store and serve them from a reliable, publicly and highly available endpoint where GCP will guaranteed
-be able to discover the authentication parameters from. For example, public GCS/S3 buckets/objects, etc.
-
-The CLI of the project offers the command `publish` for automatically fetching and uploading the two required
-JSON documents to a GCS bucket. This command will try to retrieve the Kubernetes and Google credentials from
-the environment where it runs on, e.g. `make dev-cluster` uses the local credentials of a developer of the
-project, while `make ci-cluster` uses the kubeconfig created by KinD in the GitHub Workflow
-[`./.github/workflows/pull-request.yml`](./.github/workflows/pull-request.yml) and the Google credentials
-obtained via Workload Identity Federation for this GitHub repository
-([`./.github/workflows/bootstrap.tf`](./.github/workflows/bootstrap.tf)).
-
-Alternatively, this is how you could retrieve these two JSON documents from inside a Pod using `curl`:
-
-```bash
-curl --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt \
-    -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
-    "https://kubernetes.default.svc.cluster.local/.well-known/openid-configuration"
-curl --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt \
-    -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
-    "https://kubernetes.default.svc.cluster.local/openid/v1/jwks"
-```
-
-Copy the JSON outputs of the two `curl` commands above into files named respectively `openid-config.json`
-and `openid-keys.json`, then run the following commands to upload them to GCS:
-
-```bash
-gcloud storage cp openid-config.json gs://$ISSUER_GCS_URI/.well-known/openid-configuration
-gcloud storage cp openid-keys.json   gs://$ISSUER_GCS_URI/openid/v1/jwks
-```
-
-Where `$ISSUER_GCS_URI` is either just a GCS bucket name, or `$BUCKET_NAME/$KEY_PREFIX` where `$KEY_PREFIX`
-is a prefix for the GCS object keys, useful for example for storing multiple OIDC configurations (e.g. for
-multiple Kubernetes clusters) together in a single GCS bucket. The public HTTPS URLs of the upload objects
-will be respectively:
-
-```bash
-echo "https://storage.googleapis.com/$ISSUER_GCS_URI/.well-known/openid-configuration"
-echo "https://storage.googleapis.com/$ISSUER_GCS_URI/openid/v1/jwks"
-```
-
-Configuring the OIDC Issuer and JWKS URIs usually implies restarting the Kubernetes Control Plane for
-specifying the required API server binary arguments (e.g. see the KinD development configuration at
-[`./k8s/test-kind-config.yaml`](./k8s/test-kind-config.yaml)).
-
-```bash
-# the --service-account-issuer k8s API server CLI flag will be the following (short URL form,
-# no need for the /.well-known/openid-configuration suffix):
-echo "https://storage.googleapis.com/$ISSUER_GCS_URI"
-
-# the --service-account-jwks-uri k8s API server CLI flag will be the following (full URL form):
-echo "https://storage.googleapis.com/$ISSUER_GCS_URI/openid/v1/jwks"
-```
-
-#### JWKS Rotation
-
-In case you are rotating the keys used by the Kubernetes ServiceAccount Issuer, the emulator has a
-feature for periodically rotating the JWKS document in a GCS bucket. This feature fetches the JWKS
-document from the Kubernetes API Server and updates it in the bucket. It requires the configuration
-of a Google Service Account for the emulator to perform the required GCS API calls. Check the Helm
-Values API for details (see the deploy section further below).
-
-The emulator will also use a federated token for its own Kubernetes ServiceAccount in order to use
-this Google Service Account. Because of that, this Google Service Account needs an IAM Policy that
-binds the IAM Role `roles/iam.workloadIdentityUser` to the Kubernetes ServiceAccount. When using
-the Helm Chart, the Kubernetes ServiceAccount is created with the name `gke-metadata-server`, and
-the namespace (where both the DaemonSet and the ServiceAccount are created) is defined via the Helm
-Values (default: `kube-system`). The next section gives details on how to grant roles to the
-federated Kubernetes ServiceAccounts.
-
 ### Configure GCP Workload Identity Federation for Kubernetes
 
 Steps:
-1. Configure Pool and Provider
-2. Configure Service Account Impersonation for Kubernetes
+1. Create a Workload Identity Pool and Provider pair for your cluster
+2. Grant Kubernetes ServiceAccounts permissions to impersonate Google Service Accounts
 
-Docs: [link](https://cloud.google.com/iam/docs/workload-identity-federation-with-kubernetes).
+Official docs and examples:
+[link](https://cloud.google.com/iam/docs/workload-identity-federation-with-kubernetes).
 
-Examples for all the configuration described in this section are available here:
+More examples for all the configuration described in this section are available here:
 [`./terraform/test.tf`](./terraform/test.tf). This is where we provision the
 infrastructure required for testing this project in CI and development.
 
-#### Pool and Provider
+#### Create a Workload Identity Pool and Provider pair for your cluster
 
 In order to map Kubernetes ServiceAccounts to Google Service Accounts, one must first create
-a Workload Identity Pool and Provider. A Pool is a set of Subjects and a set of Providers,
-with each Subject being visible to all the Providers in the set. For enforcing a strict
-authentication system, be sure to create exactly one Provider per Pool, i.e. create a single
-Pool + Pool Provider pair for each Kubernetes cluster. This Provider must reflect the Kubernetes
-ServiceAccounts OIDC Identity provider configured in the previous step. The Issuer URI will
-be required (e.g. the HTTPS URL of a publicly available GCS bucket containing an object at
-key `.well-known/openid-configuration`), and the following *attribute mapping* rule must be
-created:
+a Workload Identity Pool and Provider. A Pool is a namespace for Subjects and Providers,
+where Subjects represent the identities to whom permissions to impersonate Google Service
+Accounts will be granted, i.e. the Kubernetes ServiceAccounts in this case. The Provider
+stores the OIDC configuration parameters retrieved from the cluster for allowing Google to
+verify the ServiceAccount JWT Tokens issued by Kubernetes. The Subject is mapped from the
+`sub` claim of the JWT. For enforcing a strong authentication system, be sure to create
+exactly one Provider per Pool, i.e. create a single Pool + Provider pair for each Kubernetes
+cluster.
 
-`google.subject = assertion.sub`
+Specifically for the creation of the Provider, see an example in the
+[`./Makefile`](./Makefile), target `kind-cluster`.
 
-If this configuration is correct, then the Subject mapped by Google from a Kubernetes ServiceAccount
-Token will have the following syntax:
+**Attention 1**: The Google Subject can have at most 127 characters
+([docs](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/iam_workload_identity_pool_provider#google.subject)). The format of the `sub` claim in
+the ServiceAccount JWT Tokens is `system:serviceaccount:{k8s_namespace}:{k8s_sa_name}`.
 
-`system:serviceaccount:{k8s_namespace}:{k8s_sa_name}`
-
-**Attention 1**: A `google.subject` can have at most 127 characters
-([docs](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/iam_workload_identity_pool_provider#google.subject)).
-
-**Attention 2**: Please make sure not to specify any *audiences*. This project uses the
-default audience assigned by Google to a Pool Provider when creating the OIDC tokens
-for Kubernetes ServiceAccounts. This default audience contains the full resource name of
-the Pool Provider, which is a good/strict security rule:
+**Attention 2**: Please make sure not to specify any *audiences* when creating the Pool
+Provider. This project uses the default audience assigned by Google to a Provider when
+creating the ServiceAccount Tokens. This default audience contains the full resource
+name of the Provider, which is a good/strict security rule:
 
 `//iam.googleapis.com/{pool_full_name}/providers/{pool_provider_short_name}`
 
@@ -221,7 +137,7 @@ Where `{pool_full_name}` has the form:
 
 The Pool full name can be retrieved on its Google Cloud Console webpage.
 
-#### Service Account Impersonation for Kubernetes
+#### Grant Kubernetes ServiceAccounts permissions to impersonate Google Service Accounts
 
 For allowing the `{gcp_service_account}@{gcp_project_id}.iam.gserviceaccount.com` Google Service Account
 to be impersonated by the Kubernetes ServiceAccount `{k8s_sa_name}` of Namespace `{k8s_namespace}`,
@@ -240,11 +156,8 @@ membership string below *on the Google Service Account itself*:
 
 `serviceAccount:{gcp_service_account}@{gcp_project_id}.iam.gserviceaccount.com`
 
-This "self-impersonation" IAM Policy Binding is necessary for the
+This "self-impersonation" IAM Policy Binding is optional, and only necessary for the
 `GET /computeMetadata/v1/instance/service-accounts/*/identity` API to work.
-This is because our implementation first exchanges the Kubernetes ServiceAccount
-Token for a Google Service Account OAuth 2.0 Access Token, and then exchanges
-this Access Token for an OpenID Connect ID Token. *(All these tokens are short-lived.)*
 
 Finally, add the following annotation to the Kuberentes ServiceAccount (just like you would in GKE):
 
@@ -271,7 +184,7 @@ Alternatively, you can write your own Kubernetes manifests and consume only the 
 Where `{container_version}` is the app version, i.e. the field `.appVersion` at
 [`./helm/gke-metadata-server/Chart.yaml`](./helm/gke-metadata-server/Chart.yaml).
 
-### Verify image signatures
+### Verify supply chain authenticity
 
 For manually verifying the images above use the [`cosign`](https://github.com/sigstore/cosign)
 CLI tool.

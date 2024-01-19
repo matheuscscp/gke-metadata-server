@@ -24,11 +24,4 @@ apiVersion: kind.x-k8s.io/v1alpha4
 kind: Cluster
 nodes:
 - role: control-plane
-  kubeadmConfigPatches:
-  - |
-    kind: ClusterConfiguration
-    apiServer:
-      extraArgs:
-        service-account-issuer: https://storage.googleapis.com/gke-metadata-server-issuer-test/test
-        service-account-jwks-uri: https://storage.googleapis.com/gke-metadata-server-issuer-test/test/openid/v1/jwks
 - role: worker
