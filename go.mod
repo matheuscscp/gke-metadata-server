@@ -1,6 +1,6 @@
 module github.com/matheuscscp/gke-metadata-server
 
-go 1.21.5
+go 1.22
 
 require (
 	cloud.google.com/go/compute/metadata v0.2.3
