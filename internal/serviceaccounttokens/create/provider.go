@@ -26,13 +26,11 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/matheuscscp/gke-metadata-server/internal/googlecredentials"
 	"github.com/matheuscscp/gke-metadata-server/internal/serviceaccounttokens"
 
-	"github.com/google/uuid"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/idtoken"
@@ -113,24 +111,15 @@ func (p *Provider) GetGoogleIdentityToken(ctx context.Context, saToken, googleEm
 func (p *Provider) runWithGoogleCredentialsFromKubernetesServiceAccountToken(ctx context.Context,
 	token, email string, f func(context.Context, *google.Credentials) error) error {
 	// write k8s sa token to tmp file
-	var tokenFile string
-	for {
-		tokenFile = filepath.Join(os.TempDir(), fmt.Sprintf("%s.json", uuid.NewString()))
-		file, err := os.OpenFile(tokenFile, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
-		if err != nil {
-			if os.IsExist(err) {
-				continue
-			}
-			return fmt.Errorf("error creating temporary file for service account token '%s': %w", tokenFile, err)
-		}
-		defer os.Remove(tokenFile)
-		if _, err := file.Write([]byte(token)); err != nil {
-			return fmt.Errorf("error writing service account token to temporary file '%s': %w", tokenFile, err)
-		}
-		if err := file.Close(); err != nil {
-			return fmt.Errorf("error closing service account token temporary file '%s': %w", tokenFile, err)
-		}
-		break
+	file, err := os.CreateTemp("/tmp", "*.json")
+	if err != nil {
+		return fmt.Errorf("error creating temporary file for service account token: %w", err)
+	}
+	tokenFile := file.Name()
+	defer os.Remove(tokenFile)
+	file.Close()
+	if err := os.WriteFile(tokenFile, []byte(token), 0644); err != nil {
+		return fmt.Errorf("error writing service account token to temporary file '%s': %w", tokenFile, err)
 	}
 
 	// get the credential config with k8s sa token file as the credential source
