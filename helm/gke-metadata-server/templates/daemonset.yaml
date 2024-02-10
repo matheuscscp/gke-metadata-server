@@ -117,6 +117,8 @@ spec:
         - name: gcp-iam-token
           readOnly: true
           mountPath: /var/run/secrets/sts.googleapis.com/serviceaccount
+        - name: tmpfs
+          mountPath: /tmp
       volumes:
       - name: gcp-iam-token
         projected:
@@ -125,3 +127,6 @@ spec:
               audience: //iam.googleapis.com/{{ .Values.config.workloadIdentityProvider }}
               expirationSeconds: 3600
               path: token
+      - name: tmpfs
+        emptyDir:
+          medium: Memory
