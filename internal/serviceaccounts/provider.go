@@ -35,13 +35,9 @@ type Provider interface {
 	Get(ctx context.Context, namespace, name string) (*corev1.ServiceAccount, error)
 }
 
-const (
-	GoogleEmailPattern = `^[a-zA-Z0-9-]+@[a-zA-Z0-9-]+\.iam\.gserviceaccount\.com$`
+const gkeAnnotation = "iam.gke.io/gcp-service-account"
 
-	gkeAnnotation = "iam.gke.io/gcp-service-account"
-)
-
-var googleEmailRegex = regexp.MustCompile(GoogleEmailPattern)
+var googleEmailRegex = regexp.MustCompile(`^[a-zA-Z0-9-]+@[a-zA-Z0-9-]+\.iam\.gserviceaccount\.com$`)
 
 func GoogleEmail(sa *corev1.ServiceAccount) (string, error) {
 	v, ok := sa.Annotations[gkeAnnotation]
@@ -51,8 +47,8 @@ func GoogleEmail(sa *corev1.ServiceAccount) (string, error) {
 	}
 	v = strings.TrimSpace(v)
 	if !IsGoogleEmail(v) {
-		return "", fmt.Errorf("annotation %s value '%s' does not match pattern '%s'",
-			gkeAnnotation, v, GoogleEmailPattern)
+		return "", fmt.Errorf("annotation %s value %q does not match pattern %q",
+			gkeAnnotation, v, googleEmailRegex.String())
 	}
 	return v, nil
 }

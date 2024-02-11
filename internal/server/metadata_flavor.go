@@ -53,6 +53,6 @@ func metadataFlavorMiddleware(flavor, server string, next http.Handler) http.Han
 
 		const statusCode = http.StatusForbidden
 		w.WriteHeader(statusCode)
-		w.Write([]byte(fmt.Sprintf("Missing required header \"Metadata-Flavor\": \"%s\"\n", flavor)))
+		w.Write([]byte(fmt.Sprintf("Missing required header %q: %q\n", metadataFlavorHeader, flavor)))
 	})
 }

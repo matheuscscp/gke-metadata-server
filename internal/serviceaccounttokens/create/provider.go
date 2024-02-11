@@ -119,7 +119,7 @@ func (p *Provider) runWithGoogleCredentialsFromKubernetesServiceAccountToken(ctx
 	defer os.Remove(tokenFile)
 	file.Close()
 	if err := os.WriteFile(tokenFile, []byte(token), 0644); err != nil {
-		return fmt.Errorf("error writing service account token to temporary file '%s': %w", tokenFile, err)
+		return fmt.Errorf("error writing service account token to temporary file %q: %w", tokenFile, err)
 	}
 
 	// get the credential config with k8s sa token file as the credential source

@@ -94,7 +94,7 @@ func (n *directoryNode) handle(prefix string, path []string, handler http.Handle
 
 		// copy directory lister
 		if len(dirListers) == 0 || dirListers[0] == nil {
-			panic(fmt.Sprintf("path parameter '%s' at %s provided without a matching directory lister", piece, prefix))
+			panic(fmt.Sprintf("path parameter %q at %s provided without a matching directory lister", piece, prefix))
 		}
 		if n.dirLister != nil {
 			l.Trace("overriding previous dirLister")
