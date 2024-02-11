@@ -119,7 +119,7 @@ func requestURL(t *testing.T, headers http.Header, url, name, expectedContentTyp
 			ct, name, expectedContentType, getErr())
 	}
 	if mf := resp.Header.Get("Metadata-Flavor"); mf != expectedMetadataFlavor {
-		t.Fatalf("unexpected metadata flavor %s for %s (was expecting '%s'). error(s): %v",
+		t.Fatalf("unexpected metadata flavor %s for %s (was expecting %q). error(s): %v",
 			mf, name, expectedMetadataFlavor, getErr())
 	}
 	b, err := io.ReadAll(resp.Body)
@@ -142,7 +142,7 @@ func CheckRegex(t *testing.T, name, pattern, value string) {
 		return
 	}
 	if !re.MatchString(value) {
-		t.Errorf("value '%s' does not match regex %s for %s", value, pattern, name)
+		t.Errorf("value %q does not match regex %s for %s", value, pattern, name)
 	}
 }
 

@@ -45,7 +45,7 @@ func newInitNetworkCommand() *cobra.Command {
 			for _, ip := range ipAddresses {
 				ipAddr, err := netlink.ParseAddr(ip + "/32")
 				if err != nil {
-					return fmt.Errorf("error parsing '%s' as an ip address: %w", ip, err)
+					return fmt.Errorf("error parsing %q as an ip address: %w", ip, err)
 				}
 				ips[ip] = ipAddr
 			}
@@ -65,7 +65,7 @@ func newInitNetworkCommand() *cobra.Command {
 			}
 			for ip, ipAddr := range ips {
 				if err := netlink.AddrAdd(lo, ipAddr); err != nil {
-					return fmt.Errorf("error adding ip address '%s' to the loopback interface: %w", ip, err)
+					return fmt.Errorf("error adding ip address %q to the loopback interface: %w", ip, err)
 				}
 				l.WithField("loopback_ip", ip).Info("ip address added to the loopback interface")
 			}

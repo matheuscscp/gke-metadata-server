@@ -119,7 +119,7 @@ metadata server port (%s).
 				return fmt.Errorf("error parsing node ip address: %w", err)
 			}
 			if nodeIPAddr.IsLoopback() {
-				return fmt.Errorf("the specified node ip address '%s' is a loopback address", nodeIP)
+				return fmt.Errorf("the specified node ip address %q is a loopback address", nodeIP)
 			}
 
 			// parse network paths
@@ -131,37 +131,37 @@ metadata server port (%s).
 				networkPaths[j] = networkPath
 				s := strings.Split(networkPath, "=")
 				if len(s) != 2 {
-					return fmt.Errorf("network path '%s' does not have the form <frontend_addr>=<backend_port>", networkPath)
+					return fmt.Errorf("network path %q does not have the form <frontend_addr>=<backend_port>", networkPath)
 				}
 				frontendAddr, backendPort := strings.TrimSpace(s[0]), strings.TrimSpace(s[1])
 
 				// parse frontend addr
 				frontendIP, frontendPort, err := net.SplitHostPort(frontendAddr)
 				if err != nil {
-					return fmt.Errorf("error splitting frontend address '%s' from network path '%s' into host-port: %w",
+					return fmt.Errorf("error splitting frontend address %q from network path %q into host-port: %w",
 						frontendAddr, networkPath, err)
 				}
 				frontendIP, frontendPort = strings.TrimSpace(frontendIP), strings.TrimSpace(frontendPort)
 
 				// parse frontend ip
 				if _, err := netip.ParseAddr(frontendIP); err != nil {
-					return fmt.Errorf("error parsing frontend host '%s' from network path '%s' as an ip address: %w",
+					return fmt.Errorf("error parsing frontend host %q from network path %q as an ip address: %w",
 						frontendIP, networkPath, err)
 				}
 				if nodeIP == frontendIP {
-					return fmt.Errorf("the node ip is the same ip for the frontend address in the network path '%s'", networkPath)
+					return fmt.Errorf("the node ip is the same ip for the frontend address in the network path %q", networkPath)
 				}
 
 				// parse frontend port
 				if i, ok := frontendPorts[frontendPort]; ok {
-					return fmt.Errorf("frontend port %s appears in more than one network path ('%s' and '%s')",
+					return fmt.Errorf("frontend port %s appears in more than one network path (%q and %q)",
 						frontendPort, networkPaths[i], networkPaths[j])
 				}
 				frontendPorts[frontendPort] = j
 
 				// parse backend port
 				if _, _, err := net.SplitHostPort(":" + backendPort); err != nil {
-					return fmt.Errorf("error parsing backend port '%s': %w", backendPort, err)
+					return fmt.Errorf("error parsing backend port %q: %w", backendPort, err)
 				}
 
 				// add parsed network path to map
@@ -214,7 +214,7 @@ metadata server port (%s).
 				}
 				frontend.Listener, err = net.Listen("tcp", frontendAddr)
 				if err != nil {
-					return fmt.Errorf("error listening on frontend address '%s': %w", frontendAddr, err)
+					return fmt.Errorf("error listening on frontend address %q: %w", frontendAddr, err)
 				}
 				frontends = append(frontends, frontend)
 				frontend.withFields(l).Info("started listening on frontend address")
@@ -230,7 +230,7 @@ metadata server port (%s).
 			defer cancel()
 			for _, frontend := range frontends {
 				if err := frontend.shutdown(ctx); err != nil {
-					return fmt.Errorf("error shutting down frontend server '%s': %w", frontend.addr, err)
+					return fmt.Errorf("error shutting down frontend server %q: %w", frontend.addr, err)
 				}
 			}
 			return nil

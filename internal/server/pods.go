@@ -67,13 +67,13 @@ func (s *Server) getPod(w http.ResponseWriter,
 	// security assumption of the project.
 	clientHost, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
-		const format = "error spliting host-port for '%s': %w"
+		const format = "error spliting host-port for %q: %w"
 		pkghttp.RespondErrorf(w, r, http.StatusInternalServerError, format, r.RemoteAddr, err)
 		return nil, nil, fmt.Errorf(format, r.RemoteAddr, err)
 	}
 	clientIPAddr, err := netip.ParseAddr(clientHost)
 	if err != nil {
-		const format = "error parsing ip address client host '%s': %w"
+		const format = "error parsing ip address client host %q: %w"
 		pkghttp.RespondErrorf(w, r, http.StatusInternalServerError, format, r.RemoteAddr, err)
 		return nil, nil, fmt.Errorf(format, r.RemoteAddr, err)
 	}

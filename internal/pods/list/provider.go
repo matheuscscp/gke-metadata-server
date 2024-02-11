@@ -54,7 +54,7 @@ func (p *Provider) GetByIP(ctx context.Context, ipAddr string) (*corev1.Pod, err
 		FieldSelector: fmt.Sprintf("spec.nodeName=%s,status.podIP=%s", p.opts.NodeName, ipAddr),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("error listing pods in the node matching cluster ip address '%s': %w", ipAddr, err)
+		return nil, fmt.Errorf("error listing pods in the node matching cluster ip address %q: %w", ipAddr, err)
 	}
 	if n := len(podList.Items); n != 1 || podList.Items[0].Spec.HostNetwork {
 		if n == 1 { // pods on the host network are not supported, see README.md
@@ -65,7 +65,7 @@ func (p *Provider) GetByIP(ctx context.Context, ipAddr string) (*corev1.Pod, err
 		for i, pod := range podList.Items {
 			refs[i] = fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
 		}
-		return nil, fmt.Errorf("error listing pods in the node matching cluster ip address '%s': %v pods found instead of 1 [%s]",
+		return nil, fmt.Errorf("error listing pods in the node matching cluster ip address %q: %v pods found instead of 1 [%s]",
 			ipAddr, n, strings.Join(refs, ", "))
 	}
 	return &podList.Items[0], nil

@@ -42,9 +42,7 @@ type (
 	}
 )
 
-const workloadIdentityProviderPattern = `^projects/\d+/locations/global/workloadIdentityPools/[^/]+/providers/[^/]+$`
-
-var workloadIdentityProviderRegex = regexp.MustCompile(workloadIdentityProviderPattern)
+var workloadIdentityProviderRegex = regexp.MustCompile(`^projects/\d+/locations/global/workloadIdentityPools/[^/]+/providers/[^/]+$`)
 
 func AccessScopes() []string {
 	return []string{
@@ -56,7 +54,7 @@ func AccessScopes() []string {
 func NewConfig(opts ConfigOptions) (*Config, error) {
 	if !workloadIdentityProviderRegex.MatchString(opts.WorkloadIdentityProvider) {
 		return nil, fmt.Errorf("workload identity provider name does not match pattern %s",
-			workloadIdentityProviderPattern)
+			workloadIdentityProviderRegex.String())
 	}
 	return &Config{opts}, nil
 }

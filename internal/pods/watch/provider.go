@@ -140,7 +140,7 @@ func (p *Provider) GetByIP(ctx context.Context, ipAddr string) (*corev1.Pod, err
 		return pod, nil
 	}
 	if p.opts.FallbackSource == nil {
-		return nil, fmt.Errorf("error getting pod by ip '%s' from cache: %w", ipAddr, err)
+		return nil, fmt.Errorf("error getting pod by ip %q from cache: %w", ipAddr, err)
 	}
 	p.cacheMisses.Inc()
 	logging.
@@ -155,7 +155,7 @@ func (p *Provider) getByIP(ctx context.Context, ipAddr string) (*corev1.Pod, err
 		Status: corev1.PodStatus{PodIP: ipAddr},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("error getting pod from cache by ip address '%s': %w", ipAddr, err)
+		return nil, fmt.Errorf("error getting pod from cache by ip address %q: %w", ipAddr, err)
 	}
 	if n := len(v); n != 1 {
 		refs := make([]string, n)
@@ -163,7 +163,7 @@ func (p *Provider) getByIP(ctx context.Context, ipAddr string) (*corev1.Pod, err
 			pod := p.(*corev1.Pod)
 			refs[i] = fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
 		}
-		return nil, fmt.Errorf("error getting pod from cache by ip address '%s': %v pods found instead of 1 [%s]",
+		return nil, fmt.Errorf("error getting pod from cache by ip address %q: %v pods found instead of 1 [%s]",
 			ipAddr, n, strings.Join(refs, ", "))
 	}
 	return v[0].(*corev1.Pod), nil
