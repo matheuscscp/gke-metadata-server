@@ -53,7 +53,7 @@ to run on the host network in order to listen to TCP/IP connections coming from 
 running on the same Kubernetes Node, such that their unecrypted communication never
 leaves that Node. Because Pods running on the host network use a shared IP address, i.e.
 the IP address of the Node itself where they are running on, the solution implemented
-here is not be able to uniquely identify such Pods. Therefore, *Pods running on the host
+here is not able to uniquely identify such Pods. Therefore, *Pods running on the host
 network are not supported*.
 
 *(Please also note that most Pods should not run on the host network in the first place,
