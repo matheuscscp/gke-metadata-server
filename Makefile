@@ -51,7 +51,6 @@ kind-cluster:
 	@if [ "${TEST_ID}" == "" ]; then echo "TEST_ID variable is required."; exit -1; fi
 	@if [ "${PROVIDER_COMMAND}" == "" ]; then echo "PROVIDER_COMMAND variable is required."; exit -1; fi
 	kind create cluster --config k8s/test-kind-config.yaml
-	kubectl --context kind-kind apply -f k8s/test-anon-oidc-rbac.yaml
 	kubectl --context kind-kind get --raw /openid/v1/jwks > jwks.json
 	gcloud iam workload-identity-pools providers ${PROVIDER_COMMAND}-oidc ${TEST_ID} \
 		--project=gke-metadata-server \
