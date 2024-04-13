@@ -24,8 +24,6 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: anonymous-oidc-discovery
-  labels:
-    app.kubernetes.io/part-of: arista-ops
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
