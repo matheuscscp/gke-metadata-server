@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-FROM golang:1.22.1-alpine3.19 as builder
+FROM golang:1.22.2-alpine3.19 as builder
 
 WORKDIR /app
 
