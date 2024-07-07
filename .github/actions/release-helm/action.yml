@@ -27,19 +27,14 @@ inputs:
 runs:
   using: composite
   steps:
-  - run: echo "HELM_WITH_DIGEST=${image}@$(cat helm-digest.txt)" >> $GITHUB_ENV
-    shell: bash
-    env:
-      image: ${{ inputs.registry }}/matheuscscp/gke-metadata-server-helm
   - run: |
       helm push $(cat helm-package.txt) oci://${registry}/matheuscscp 2>&1 | tee helm-push.logs
-      digest=$(cat helm-push.logs | grep Digest: | awk '{print $NF}')
-      if [ "$digest" != "$(cat helm-digest.txt)" ]; then
-        echo "Error: Helm OCI artifact digests are different. Digest on first push: $(cat helm-digest.txt), Digest on second push: $digest"; \
-      fi
+      cat helm-push.logs | grep Digest: | awk '{print $NF}' > helm-digest.txt
+      echo "HELM_WITH_DIGEST=${image}@$(cat helm-digest.txt)" >> $GITHUB_ENV
     shell: bash
     env:
       registry: ${{ inputs.registry }}
+      image: ${{ inputs.registry }}/matheuscscp/gke-metadata-server-helm
   - run: cosign sign --yes $HELM_WITH_DIGEST
     shell: bash
   - run: |
