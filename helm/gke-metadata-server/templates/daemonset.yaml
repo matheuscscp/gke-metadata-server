@@ -45,7 +45,7 @@ spec:
     spec:
       serviceAccountName: gke-metadata-server
       priorityClassName: {{ .Values.priorityClass }}
-      hostNetwork: {{ .Values.hostNetwork }}
+      hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
       {{- if .Values.initContainers }}
       initContainers:

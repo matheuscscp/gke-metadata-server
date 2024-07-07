@@ -122,8 +122,8 @@ run-test:
 		sleep_secs=10; \
 		echo "Sleeping for $$sleep_secs secs and checking test Pod status..."; \
 		sleep $$sleep_secs; \
-		EXIT_CODE_1=$$(kubectl --context kind-kind -n default get po test -o jsonpath='{.status.containerStatuses[1].state.terminated.exitCode}'); \
-		EXIT_CODE_2=$$(kubectl --context kind-kind -n default get po test -o jsonpath='{.status.containerStatuses[2].state.terminated.exitCode}'); \
+		EXIT_CODE_1=$$(kubectl --context kind-kind -n default get po test -o jsonpath='{.status.containerStatuses[0].state.terminated.exitCode}'); \
+		EXIT_CODE_2=$$(kubectl --context kind-kind -n default get po test -o jsonpath='{.status.containerStatuses[1].state.terminated.exitCode}'); \
 		if [ -n "$$EXIT_CODE_1" ] && [ -n "$$EXIT_CODE_2" ]; then \
 			echo "Both containers exited"; \
 			break; \
@@ -132,8 +132,7 @@ run-test:
 	kubectl --context kind-kind -n kube-system describe $$(kubectl --context kind-kind -n kube-system get po -o name | grep gke); \
 	kubectl --context kind-kind -n default describe po test; \
 	kubectl --context kind-kind -n kube-system logs ds/gke-metadata-server; \
-	kubectl --context kind-kind -n default logs test -c init-gke-metadata-proxy; \
-	kubectl --context kind-kind -n default logs test -c gke-metadata-proxy; \
+	kubectl --context kind-kind -n default logs test -c init-gke-metadata-server; \
 	kubectl --context kind-kind -n default logs test -c test -f; \
 	kubectl --context kind-kind -n default logs test -c test-gcloud -f; \
 	echo "Container 'test'        exit code: $$EXIT_CODE_1"; \
