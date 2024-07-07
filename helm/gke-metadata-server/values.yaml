@@ -77,15 +77,3 @@ namespace: kube-system
 
 # Pod .spec.priorityClassName. This controls how much preemptible the DaemonSet Pods will be.
 priorityClass: system-node-critical
-
-# This Pod needs to listen on the host network, port 80.
-hostNetwork: true
-
-# Pod .spec.initContainers. Can be used for initializing the Node loopback interface
-# with the the Google Metadata IP address (169.254.169.254) using the CLI "init-network"
-# command (see k8s/test-pod.yaml). This allows your pods to run without the sidecar,
-# but also requires the emulator to listen on port 80 (on the host network!). When
-# doing so, it's also advisable to set the Helm value config.serverAddr including
-# this IP address, i.e. set the server addres to "169.254.169.254:80". This way only
-# connections targeting this specific IP address will reach the server.
-initContainers:

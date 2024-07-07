@@ -72,7 +72,6 @@ func main() {
 	}
 
 	rootCmd.AddCommand(newServerCommand())
-	rootCmd.AddCommand(newSidecarCommand())
 	rootCmd.AddCommand(newInitNetworkCommand())
 
 	rootCmd.PersistentFlags().StringVar(&kubeconfig, "kubeconfig", filepath.Join(homedir.HomeDir(), ".kube", "config"),

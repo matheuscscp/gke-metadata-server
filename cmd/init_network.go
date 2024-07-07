@@ -24,57 +24,75 @@ package main
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/matheuscscp/gke-metadata-server/internal/logging"
 
 	"github.com/spf13/cobra"
-	"github.com/vishvananda/netlink"
+	"k8s.io/kubernetes/pkg/util/iptables"
+	"k8s.io/utils/exec"
 )
 
-const gkeMetadataIPAddress = "169.254.169.254"
-
 func newInitNetworkCommand() *cobra.Command {
-	var ipAddresses []string
-
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:   "init-network",
-		Short: "Add a list of IP addresses to the loopback interface",
-		Long:  "Add a list of IP addresses to the loopback interface of the current network namespace",
+		Short: "Prepare the pod network namespace for gke-metadata-server",
+		Long: `Prepare the pod network namespace for gke-metadata-server,
+routing traffic for the hardcoded GKE metadata server endpoint
+to DAEMONSET_IP:DAEMONSET_PORT, where both DAEMONSET_IP and
+DAEMONSET_PORT are provided as environment variables.`,
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
-			ips := map[string]*netlink.Addr{}
-			for _, ip := range ipAddresses {
-				ipAddr, err := netlink.ParseAddr(ip + "/32")
-				if err != nil {
-					return fmt.Errorf("error parsing %q as an ip address: %w", ip, err)
-				}
-				ips[ip] = ipAddr
-			}
+			emulatorIP := os.Getenv("DAEMONSET_IP")
+			emulatorPort := os.Getenv("DAEMONSET_PORT")
+			emulatorAddr := fmt.Sprintf("%s:%s", emulatorIP, emulatorPort)
 
-			ctx := cmd.Context()
-			l := logging.FromContext(ctx)
 			defer func() {
-				if runtimeErr := err; err != nil {
+				if runtimeErr := err; runtimeErr != nil {
 					err = nil
-					l.WithError(runtimeErr).Fatal("runtime error")
+					logging.
+						FromContext(cmd.Context()).
+						WithField("emulator_addr", emulatorAddr).
+						WithError(runtimeErr).
+						Fatal("runtime error")
 				}
 			}()
 
-			lo, err := netlink.LinkByName("lo")
+			// Create the following iptables rules:
+			// iptables -t nat -A OUTPUT -d 169.254.169.254 -p tcp --dport 80 -j DNAT --to-destination <emulatorAddr>
+			// iptables -A FORWARD -d <emulatorIP> -p tcp --dport <emulatorPort> -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
+
+			const gkeMetadataServer = "169.254.169.254"
+			ipTables := iptables.New(exec.New(), iptables.ProtocolIPv4)
+			_, err = ipTables.EnsureRule(
+				iptables.Append,
+				iptables.TableNAT,
+				iptables.ChainOutput,
+				"-d", gkeMetadataServer,
+				"-p", "tcp",
+				"--dport", "80",
+				"-j", "DNAT",
+				"--to-destination", emulatorAddr,
+			)
 			if err != nil {
-				return fmt.Errorf("error getting the loopback interface: %w", err)
+				return fmt.Errorf("error adding DNAT rule: %w", err)
 			}
-			for ip, ipAddr := range ips {
-				if err := netlink.AddrAdd(lo, ipAddr); err != nil {
-					return fmt.Errorf("error adding ip address %q to the loopback interface: %w", ip, err)
-				}
-				l.WithField("loopback_ip", ip).Info("ip address added to the loopback interface")
+
+			_, err = ipTables.EnsureRule(
+				iptables.Append,
+				iptables.TableFilter,
+				iptables.ChainForward,
+				"-d", emulatorIP,
+				"-p", "tcp",
+				"--dport", emulatorPort,
+				"-m", "state",
+				"--state", "NEW,ESTABLISHED,RELATED",
+				"-j", "ACCEPT",
+			)
+			if err != nil {
+				return fmt.Errorf("error adding forwarding rule: %w", err)
 			}
+
 			return nil
 		},
 	}
-
-	cmd.Flags().StringSliceVar(&ipAddresses, "ip-address", []string{gkeMetadataIPAddress},
-		"List of IP addresses to be added")
-
-	return cmd
 }

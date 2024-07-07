@@ -44,33 +44,31 @@ spec:
   # Use the ServiceAccount created above.
   serviceAccountName: test
 
-  # These settings emulate the HTTP endpoint 169.254.169.254:80, hardcoded across
-  # Google libraries as the endpoint for detecting if the code is running inside
-  # a Google Cloud environment or not. The hostAliases field configures the DNS
-  # entry. The init container adds the IP address to the loopback interface of
-  # the Pod (this is why the NET_ADMIN security capability is required in this
-  # init container). The sidecar container proxies TCP/IP connections on this
-  # special endpoint to the NODE_IP:default_emulator_port network address, where
-  # the emulator will be listening, on the same Kubernetes Node of this pod.
+  # The settings below emulate the HTTP endpoint 169.254.169.254:80, which is
+  # hardcoded across Google libraries as the endpoint for detecting whether
+  # or not the program is running inside the Google Cloud. The hostAliases
+  # field configures the DNS entry. The init container initializes the pod
+  # network namespace to route traffic from 169.254.169.254:80 to the
+  # DAEMONSET_IP:DAEMONSET_PORT network address, where the emulator will
+  # be listening on, on the same node of this pod (hence why the init
+  # container requires the NET_ADMIN security capability).
   hostAliases:
   - hostnames: [metadata.google.internal]
     ip: 169.254.169.254
   initContainers:
-  - name: init-gke-metadata-proxy
+  - name: init-gke-metadata-server
     image: ghcr.io/matheuscscp/gke-metadata-server/test@<CONTAINER_DIGEST>
     args: [init-network]
     securityContext:
       capabilities:
         add: [NET_ADMIN]
-  containers:
-  - name: gke-metadata-proxy
-    image: ghcr.io/matheuscscp/gke-metadata-server/test@<CONTAINER_DIGEST>
-    args: [sidecar]
     env:
-    - name: NODE_IP
+    - name: DAEMONSET_IP
       valueFrom:
         fieldRef:
           fieldPath: status.hostIP
+    - name: DAEMONSET_PORT
+      value: "8080"
 
   # The containers below run our automatic tests. Replace them with your containers
   # in your production Pods.
@@ -79,6 +77,7 @@ spec:
   # The tests running here perform authenticated operations in GCP by just communicating
   # with the well-known GCE/GKE Metadata APIs backed by the emulator. The custom APIs of
   # the emulator are also tested.
+  containers:
   - name: test
     image: ghcr.io/matheuscscp/gke-metadata-server/test@<GO_TEST_DIGEST>
     env:
@@ -87,7 +86,7 @@ spec:
 
   # This container demonstrates vanilla "Workload Identity Federation with Kubernetes".
   # The custom API of the emulator shown below returns a (non-secret) JSON with a
-  # Google credential configuration, containiner the full name of the Workload Identity
+  # Google credential configuration, containing the full name of the Workload Identity
   # Provider resource. The "gcloud auth login" command below configures the Pod with
   # the credentials that can be acquired by the parameters described inside this JSON
   # file. After performing login the container uses this authentication to make calls
