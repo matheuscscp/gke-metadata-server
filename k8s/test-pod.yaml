@@ -87,7 +87,7 @@ spec:
 
   # This container demonstrates vanilla "Workload Identity Federation with Kubernetes".
   # The custom API of the emulator shown below returns a (non-secret) JSON with a
-  # Google credential configuration, containiner the full name of the Workload Identity
+  # Google credential configuration, containing the full name of the Workload Identity
   # Provider resource. The "gcloud auth login" command below configures the Pod with
   # the credentials that can be acquired by the parameters described inside this JSON
   # file. After performing login the container uses this authentication to make calls
