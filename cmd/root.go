@@ -66,7 +66,12 @@ func main() {
 			if err != nil {
 				return fmt.Errorf("not a valid log level. the accepted values are: %s", acceptedLogLevels)
 			}
-			cmd.SetContext(logging.IntoContext(cmd.Context(), logging.NewLogger(logLevel)))
+
+			l := logging.NewLogger(logLevel)
+			cmd.SetContext(logging.IntoContext(cmd.Context(), l))
+
+			// set also klog to use the same logger
+			logging.InitKLog(l, logLevel)
 			return nil
 		},
 	}
