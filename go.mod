@@ -3,7 +3,7 @@ module github.com/matheuscscp/gke-metadata-server
 go 1.22.2
 
 require (
-	cloud.google.com/go/compute/metadata v0.3.0
+	cloud.google.com/go/compute/metadata v0.4.0
 	cloud.google.com/go/storage v1.43.0
 	github.com/coreos/go-oidc/v3 v3.10.0
 	github.com/golang-jwt/jwt/v5 v5.2.1
