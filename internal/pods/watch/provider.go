@@ -157,16 +157,22 @@ func (p *Provider) getByIP(ctx context.Context, ipAddr string) (*corev1.Pod, err
 	if err != nil {
 		return nil, fmt.Errorf("error getting pod from cache by ip address %q: %w", ipAddr, err)
 	}
-	if n := len(v); n != 1 {
+	var podsMatchingIP []*corev1.Pod
+	for _, p := range v {
+		pod := p.(*corev1.Pod)
+		if pod.Status.PodIP == ipAddr {
+			podsMatchingIP = append(podsMatchingIP, pod)
+		}
+	}
+	if n := len(podsMatchingIP); n != 1 {
 		refs := make([]string, n)
-		for i, p := range v {
-			pod := p.(*corev1.Pod)
+		for i, pod := range podsMatchingIP {
 			refs[i] = fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
 		}
 		return nil, fmt.Errorf("error getting pod from cache by ip address %q: %v pods found instead of 1 [%s]",
 			ipAddr, n, strings.Join(refs, ", "))
 	}
-	return v[0].(*corev1.Pod), nil
+	return podsMatchingIP[0], nil
 }
 
 func (p *Provider) Start(ctx context.Context) {
