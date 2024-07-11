@@ -65,6 +65,14 @@ spec:
         {{- if .Values.config.serverAddr }}
         - --server-addr={{ .Values.config.serverAddr }}
         {{- end }}
+        {{- if .Values.config.webhookAddr }}
+        - --webhook-addr={{ .Values.config.webhookAddr }}
+        {{- end }}
+        {{- if .Values.image.digest }}
+        - --init-network-image={{ .Values.image.repository }}@{{ .Values.image.digest }}
+        {{- else }}
+        - --init-network-image={{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
+        {{- end }}
         {{- if .Values.config.logLevel }}
         - --log-level={{ .Values.config.logLevel }}
         {{- end }}
@@ -101,13 +109,16 @@ spec:
         - name: http
           containerPort: {{ index (split ":" .Values.config.serverAddr) "_1" }}
           protocol: TCP
+        - name: webhook
+          containerPort: {{ index (split ":" .Values.config.webhookAddr) "_1" }}
+          protocol: TCP
         livenessProbe:
-          initialDelaySeconds: 10
+          initialDelaySeconds: 3
           httpGet:
             path: /healthz
             port: http
         readinessProbe:
-          initialDelaySeconds: 10
+          initialDelaySeconds: 3
           httpGet:
             path: /readyz
             port: http
@@ -116,7 +127,13 @@ spec:
         volumeMounts:
         - name: tmpfs
           mountPath: /tmp
+        - name: tls
+          mountPath: /etc/gke-metadata-server/certs
+          readOnly: true
       volumes:
       - name: tmpfs
         emptyDir:
           medium: Memory
+      - name: tls
+        secret:
+          secretName: gke-metadata-server-tls

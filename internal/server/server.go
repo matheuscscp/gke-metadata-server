@@ -185,11 +185,11 @@ func New(ctx context.Context, opts ServerOptions) *Server {
 
 	// start server
 	go func() {
+		l.Info("starting server...")
 		if err := s.httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			l.WithError(err).Panic("error listening and serving")
+			l.WithError(err).Fatal("error listening and serving server")
 		}
 	}()
-	l.Info("server started")
 
 	return s
 }

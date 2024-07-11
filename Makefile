@@ -22,8 +22,7 @@
 
 SHELL := /bin/bash
 
-BASE_IMAGE := ghcr.io/matheuscscp/gke-metadata-server/test
-HELM_IMAGE := oci://${BASE_IMAGE}/gke-metadata-server-helm
+TEST_IMAGE := ghcr.io/matheuscscp/gke-metadata-server/test
 
 .PHONY: all
 all: gke-metadata-server-linux-amd64 push
@@ -51,6 +50,7 @@ kind-cluster:
 	@if [ "${TEST_ID}" == "" ]; then echo "TEST_ID variable is required."; exit -1; fi
 	@if [ "${PROVIDER_COMMAND}" == "" ]; then echo "PROVIDER_COMMAND variable is required."; exit -1; fi
 	kind create cluster --config k8s/test-kind-config.yaml
+	kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.15.1/cert-manager.yaml
 	kubectl --context kind-kind apply -f k8s/test-anon-oidc-rbac.yaml
 	kubectl --context kind-kind get --raw /openid/v1/jwks > jwks.json
 	gcloud iam workload-identity-pools providers ${PROVIDER_COMMAND}-oidc ${TEST_ID} \
@@ -60,6 +60,15 @@ kind-cluster:
 		--issuer-uri=$$(kubectl --context kind-kind get --raw /.well-known/openid-configuration | jq -r .issuer) \
 		--attribute-mapping=google.subject=assertion.sub \
 		--jwk-json-path=jwks.json
+	while : ; do \
+		sleep_secs=10; \
+		echo "Sleeping for $$sleep_secs secs and checking cert-manager webhook status..."; \
+		sleep $$sleep_secs; \
+		if [ $$(kubectl --context kind-kind -n cert-manager get deploy cert-manager-webhook | grep cert | awk '{print $$4}') -eq 1 ]; then \
+			echo "cert-manager-webhook is ready"; \
+			break; \
+		fi; \
+	done
 
 .PHONY: cluster
 cluster:
@@ -73,22 +82,19 @@ ci-cluster: test-id.txt
 
 .PHONY: push
 push:
-	docker build . -t ${BASE_IMAGE}:container
-	docker push ${BASE_IMAGE}:container | tee docker-push.logs
+	docker build . -t ${TEST_IMAGE}:container
+	docker push ${TEST_IMAGE}:container | tee docker-push.logs
 	cat docker-push.logs | grep digest: | awk '{print $$3}' > container-digest.txt
 
 	mv .dockerignore .dockerignore.ignore
-	docker build . -t ${BASE_IMAGE}:go-test -f Dockerfile.test
+	docker build . -t ${TEST_IMAGE}:go-test -f Dockerfile.test
 	mv .dockerignore.ignore .dockerignore
-	docker push ${BASE_IMAGE}:go-test | tee docker-push.logs
+	docker push ${TEST_IMAGE}:go-test | tee docker-push.logs
 	cat docker-push.logs | grep digest: | awk '{print $$3}' > go-test-digest.txt
 
 	helm lint helm/gke-metadata-server
 	helm package helm/gke-metadata-server | tee helm-package.logs
 	basename $$(cat helm-package.logs | grep .tgz | awk '{print $$NF}') > helm-package.txt
-	helm push $$(cat helm-package.txt) oci://${BASE_IMAGE} 2>&1 | tee helm-push.logs
-	cat helm-push.logs | grep Pushed: | awk '{print $$NF}' | cut -d ":" -f2 > helm-version.txt
-	cat helm-push.logs | grep Digest: | awk '{print $$NF}' > helm-digest.txt
 
 .PHONY: test
 test:
@@ -104,18 +110,20 @@ ci-test:
 run-test:
 	@if [ "${TEST_ID}" == "" ]; then echo "TEST_ID variable is required."; exit -1; fi
 	@if [ "${HELM_TEST_CASE}" == "" ]; then echo "HELM_TEST_CASE variable is required."; exit -1; fi
-	helm pull ${HELM_IMAGE} --version $$(cat helm-version.txt) 2>&1 | tee helm-pull.logs
-	pull_digest=$$(cat helm-pull.logs | grep Digest: | awk '{print $$NF}'); \
-	if [ "$$(cat helm-digest.txt)" != "$$pull_digest" ]; then \
-		echo "Error: Helm OCI artifact digests are different. Digest on push: $$(cat helm-digest.txt), Digest on pull: $$pull_digest"; \
-		exit 1; \
-	fi
 	sed "s|<TEST_ID>|${TEST_ID}|g" k8s/test-helm-values-${HELM_TEST_CASE}.yaml | \
 		sed "s|<CONTAINER_DIGEST>|$$(cat container-digest.txt)|g" | \
-		tee >(helm --kube-context kind-kind -n kube-system upgrade --install --wait gke-metadata-server ${HELM_IMAGE} --version $$(cat helm-version.txt) -f -)
+		tee >(helm --kube-context kind-kind -n kube-system upgrade --install --wait gke-metadata-server $$(cat helm-package.txt) -f -)
 	kubectl --context kind-kind -n default delete po test || true
+	while : ; do \
+		sleep_secs=10; \
+		echo "Sleeping for $$sleep_secs secs and checking DaemonSet status..."; \
+		sleep $$sleep_secs; \
+		if [ $$(kubectl --context kind-kind -n kube-system get ds gke-metadata-server | grep gke | awk '{print $$4}') -eq 1 ]; then \
+			echo "DaemonSet is ready"; \
+			break; \
+		fi; \
+	done
 	sed "s|<TEST_ID>|${TEST_ID}|g" k8s/test-pod.yaml | \
-		sed "s|<CONTAINER_DIGEST>|$$(cat container-digest.txt)|g" | \
 		sed "s|<GO_TEST_DIGEST>|$$(cat go-test-digest.txt)|g" | \
 		tee >(kubectl --context kind-kind apply -f -)
 	while : ; do \

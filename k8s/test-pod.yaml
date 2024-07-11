@@ -31,6 +31,8 @@ metadata:
   name: test
   namespace: default
   annotations:
+    # This annotation is the usual way to configure GKE Workload Identity.
+    # The emulator uses this annotation to know which service account to impersonate.
     iam.gke.io/gcp-service-account: test-sa@gke-metadata-server.iam.gserviceaccount.com
 ---
 apiVersion: v1
@@ -38,40 +40,15 @@ kind: Pod
 metadata:
   name: test
   namespace: default
+  labels:
+    # This label is used by the MutatingWebhookConfiguration to select which Pods to mutate.
+    # The mutation injects metadata.google.internal->169.254.169.254 to .spec.hostAliases and
+    # an initContainer that creates iptables rules to redirect outbound traffic targeting
+    # metadata.google.internal to the emulator.
+    gke-metadata-server.matheuscscp.io/webhook: Mutate
 spec:
-  restartPolicy: Never
-
-  # Use the ServiceAccount created above.
+  restartPolicy: OnFailure
   serviceAccountName: test
-
-  # The settings below emulate the HTTP endpoint 169.254.169.254:80, which is
-  # hardcoded across Google libraries as the endpoint for detecting whether
-  # or not the program is running inside the Google Cloud. The hostAliases
-  # field configures the DNS entry. The init container initializes the pod
-  # network namespace to route traffic from 169.254.169.254:80 to the
-  # DAEMONSET_IP:DAEMONSET_PORT network address, where the emulator will
-  # be listening on, on the same node of this pod (hence why the init
-  # container requires the NET_ADMIN security capability).
-  hostAliases:
-  - hostnames: [metadata.google.internal]
-    ip: 169.254.169.254
-  initContainers:
-  - name: init-gke-metadata-server
-    image: ghcr.io/matheuscscp/gke-metadata-server/test@<CONTAINER_DIGEST>
-    args: [init-network]
-    securityContext:
-      capabilities:
-        add: [NET_ADMIN]
-    env:
-    - name: DAEMONSET_IP
-      valueFrom:
-        fieldRef:
-          fieldPath: status.hostIP
-    - name: DAEMONSET_PORT
-      value: "8080"
-
-  # The containers below run our automatic tests. Replace them with your containers
-  # in your production Pods.
 
   # This container demonstrates "GKE Workload Identity". The image does not have gcloud.
   # The tests running here perform authenticated operations in GCP by just communicating

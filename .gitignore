@@ -5,3 +5,7 @@ gke-metadata-server-linux-amd64*
 *.tgz
 .terraform*
 terraform.*
+*.key
+*.crt
+*.pem
+openssl.cnf
