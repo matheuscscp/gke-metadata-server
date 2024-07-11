@@ -42,10 +42,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const (
-	defaultServerPort       = "8080"
-	serviceAccountTokenFile = "/var/run/secrets/sts.googleapis.com/serviceaccount/token"
-)
+const defaultServerPort = "8080"
 
 func newServerCommand() *cobra.Command {
 	const (
