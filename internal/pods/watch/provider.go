@@ -88,14 +88,21 @@ func NewProvider(opts ProviderOptions) *Provider {
 		opts.KubeClient,
 		corev1.NamespaceAll,
 		opts.ResyncPeriod,
-		cache.Indexers{ // pods on the host network are not supported, see README.md
+		cache.Indexers{
 			ipIndex: func(obj interface{}) ([]string, error) {
 				pod := obj.(*corev1.Pod)
-				return []string{pod.Status.PodIP, fmt.Sprint(pod.Spec.HostNetwork)}, nil
+				podIP := pod.Status.PodIP
+				if podIP == "" {
+					podIP = "<empty>"
+				}
+				return []string{podIP}, nil
 			},
 		},
 		func(lo *metav1.ListOptions) {
-			lo.FieldSelector = fmt.Sprintf("spec.nodeName=%s", opts.NodeName)
+			lo.FieldSelector = strings.Join([]string{
+				"spec.nodeName=" + opts.NodeName,
+				"spec.hostNetwork=false",
+			}, ",")
 		},
 	)
 
@@ -111,22 +118,14 @@ func NewProvider(opts ProviderOptions) *Provider {
 	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			numPods.Inc()
-			pod := obj.(*corev1.Pod)
-			if pod.Spec.HostNetwork {
-				return
-			}
 			for _, l := range p.listeners {
-				l.AddPod(pod)
+				l.AddPod(obj.(*corev1.Pod))
 			}
 		},
 		DeleteFunc: func(obj interface{}) {
 			numPods.Dec()
-			pod := obj.(*corev1.Pod)
-			if pod.Spec.HostNetwork {
-				return
-			}
 			for _, l := range p.listeners {
-				l.DeletePod(pod)
+				l.DeletePod(obj.(*corev1.Pod))
 			}
 		},
 	})
@@ -135,44 +134,58 @@ func NewProvider(opts ProviderOptions) *Provider {
 }
 
 func (p *Provider) GetByIP(ctx context.Context, ipAddr string) (*corev1.Pod, error) {
-	pod, err := p.getByIP(ctx, ipAddr)
+	pod, err := p.getByIP(ipAddr)
 	if err == nil {
 		return pod, nil
 	}
 	if p.opts.FallbackSource == nil {
-		return nil, fmt.Errorf("error getting pod by ip %q from cache: %w", ipAddr, err)
+		return nil, fmt.Errorf("error getting pod with cluster ip %s from cache: %w", ipAddr, err)
 	}
-	p.cacheMisses.Inc()
+
 	logging.
 		FromContext(ctx).
 		WithError(err).
-		Error("error getting pod by ip from cache, delegating request to fallback source")
-	return p.opts.FallbackSource.GetByIP(ctx, ipAddr)
+		WithField("cluster_ip", ipAddr).
+		Error("error getting pod by cluster ip from cache, delegating request to fallback source")
+
+	pod, err = p.opts.FallbackSource.GetByIP(ctx, ipAddr)
+	if err != nil {
+		return nil, err
+	}
+	p.cacheMisses.Inc()
+	return pod, nil
 }
 
-func (p *Provider) getByIP(ctx context.Context, ipAddr string) (*corev1.Pod, error) {
-	v, err := p.informer.GetIndexer().Index(ipIndex, &corev1.Pod{
+func (p *Provider) getByIP(ipAddr string) (*corev1.Pod, error) {
+	list, err := p.informer.GetIndexer().Index(ipIndex, &corev1.Pod{
 		Status: corev1.PodStatus{PodIP: ipAddr},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("error getting pod from cache by ip address %q: %w", ipAddr, err)
+		return nil, fmt.Errorf("error listing pods in the node cache matching cluster ip %s: %w", ipAddr, err)
 	}
-	var podsMatchingIP []*corev1.Pod
-	for _, p := range v {
-		pod := p.(*corev1.Pod)
-		if pod.Status.PodIP == ipAddr {
-			podsMatchingIP = append(podsMatchingIP, pod)
+
+	var matchingPods []*corev1.Pod
+	for _, v := range list {
+		pod := v.(*corev1.Pod)
+		matchingPods = append(matchingPods, pod)
+		// if pod.Spec.NodeName == p.opts.NodeName && !pod.Spec.HostNetwork && pod.Status.PodIP == ipAddr {
+		// }
+	}
+
+	if n := len(matchingPods); n != 1 {
+		if n == 0 {
+			return nil, fmt.Errorf("no pods found in the node cache matching cluster ip %s", ipAddr)
 		}
-	}
-	if n := len(podsMatchingIP); n != 1 {
+
 		refs := make([]string, n)
-		for i, pod := range podsMatchingIP {
+		for i, pod := range matchingPods {
 			refs[i] = fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
 		}
-		return nil, fmt.Errorf("error getting pod from cache by ip address %q: %v pods found instead of 1 [%s]",
+		return nil, fmt.Errorf("multiple pods found in the node cache matching cluster ip %s (%v pods): %s",
 			ipAddr, n, strings.Join(refs, ", "))
 	}
-	return podsMatchingIP[0], nil
+
+	return matchingPods[0], nil
 }
 
 func (p *Provider) Start(ctx context.Context) {

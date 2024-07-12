@@ -32,7 +32,6 @@ import (
 	"github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	informersv1 "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes"
@@ -98,15 +97,13 @@ func NewProvider(ctx context.Context, opts ProviderOptions) *Provider {
 	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			numServiceAccounts.Inc()
-			sa := obj.(*corev1.ServiceAccount)
 			for _, l := range p.listeners {
-				l.UpdateServiceAccount(sa)
+				l.UpdateServiceAccount(obj.(*corev1.ServiceAccount))
 			}
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
-			sa := newObj.(*corev1.ServiceAccount)
 			for _, l := range p.listeners {
-				l.UpdateServiceAccount(sa)
+				l.UpdateServiceAccount(newObj.(*corev1.ServiceAccount))
 			}
 		},
 		DeleteFunc: func(obj interface{}) {
@@ -118,22 +115,29 @@ func NewProvider(ctx context.Context, opts ProviderOptions) *Provider {
 }
 
 func (p *Provider) Get(ctx context.Context, namespace, name string) (*corev1.ServiceAccount, error) {
-	sa, err := p.get(ctx, namespace, name)
+	sa, err := p.get(namespace, name)
 	if err == nil {
 		return sa, nil
 	}
 	if p.opts.FallbackSource == nil {
-		return nil, fmt.Errorf("error getting service account '%s/%s' from cache: %w", namespace, name, err)
+		return nil, fmt.Errorf("error getting service account %s/%s from cache: %w", namespace, name, err)
+	}
+
+	logging.
+		FromContext(ctx).
+		WithError(err).
+		WithField("service_account", fmt.Sprintf("%s/%s", namespace, name)).
+		Error("error getting service account from cache, delegating request to fallback source")
+
+	sa, err = p.opts.FallbackSource.Get(ctx, namespace, name)
+	if err != nil {
+		return nil, err
 	}
 	p.cacheMisses.Inc()
-	logging.FromContext(ctx).WithError(err).WithField("service_account", logrus.Fields{
-		"namespace": namespace,
-		"name":      name,
-	}).Error("error getting service account from cache, delegating request to fallback source")
-	return p.opts.FallbackSource.Get(ctx, namespace, name)
+	return sa, nil
 }
 
-func (p *Provider) get(ctx context.Context, namespace, name string) (*corev1.ServiceAccount, error) {
+func (p *Provider) get(namespace, name string) (*corev1.ServiceAccount, error) {
 	v, ok, err := p.informer.GetStore().GetByKey(fmt.Sprintf("%s/%s", namespace, name))
 	if err != nil {
 		return nil, err

@@ -50,23 +50,31 @@ func NewProvider(opts ProviderOptions) pods.Provider {
 }
 
 func (p *Provider) GetByIP(ctx context.Context, ipAddr string) (*corev1.Pod, error) {
-	podList, err := p.opts.KubeClient.CoreV1().Pods(corev1.NamespaceAll).List(ctx, metav1.ListOptions{
-		FieldSelector: fmt.Sprintf("spec.nodeName=%s,status.podIP=%s", p.opts.NodeName, ipAddr),
-	})
+	fieldSelector := strings.Join([]string{
+		"spec.nodeName=" + p.opts.NodeName,
+		"spec.hostNetwork=false",
+		"status.podIP=" + ipAddr,
+	}, ",")
+	podList, err := p.opts.KubeClient.
+		CoreV1().
+		Pods(corev1.NamespaceAll).
+		List(ctx, metav1.ListOptions{FieldSelector: fieldSelector})
 	if err != nil {
-		return nil, fmt.Errorf("error listing pods in the node matching cluster ip address %q: %w", ipAddr, err)
+		return nil, fmt.Errorf("error listing pods in the node matching cluster ip %s: %w", ipAddr, err)
 	}
-	if n := len(podList.Items); n != 1 || podList.Items[0].Spec.HostNetwork {
-		if n == 1 { // pods on the host network are not supported, see README.md
-			podList.Items = nil
-			n = 0
+
+	if n := len(podList.Items); n != 1 {
+		if n == 0 {
+			return nil, fmt.Errorf("no pods found in the node matching cluster ip %s", ipAddr)
 		}
+
 		refs := make([]string, n)
 		for i, pod := range podList.Items {
 			refs[i] = fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
 		}
-		return nil, fmt.Errorf("error listing pods in the node matching cluster ip address %q: %v pods found instead of 1 [%s]",
+		return nil, fmt.Errorf("multiple pods found in the node matching cluster ip %s (%v pods): %s",
 			ipAddr, n, strings.Join(refs, ", "))
 	}
+
 	return &podList.Items[0], nil
 }
