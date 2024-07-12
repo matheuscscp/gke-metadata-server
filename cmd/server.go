@@ -25,6 +25,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/matheuscscp/gke-metadata-server/internal/googlecredentials"
@@ -37,12 +38,11 @@ import (
 	watchserviceaccounts "github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts/watch"
 	cacheserviceaccounttokens "github.com/matheuscscp/gke-metadata-server/internal/serviceaccounttokens/cache"
 	createserviceaccounttoken "github.com/matheuscscp/gke-metadata-server/internal/serviceaccounttokens/create"
+	"github.com/matheuscscp/gke-metadata-server/internal/webhook"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
-
-const defaultServerPort = "8080"
 
 func newServerCommand() *cobra.Command {
 	const (
@@ -52,7 +52,9 @@ func newServerCommand() *cobra.Command {
 
 	var (
 		serverAddr                          string
+		webhookAddr                         string
 		workloadIdentityProvider            string
+		initNetworkImage                    string
 		watchPods                           bool
 		watchPodsResyncPeriod               time.Duration
 		watchPodsDisableFallback            bool
@@ -187,20 +189,33 @@ func newServerCommand() *cobra.Command {
 				MetricsRegistry:         metricsRegistry,
 			})
 
+			webhookServer := webhook.New(ctx, webhook.ServerOptions{
+				ServerAddr:       webhookAddr,
+				InitNetworkImage: initNetworkImage,
+				DaemonSetPort:    strings.Split(serverAddr, ":")[1],
+			})
+
 			ctx, cancel := waitForShutdown(ctx)
 			defer cancel()
 			if err := s.Shutdown(ctx); err != nil {
-				return fmt.Errorf("error in graceful shutdown: %w", err)
+				return fmt.Errorf("error in server graceful shutdown: %w", err)
+			}
+			if err := webhookServer.Shutdown(ctx); err != nil {
+				return fmt.Errorf("error in webhook graceful shutdown: %w", err)
 			}
 
 			return nil
 		},
 	}
 
-	cmd.Flags().StringVar(&serverAddr, "server-addr", ":"+defaultServerPort,
+	cmd.Flags().StringVar(&serverAddr, "server-addr", ":8080",
 		"Network address where the metadata server must listen on")
+	cmd.Flags().StringVar(&webhookAddr, "webhook-addr", ":8081",
+		"Network address where the webhook server must listen on")
 	cmd.Flags().StringVar(&workloadIdentityProvider, "workload-identity-provider", "",
 		"Mandatory fully-qualified resource name of the GCP Workload Identity Provider (projects/<project_number>/locations/global/workloadIdentityPools/<pool_name>/providers/<provider_name>)")
+	cmd.Flags().StringVar(&initNetworkImage, "init-network-image", "ghcr.io/matheuscscp/gke-metadata-server:0.6.0",
+		"Image to be used for the init container that sets up the network namespace for reaching the metadata server")
 	cmd.Flags().BoolVar(&watchPods, "watch-pods", false,
 		"Whether or not to watch the pods running on the same node (default false)")
 	cmd.Flags().BoolVar(&watchPodsDisableFallback, "watch-pods-disable-fallback", false,

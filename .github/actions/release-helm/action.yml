@@ -29,6 +29,7 @@ runs:
   steps:
   - run: |
       helm push $(cat helm-package.txt) oci://${registry}/matheuscscp 2>&1 | tee helm-push.logs
+      cat helm-push.logs | grep Pushed: | awk '{print $NF}' | cut -d ":" -f2 > helm-version.txt
       cat helm-push.logs | grep Digest: | awk '{print $NF}' > helm-digest.txt
       echo "HELM_WITH_DIGEST=${image}@$(cat helm-digest.txt)" >> $GITHUB_ENV
     shell: bash

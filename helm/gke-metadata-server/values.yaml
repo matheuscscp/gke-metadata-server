@@ -25,12 +25,13 @@
 # Declare variables to be passed into your templates.
 
 config:
-  logLevel: info # Log level. Accepted values: panic, fatal, error, warning, info, debug, trace
-  serverAddr: :8080 # Network address where the HTTP server will listen on.
   # Mandatory fully-qualified name of the GCP Workload Identity Provider.
   # This full name can be retrieved on the Google Cloud Console webpage for the provider.
   # Must match the pattern: projects/<gcp_project_number>/locations/global/workloadIdentityPools/<pool_name>/providers/<provider_name>
   workloadIdentityProvider: ""
+  logLevel: info # Log level. Accepted values: panic, fatal, error, warning, info, debug, trace
+  serverAddr: :8080 # Network address where the HTTP server will listen on.
+  webhookAddr: :8081 # Network address where the Mutating Webhook server will listen on.
   watchPods:
     enabled: true # Whether or not to watch and cache the Pods running on the same Node.
     disableFallback: false # Whether or not to disable the simple fallback method for retrieving Pods upon cache misses.
@@ -71,8 +72,9 @@ image:
   # Overrides the image tag whose default is the chart appVersion (stronger than tag).
   # digest: some-digest
 
-# This is a very powerful, critical infrastructure application, granting properly configured GCP access to
-# all the workloads inside a Kubernetes cluster. It should reside in the kube-system namespace.
+# This is a very powerful/critical infrastructure application for granting GCP access to all
+# the workloads inside a Kubernetes cluster. It should reside in the kube-system namespace.
+# If you want to change this, you must know what you are doing.
 namespace: kube-system
 
 # Pod .spec.priorityClassName. This controls how much preemptible the DaemonSet Pods will be.
