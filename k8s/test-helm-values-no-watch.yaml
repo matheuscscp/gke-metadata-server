@@ -32,5 +32,3 @@ config:
 image:
   repository: ghcr.io/matheuscscp/gke-metadata-server/test
   digest: <CONTAINER_DIGEST>
-
-timestampPodAnnotation: true

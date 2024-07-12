@@ -42,5 +42,5 @@ runs:
         exit 1
       fi
 
-  - run: make ci-cluster push ci-test
+  - run: make ci-cluster build ci-test
     shell: bash

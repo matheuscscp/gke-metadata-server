@@ -25,7 +25,7 @@ SHELL := /bin/bash
 TEST_IMAGE := ghcr.io/matheuscscp/gke-metadata-server/test
 
 .PHONY: all
-all: gke-metadata-server-linux-amd64 push
+all: tidy cluster build test
 
 .PHONY: test-id.txt
 test-id.txt:
@@ -39,11 +39,6 @@ tidy:
 	terraform fmt -recursive ./.*/**/*.tf
 	./scripts/license.sh
 	git status
-
-.PHONY: gke-metadata-server-linux-amd64
-gke-metadata-server-linux-amd64:
-	GOOS=linux GOARCH=amd64 go build -o $@ github.com/matheuscscp/gke-metadata-server/cmd
-	sha256sum $@ > $@.sha256sum
 
 .PHONY: kind-cluster
 kind-cluster:
@@ -80,8 +75,8 @@ cluster:
 ci-cluster: test-id.txt
 	make kind-cluster TEST_ID=$$(cat test-id.txt) PROVIDER_COMMAND=create
 
-.PHONY: push
-push:
+.PHONY: build
+build:
 	docker build . -t ${TEST_IMAGE}:container
 	docker push ${TEST_IMAGE}:container | tee docker-push.logs
 	cat docker-push.logs | grep digest: | awk '{print $$3}' > container-digest.txt
