@@ -90,12 +90,10 @@ func NewProvider(opts ProviderOptions) *Provider {
 		opts.ResyncPeriod,
 		cache.Indexers{
 			ipIndex: func(obj interface{}) ([]string, error) {
-				pod := obj.(*corev1.Pod)
-				podIP := pod.Status.PodIP
-				if podIP == "" {
-					podIP = "<empty>"
+				if podIP := obj.(*corev1.Pod).Status.PodIP; podIP != "" {
+					return []string{podIP}, nil
 				}
-				return []string{podIP}, nil
+				return nil, nil
 			},
 		},
 		func(lo *metav1.ListOptions) {
