@@ -162,28 +162,21 @@ func (p *Provider) getByIP(ipAddr string) (*corev1.Pod, error) {
 		return nil, fmt.Errorf("error listing pods in the node cache matching cluster ip %s: %w", ipAddr, err)
 	}
 
-	var matchingPods []*corev1.Pod
-	for _, v := range list {
-		pod := v.(*corev1.Pod)
-		matchingPods = append(matchingPods, pod)
-		// if pod.Spec.NodeName == p.opts.NodeName && !pod.Spec.HostNetwork && pod.Status.PodIP == ipAddr {
-		// }
-	}
-
-	if n := len(matchingPods); n != 1 {
+	if n := len(list); n != 1 {
 		if n == 0 {
 			return nil, fmt.Errorf("no pods found in the node cache matching cluster ip %s", ipAddr)
 		}
 
 		refs := make([]string, n)
-		for i, pod := range matchingPods {
+		for i, v := range list {
+			pod := v.(*corev1.Pod)
 			refs[i] = fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
 		}
 		return nil, fmt.Errorf("multiple pods found in the node cache matching cluster ip %s (%v pods): %s",
 			ipAddr, n, strings.Join(refs, ", "))
 	}
 
-	return matchingPods[0], nil
+	return list[0].(*corev1.Pod), nil
 }
 
 func (p *Provider) Start(ctx context.Context) {

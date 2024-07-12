@@ -31,17 +31,12 @@ spec:
       app: gke-metadata-server
   template:
     metadata:
-      {{- if or .Values.timestampPodAnnotation (ne (len .Values.podAnnotations) 0) }}
-      annotations:
-      {{- end }}
-      {{- if .Values.timestampPodAnnotation }}
-        timestamp: {{ now | date "2006-01-02T15:04:05Z07:00" }}
-      {{- end }}
-      {{- with .Values.podAnnotations }}
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
       labels:
         app: gke-metadata-server
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
     spec:
       serviceAccountName: gke-metadata-server
       priorityClassName: {{ .Values.priorityClass }}

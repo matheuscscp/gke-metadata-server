@@ -24,15 +24,15 @@
 # but also an example of how to configure Pods in a cluster where the emulator
 # is deployed. Use this as reference for how to configure your production Pods.
 
-# ServiceAccount configuration is the exact same of GKE Workload Identity.
+# ServiceAccount configuration is the exact same of Workload Identity in GKE.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: test
   namespace: default
   annotations:
-    # This annotation is the usual way to configure GKE Workload Identity.
-    # The emulator uses this annotation to know which service account to impersonate.
+    # This annotation is how Workload Identity is configured in GKE.
+    # This project also uses this annotation to know which Google Service Account to impersonate.
     iam.gke.io/gcp-service-account: test-sa@gke-metadata-server.iam.gserviceaccount.com
 ---
 apiVersion: v1
@@ -47,13 +47,13 @@ metadata:
     # metadata.google.internal to the emulator.
     gke-metadata-server.matheuscscp.io/webhook: Mutate
 spec:
-  restartPolicy: OnFailure
   serviceAccountName: test
+  restartPolicy: Never
 
-  # This container demonstrates "GKE Workload Identity". The image does not have gcloud.
-  # The tests running here perform authenticated operations in GCP by just communicating
-  # with the well-known GCE/GKE Metadata APIs backed by the emulator. The custom APIs of
-  # the emulator are also tested.
+  # This container demonstrates that automatic authentication using Google libraries works.
+  # The tests running here perform authentication by simply communicating with the well-known
+  # GCE/GKE Metadata APIs backed by the emulator, which are installed by an init container
+  # added by the mutation mentioned above. The custom APIs of the emulator are also tested.
   containers:
   - name: test
     image: ghcr.io/matheuscscp/gke-metadata-server/test@<GO_TEST_DIGEST>
