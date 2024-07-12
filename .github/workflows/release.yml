@@ -47,19 +47,23 @@ jobs:
       with:
         google-service-account-name: release
         github-token: ${{ secrets.GITHUB_TOKEN }}
-    - id: ci-checks
-      uses: ./.github/actions/ci-checks/
+
+    - id: check-new-releases
+      uses: ./.github/actions/check-new-releases/
+
+    - uses: ./.github/actions/ci-checks/
+      if: steps.check-new-releases.outputs.release-container == 'yes' || steps.check-new-releases.outputs.release-helm == 'yes'
 
     - uses: sigstore/cosign-installer@v3.3.0
-      if: steps.ci-checks.outputs.release-container == 'yes' || steps.ci-checks.outputs.release-helm == 'yes'
+      if: steps.check-new-releases.outputs.release-container == 'yes' || steps.check-new-releases.outputs.release-helm == 'yes'
 
     - name: Release Container in GitHub Container Registry
-      if: steps.ci-checks.outputs.release-container == 'yes'
+      if: steps.check-new-releases.outputs.release-container == 'yes'
       uses: ./.github/actions/release-container/
       with:
         registry: ghcr.io
     - name: Release Container in GitHub
-      if: steps.ci-checks.outputs.release-container == 'yes'
+      if: steps.check-new-releases.outputs.release-container == 'yes'
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
@@ -73,12 +77,12 @@ jobs:
           --latest
 
     - name: Release Helm Chart in GitHub Container Registry
-      if: steps.ci-checks.outputs.release-helm == 'yes'
+      if: steps.check-new-releases.outputs.release-helm == 'yes'
       uses: ./.github/actions/release-helm/
       with:
         registry: ghcr.io
     - name: Release Helm Chart in GitHub
-      if: steps.ci-checks.outputs.release-helm == 'yes'
+      if: steps.check-new-releases.outputs.release-helm == 'yes'
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
