@@ -4,99 +4,25 @@
 [![release](https://github.com/matheuscscp/gke-metadata-server/actions/workflows/release.yml/badge.svg?branch=main)](https://github.com/matheuscscp/gke-metadata-server/actions/workflows/release.yml)
 
 A GKE Metadata Server *emulator* for making it easier to use GCP Workload Identity Federation
-inside non-GKE Kubernetes clusters, e.g. on-prem, bare-metal, managed Kubernetes from other
-clouds, etc. This implementation is heavily inspired by, and deployed in the same fashion of
-the Google-managed `gke-metadata-server` `DaemonSet` present in the `kube-system` Namespace of
-GKE clusters with GKE Workload Identity enabled. See how GKE Workload Identity
-[works](https://cloud.google.com/kubernetes-engine/docs/concepts/workload-identity#metadata_server).
-
-**Disclaimer 1:** This project was not created by Google or by anybody related to Google.
-Google enterprise support is not available. **Use this tool at your own risk.**
-*(But please do feel free to open issues for reporting bugs or vulnerabilities, or for asking
-questions, help or requesting new features. Feel also free to
-[contribute](https://github.com/matheuscscp/gke-metadata-server/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22).)*
-
-**Disclaimer 2:** This tool is *not necessary* for using GCP Workload Identity Federation inside
-non-GKE Kubernetes clusters. This is just a facilitator. Kubernetes and GCP Workload Identity
-Federation work together by themselves. This tool just makes your Pods need less configuration
-to use GCP Workload Identity Federation (some level of configuration is still required, but the
-full Workload Identity Provider resource name is hidden from the client Pods and kept only as part
-of the emulator, see a full example at [`./k8s/test-pod.yaml`](./k8s/test-pod.yaml)), and the
-integration is closer to how native GKE Workload Identity works (but still not perfect, as the
-impersonation IAM settings are still slightly different, see the section
-[Configure GCP Workload Identity Federation for Kubernetes](#configure-gcp-workload-identity-federation-for-kubernetes)
-below).
-
-## Limitations and Caveats
-
-### Pod identification by IP address
-
-The server uses the source IP address reported in the HTTP request to identify the
-requesting Pod in the Kubernetes API.
-
-If an attacker can easily perform IP address impersonation attacks in your cluster, e.g.
-[ARP spoofing](https://cloud.hacktricks.xyz/pentesting-cloud/kubernetes-security/kubernetes-network-attacks),
-then they will most likely exploit this design choice to steal your credentials.
-**Please evaluate the risk of such attacks in your cluster before choosing this tool.**
-
-*(Please also note that the attack explained in the link above requires Pods configured
-with very high privileges, which should normally not be allowed in sensitive/production
-clusters. If the security of your cluster is really important, then you should be
-[enforcing restrictions](https://github.com/open-policy-agent/gatekeeper) for preventing
-Pods from being created with such high privileges, except in special/trusted cases.)*
-
-### Pods running on the host network
-
-In a cluster there may also be Pods running on the *host network*, i.e. Pods with the
-field `spec.hostNetwork` set to `true`. The emulator Pods themselves, for example, need
-to run on the host network in order to listen to TCP/IP connections coming from Pods
-running on the same Kubernetes Node, such that their unecrypted communication never
-leaves that Node. Because Pods running on the host network use a shared IP address, i.e.
-the IP address of the Node itself where they are running on, the solution implemented
-here is not able to uniquely identify such Pods. Therefore, *Pods running on the host
-network are not supported*.
-
-*(Please also note that most Pods should not run on the host network in the first place,
-as there is usually no need for this. Most applications are, and should be able to fulfill
-their purposes without running on the host network. This is only required for very special
-cases, like in the case of the emulator itself.)*
+inside *non-GKE* Kubernetes clusters, e.g. KinD, on-prem, managed Kubernetes from other
+clouds, etc. This implementation tries to mimic the `gke-metadata-server` `DaemonSet` deployed
+automatically by Google in the `kube-system` namespace of GKE clusters that have the feature
+*Workload Identity* enabled. See how it [works](https://cloud.google.com/kubernetes-engine/docs/concepts/workload-identity#metadata_server).
 
 ## Usage
 
 Steps:
-1. Configure Kubernetes DNS
-2. Configure GCP Workload Identity Federation for Kubernetes
-3. Deploy `gke-metadata-server` in your cluster
-4. Verify supply chain authenticity
-
-### Configure Kubernetes DNS
-
-Add the following DNS entry to your cluster:
-
-`metadata.google.internal` ---> `169.254.169.254`
-
-Google libraries and `gcloud` query these well-known endpoints for retrieving Google OAuth 2.0
-access tokens, which are short-lived (1h-long) authorization codes granting access to resources
-in the GCP APIs.
-
-#### CoreDNS
-
-If your cluster uses CoreDNS, here's a StackOverflow [tutorial](https://stackoverflow.com/a/65338650)
-for adding custom cluster-level DNS entries.
-
-Adding an entry to CoreDNS does not work seamlessly for all cases. Depending on how the
-application code resolves DNS, the Pod-level DNS configuration mentioned in the link
-above may be the only feasible choice.
-
-*(Google's Go libraries target the `169.254.169.254` IP address directly. If you are running mostly
-Go applications *authenticating through Google's Go libraries* then this DNS configuration may not
-be required. Test it!)*
+1. Install [cert-manager](https://cert-manager.io/docs/installation/) in the cluster. This dependency is used for bootstrapping a self-signed CA and TLS certificate for a `MutatingWebhook` that adds networking configurations to the user Pods.
+2. Configure GCP Workload Identity Federation for Kubernetes.
+3. Deploy `gke-metadata-server` in the cluster using the Workload Identity Provider full name, obtained after step 2.
+4. (Optional, Recommended) Verify the supply chain authenticity.
+5. See [./k8s/test-pod.yaml](./k8s/test-pod.yaml) for an example of how to configure your Pods.
 
 ### Configure GCP Workload Identity Federation for Kubernetes
 
 Steps:
-1. Create a Workload Identity Pool and Provider pair for your cluster
-2. Grant Kubernetes ServiceAccounts permissions to impersonate Google Service Accounts
+1. Create a Workload Identity Pool and Provider pair for the cluster.
+2. Grant Kubernetes ServiceAccounts permissions to impersonate Google Service Accounts.
 
 Official docs and examples:
 [link](https://cloud.google.com/iam/docs/workload-identity-federation-with-kubernetes).
@@ -105,7 +31,7 @@ More examples for all the configuration described in this section are available 
 [`./terraform/test.tf`](./terraform/test.tf). This is where we provision the
 infrastructure required for testing this project in CI and development.
 
-#### Create a Workload Identity Pool and Provider pair for your cluster
+#### Create a Workload Identity Pool and Provider pair for the cluster
 
 In order to map Kubernetes ServiceAccounts to Google Service Accounts, one must first create
 a Workload Identity Pool and Provider. A Pool is a namespace for Subjects and Providers,
@@ -173,21 +99,22 @@ A Helm Chart is available in the following [Helm OCI Repository](https://helm.sh
 `ghcr.io/matheuscscp/gke-metadata-server-helm:{helm_version}` (GitHub Container Registry)
 
 Where `{helm_version}` is a Helm Chart SemVer, i.e. the field `.version` at
-[`./helm/gke-metadata-server/Chart.yaml`](./helm/gke-metadata-server/Chart.yaml).
+[`./helm/gke-metadata-server/Chart.yaml`](./helm/gke-metadata-server/Chart.yaml). Check available releases
+in the [GitHub Releases Page](https://github.com/matheuscscp/gke-metadata-server/releases).
 
-See the Helm values API at [`./helm/gke-metadata-server/values.yaml`](./helm/gke-metadata-server/values.yaml).
+See the Helm Values API at [`./helm/gke-metadata-server/values.yaml`](./helm/gke-metadata-server/values.yaml).
 
 Alternatively, you can write your own Kubernetes manifests and consume only the container image:
 
 `ghcr.io/matheuscscp/gke-metadata-server:{container_version}` (GitHub Container Registry)
 
 Where `{container_version}` is the app version, i.e. the field `.appVersion` at
-[`./helm/gke-metadata-server/Chart.yaml`](./helm/gke-metadata-server/Chart.yaml).
+[`./helm/gke-metadata-server/Chart.yaml`](./helm/gke-metadata-server/Chart.yaml). Check available releases
+in the [GitHub Releases Page](https://github.com/matheuscscp/gke-metadata-server/releases).
 
-### Verify supply chain authenticity
+### Verify the supply chain authenticity
 
-For manually verifying the images above use the [`cosign`](https://github.com/sigstore/cosign)
-CLI tool.
+For verifying the images above use the [`cosign`](https://github.com/sigstore/cosign) CLI tool.
 
 For verifying the image of a given Container GitHub Release (tags `v{container_version}`), fetch the
 digest file `container-digest.txt` attached to the release and use it with `cosign`:
@@ -207,8 +134,54 @@ cosign verify ghcr.io/matheuscscp/gke-metadata-server-helm@$(cat helm-digest.txt
     --certificate-identity=https://github.com/matheuscscp/gke-metadata-server/.github/workflows/release.yml@refs/heads/main
 ```
 
-If you are using FluxCD for deploying Helm Charts, use
+If you are using *FluxCD* for deploying Helm Charts you can automate the verification using
 [Keyless Verification](https://fluxcd.io/flux/components/source/helmcharts/#keyless-verification).
 
-If you are using Kyverno for enforcing policies, use
+If you are using *Kyverno* for enforcing policies you can automate the verification using
 [Keyless Verification](https://kyverno.io/docs/writing-policies/verify-images/sigstore/#keyless-signing-and-verification).
+
+## Limitations and Security Risks
+
+### Pod identification by IP address
+
+The server uses the client IP address reported in the HTTP request to identify the
+requesting Pod in the Kubernetes API (just like in the native GKE implementation).
+
+If an attacker can easily perform IP address impersonation attacks in your cluster, e.g.
+[ARP spoofing](https://cloud.hacktricks.xyz/pentesting-cloud/kubernetes-security/kubernetes-network-attacks),
+then they will most likely exploit this design choice to steal your credentials.
+**Please evaluate the risk of such attacks in your cluster before choosing this tool.**
+
+*(Please also note that the attack explained in the link above requires Pods configured
+with very high privileges, which should normally not be allowed in sensitive/production
+clusters. If the security of your cluster is really important, then you should be
+[enforcing restrictions](https://github.com/open-policy-agent/gatekeeper) for preventing
+Pods from being created with such high privileges in the majority of cases.)*
+
+### Pods running on the host network
+
+In a cluster there may also be Pods running on the *host network*, i.e. Pods with the
+field `spec.hostNetwork` set to `true`. The emulator Pods themselves, for example, need
+to run on the host network in order to listen to TCP/IP connections coming from Pods
+running on the same Kubernetes node, which are the ones they will serve. Just like in
+the GKE implementation, this design choice makes it such that the (unencrypted)
+communication never leaves the Node.
+
+Because Pods running on the host network use a shared IP address, i.e. the IP address of
+the Node itself where they are running on, they cannot be uniquely identified by the
+server using the client IP address reported in the HTTP request. This is a limitation
+of the Kubernetes API, which does not provide a way to identify Pods running on the host
+network by IP address.
+
+## Disclaimer
+
+This project was not created by Google. Enterprise support from Google is
+not available. **Use this tool at your own risk.**
+*(But please do feel free to report bugs and CVEs, to request help and new features, and to
+[contribute](https://github.com/matheuscscp/gke-metadata-server/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22).)*
+
+Furthermore, this tool is *not necessary* for using GCP Workload Identity Federation inside
+non-GKE Kubernetes clusters. This is just a facilitator. Kubernetes and GCP Workload Identity
+Federation work together by themselves. This tool just makes your Pods need much less configuration
+to use GCP Workload Identity Federation by making the configuration as close as possible to
+how Workload Identity is configured in a native GKE cluster.
