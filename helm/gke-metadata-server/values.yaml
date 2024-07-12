@@ -34,11 +34,11 @@ config:
   webhookAddr: :8081 # Network address where the Mutating Webhook server will listen on.
   watchPods:
     enabled: true # Whether or not to watch and cache the Pods running on the same Node.
-    disableFallback: false # Whether or not to disable the simple fallback method for retrieving Pods upon cache misses.
+    disableFallback: false # Whether or not to disable the simple fallback method for looking up Pods upon cache misses.
     resyncPeriod: 10m # How often to fully resync.
   watchServiceAccounts:
     enabled: true # Whether or not to watch and cache all the Service Accounts of the cluster.
-    disableFallback: false # Whether or not to disable the simple fallback method for retrieving Service Accounts upon cache misses.
+    disableFallback: false # Whether or not to disable the simple fallback method for looking up Service Accounts upon cache misses.
     resyncPeriod: 1h # How often to fully resync.
   cacheTokens:
     enabled: true # Whether or not to proactively cache tokens for the Service Accounts used by the Pods running in the same Node.
