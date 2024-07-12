@@ -43,11 +43,12 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - id: ci-checks
-      uses: ./.github/actions/ci-checks/
+    - uses: ./.github/actions/ci-login/
       with:
         google-service-account-name: release
         github-token: ${{ secrets.GITHUB_TOKEN }}
+    - id: ci-checks
+      uses: ./.github/actions/ci-checks/
 
     - uses: sigstore/cosign-installer@v3.3.0
       if: steps.ci-checks.outputs.release-container == 'yes' || steps.ci-checks.outputs.release-helm == 'yes'

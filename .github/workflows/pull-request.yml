@@ -37,11 +37,14 @@ jobs:
       pull-requests: write
     steps:
     - uses: actions/checkout@v4
-    - id: ci-checks
-      uses: ./.github/actions/ci-checks/
+
+    - uses: ./.github/actions/ci-login/
       with:
         google-service-account-name: pull-request
         github-token: ${{ secrets.GITHUB_TOKEN }}
+    - id: ci-checks
+      uses: ./.github/actions/ci-checks/
+
     - name: Prepare release check comment
       env:
         RELEASE_CONTAINER: ${{ steps.ci-checks.outputs.release-container }}
