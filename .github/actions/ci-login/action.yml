@@ -20,27 +20,28 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+inputs:
+  google-service-account-name:
+    required: true
+  github-token:
+    required: true
+
 runs:
   using: composite
-
   steps:
-  - uses: actions/setup-go@v4
+  - uses: google-github-actions/auth@v2
     with:
-      go-version: 1.22.2
-
-  - run: make tidy
+      project_id: gke-metadata-server
+      workload_identity_provider: projects/637293746831/locations/global/workloadIdentityPools/github-actions/providers/github-actions
+      service_account: ${{ inputs.google-service-account-name }}@gke-metadata-server.iam.gserviceaccount.com
+  - uses: docker/login-action@v3
+    with:
+      registry: ghcr.io
+      username: ${{ github.actor }}
+      password: ${{ inputs.github-token }}
+  - run: helm registry login $registry -u $username -p $password
     shell: bash
-  - name: Fail if make tidy produced changes
-    shell: bash
-    run: |
-      if [ -n "$(git diff --name-only)" ] || [ -n "$(git status --porcelain | grep '??')" ]; then
-        git status
-        echo ""
-        echo "The command 'make tidy' produced differences."
-        echo "Please remember to run it locally before committing your changes."
-        echo ""
-        exit 1
-      fi
-
-  - run: make ci-cluster push ci-test
-    shell: bash
+    env:
+      registry: ghcr.io
+      username: ${{ github.actor }}
+      password: ${{ inputs.github-token }}

@@ -37,31 +37,37 @@ jobs:
       pull-requests: write
     steps:
     - uses: actions/checkout@v4
-    - id: ci-checks
-      uses: ./.github/actions/ci-checks/
+
+    - uses: ./.github/actions/ci-login/
       with:
         google-service-account-name: pull-request
         github-token: ${{ secrets.GITHUB_TOKEN }}
-        cache-key: pull-request-${{ github.event.pull_request.number }}
-    - name: Prepare release check comment
+
+    - id: check-new-releases
+      uses: ./.github/actions/check-new-releases/
+
+    - name: Prepare New Releases Check PR Comment
       env:
-        RELEASE_CONTAINER: ${{ steps.ci-checks.outputs.release-container }}
-        RELEASE_HELM: ${{ steps.ci-checks.outputs.release-helm }}
+        RELEASE_CONTAINER: ${{ steps.check-new-releases.outputs.release-container }}
+        RELEASE_HELM: ${{ steps.check-new-releases.outputs.release-helm }}
       run: |
-        touch release-check.txt
+        touch new-releases-check.txt
         if [ "$RELEASE_CONTAINER" == "yes" ]; then
-          echo "This pull request will release version $(cat container-version.txt) of the Container." >> release-check.txt
+          echo "This pull request will release version $(cat container-version.txt) of the Container." >> new-releases-check.txt
         fi
         if [ "$RELEASE_CONTAINER" == "yes" ] && [ "$RELEASE_HELM" == "yes" ]; then
-          echo "" >> release-check.txt
+          echo "" >> new-releases-check.txt
         fi
         if [ "$RELEASE_HELM" == "yes" ]; then
-          echo "This pull request will release version $(cat helm-version.txt) of the Helm Chart." >> release-check.txt
+          echo "This pull request will release version $(cat helm-version.txt) of the Helm Chart." >> new-releases-check.txt
         fi
         if [ "$RELEASE_CONTAINER" == "no" ] && [ "$RELEASE_HELM" == "no" ]; then
-          echo "No version releases in this pull request." >> release-check.txt
+          echo "No version releases in this pull request." >> new-releases-check.txt
         fi
-    - uses: ./.github/actions/comment-status/
+    - name: Comment New Releases Check on PR
+      uses: ./.github/actions/comment-status/
       with:
-        title: Release Check
-        message-file: release-check.txt
+        title: New Releases Check
+        message-file: new-releases-check.txt
+
+    - uses: ./.github/actions/ci-checks/

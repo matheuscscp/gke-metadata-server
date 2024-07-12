@@ -1,0 +1,61 @@
+# MIT License
+#
+# Copyright (c) 2023 Matheus Pimenta
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+outputs:
+  release-container:
+    value: ${{ steps.release-check.outputs.release-container }}
+  release-helm:
+    value: ${{ steps.release-check.outputs.release-helm }}
+
+runs:
+  using: composite
+  steps:
+  - name: Check new releases
+    id: release-check
+    shell: bash
+    run: |
+      chart_path=./helm/gke-metadata-server/Chart.yaml
+
+      yq e '.appVersion' $chart_path > container-version.txt
+      container_image=ghcr.io/matheuscscp/gke-metadata-server:$(cat container-version.txt)
+
+      helm_image=oci://ghcr.io/matheuscscp/gke-metadata-server-helm
+      helm_version=$(yq e '.version' $chart_path)
+
+      container_exists=$(docker pull $container_image > /dev/null && echo yes || echo no)
+      helm_exists=$(helm pull $helm_image --version $helm_version > /dev/null && echo yes || echo no)
+      if [ "$helm_exists" == "yes" ] && [ "$container_exists" == "no" ]; then
+        echo "Must bump .version inside $chart_path when bumping .appVersion."
+        exit 1
+      elif [ "$helm_exists" == "no" ] && [ "$container_exists" == "yes" ]; then
+        echo "Need to release new version of the Helm Chart image."
+        echo "release-container=no" >> $GITHUB_OUTPUT
+        echo "release-helm=yes" >> $GITHUB_OUTPUT
+      elif [ "$helm_exists" == "no" ] && [ "$container_exists" == "no" ]; then
+        echo "Need to release new versions for both images."
+        echo "release-container=yes" >> $GITHUB_OUTPUT
+        echo "release-helm=yes" >> $GITHUB_OUTPUT
+      else
+        echo "Both versions already exist. No release needed."
+        echo "release-container=no" >> $GITHUB_OUTPUT
+        echo "release-helm=no" >> $GITHUB_OUTPUT
+      fi
