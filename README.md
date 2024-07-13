@@ -134,11 +134,11 @@ cosign verify ghcr.io/matheuscscp/gke-metadata-server-helm@$(cat helm-digest.txt
     --certificate-identity=https://github.com/matheuscscp/gke-metadata-server/.github/workflows/release.yml@refs/heads/main
 ```
 
-If you are using *FluxCD* for deploying Helm Charts you can automate the verification using
-[Keyless Verification](https://fluxcd.io/flux/components/source/helmcharts/#keyless-verification).
-
-If you are using *Kyverno* for enforcing policies you can automate the verification using
+If you are using *Kyverno* for enforcing policies you can automate the container verification using
 [Keyless Verification](https://kyverno.io/docs/writing-policies/verify-images/sigstore/#keyless-signing-and-verification).
+
+If you are using *FluxCD* for deploying Helm Charts you can automate the chart verification using
+[Keyless Verification](https://fluxcd.io/flux/components/source/helmcharts/#keyless-verification).
 
 ## Limitations and Security Risks
 
