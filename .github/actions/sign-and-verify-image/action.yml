@@ -27,14 +27,10 @@ inputs:
 runs:
   using: composite
   steps:
-  - run: echo "image=$image" >> $GITHUB_ENV
-    shell: bash
-    env:
-      image: ${{ inputs.image }}
-  - run: cosign sign --yes $image
-    shell: bash
   - run: |
-      cosign verify $image \
+      cosign sign --yes $image && cosign verify $image \
         --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
         --certificate-identity=https://github.com/matheuscscp/gke-metadata-server/.github/workflows/release.yml@refs/heads/main
     shell: bash
+    env:
+      image: ${{ inputs.image }}

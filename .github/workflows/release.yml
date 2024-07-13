@@ -58,10 +58,15 @@ jobs:
       if: steps.check-new-releases.outputs.release-container == 'yes' || steps.check-new-releases.outputs.release-helm == 'yes'
 
     - name: Release Container in GitHub Container Registry
+      id: release-container-ghcr
       if: steps.check-new-releases.outputs.release-container == 'yes'
       uses: ./.github/actions/release-container/
       with:
         registry: ghcr.io
+    - uses: ./.github/actions/sign-and-verify-image/
+      if: steps.check-new-releases.outputs.release-container == 'yes'
+      with:
+        image: ${{ steps.release-container-ghcr.outputs.container-with-digest }}
     - name: Release Container in GitHub
       if: steps.check-new-releases.outputs.release-container == 'yes'
       env:
@@ -74,10 +79,15 @@ jobs:
           --latest
 
     - name: Release Helm Chart in GitHub Container Registry
+      id: release-helm-ghcr
       if: steps.check-new-releases.outputs.release-helm == 'yes'
       uses: ./.github/actions/release-helm/
       with:
         registry: ghcr.io
+    - uses: ./.github/actions/sign-and-verify-helm/
+      if: steps.check-new-releases.outputs.release-helm == 'yes'
+      with:
+        image: ${{ steps.release-helm-ghcr.outputs.helm-with-digest }}
     - name: Release Helm Chart in GitHub
       if: steps.check-new-releases.outputs.release-helm == 'yes'
       env:

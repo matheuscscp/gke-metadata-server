@@ -24,6 +24,10 @@ inputs:
   registry:
     required: true
 
+outputs:
+  helm-with-digest:
+    value: ${{ steps.release.outputs.helm-with-digest }}
+
 runs:
   using: composite
   steps:
@@ -31,11 +35,7 @@ runs:
     run: |
       helm push $(cat helm-package.txt) oci://${repository} 2>&1 | tee helm-push.logs
       cat helm-push.logs | grep Digest: | awk '{print $NF}' > helm-digest.txt
-      echo "helm-with-digest=${repository}/${image}@$(cat helm-digest.txt)" >> $GITHUB_OUTPUT
+      echo "helm-with-digest=${repository}/gke-metadata-server-helm@$(cat helm-digest.txt)" >> $GITHUB_OUTPUT
     shell: bash
     env:
       repository: ${{ inputs.registry }}/matheuscscp
-      image: gke-metadata-server-helm
-  - uses: ../sign-and-verify-image
-    with:
-      image: ${{ steps.release.outputs.helm-with-digest }}

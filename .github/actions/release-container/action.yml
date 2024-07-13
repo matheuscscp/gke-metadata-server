@@ -24,25 +24,24 @@ inputs:
   registry:
     required: true
 
+outputs:
+  container-with-digest:
+    value: ${{ steps.release.outputs.container-with-digest }}
+
 runs:
   using: composite
   steps:
-  - id: setup-vars
-    name: Setup image names
+  - id: release
     run: |
-      echo "CONTAINER_WITH_TAG=${image}:$(cat container-version.txt)" >> $GITHUB_ENV
-      echo "CONTAINER_WITH_TAG_LATEST=${image}:latest" >> $GITHUB_ENV
+      container_with_tag=${image}:$(cat container-version.txt)
+      docker tag ghcr.io/matheuscscp/gke-metadata-server/test@$(cat container-digest.txt) $container_with_tag
+      docker push $container_with_tag
+
+      container_with_tag_latest=${image}:latest
+      docker tag $container_with_tag $container_with_tag_latest
+      docker push $container_with_tag_latest
+
       echo "container-with-digest=${image}@$(cat container-digest.txt)" >> $GITHUB_OUTPUT
     shell: bash
     env:
       image: ${{ inputs.registry }}/matheuscscp/gke-metadata-server
-  - name: Create tags for tested image
-    run: |
-      docker tag ghcr.io/matheuscscp/gke-metadata-server/test@$(cat container-digest.txt) $CONTAINER_WITH_TAG
-      docker tag $CONTAINER_WITH_TAG $CONTAINER_WITH_TAG_LATEST
-    shell: bash
-  - run: docker push $CONTAINER_WITH_TAG && docker push $CONTAINER_WITH_TAG_LATEST
-    shell: bash
-  - uses: ../sign-and-verify-image
-    with:
-      image: ${{ steps.setup-vars.outputs.container-with-digest }}
