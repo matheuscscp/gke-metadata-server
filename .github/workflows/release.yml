@@ -84,7 +84,7 @@ jobs:
       uses: ./.github/actions/release-helm/
       with:
         registry: ghcr.io
-    - uses: ./.github/actions/sign-and-verify-helm/
+    - uses: ./.github/actions/sign-and-verify-image/
       if: steps.check-new-releases.outputs.release-helm == 'yes'
       with:
         image: ${{ steps.release-helm-ghcr.outputs.helm-with-digest }}
