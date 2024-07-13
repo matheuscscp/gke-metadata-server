@@ -27,11 +27,12 @@ inputs:
 runs:
   using: composite
   steps:
-  - name: Setup image names
+  - id: setup-vars
+    name: Setup image names
     run: |
-      echo "CONTAINER_WITH_DIGEST=${image}@$(cat container-digest.txt)" >> $GITHUB_ENV
       echo "CONTAINER_WITH_TAG=${image}:$(cat container-version.txt)" >> $GITHUB_ENV
       echo "CONTAINER_WITH_TAG_LATEST=${image}:latest" >> $GITHUB_ENV
+      echo "container-with-digest=${image}@$(cat container-digest.txt)" >> $GITHUB_OUTPUT
     shell: bash
     env:
       image: ${{ inputs.registry }}/matheuscscp/gke-metadata-server
@@ -42,10 +43,6 @@ runs:
     shell: bash
   - run: docker push $CONTAINER_WITH_TAG && docker push $CONTAINER_WITH_TAG_LATEST
     shell: bash
-  - run: cosign sign --yes $CONTAINER_WITH_DIGEST
-    shell: bash
-  - run: |
-      cosign verify $CONTAINER_WITH_DIGEST \
-        --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
-        --certificate-identity=https://github.com/matheuscscp/gke-metadata-server/.github/workflows/release.yml@refs/heads/main
-    shell: bash
+  - uses: ../sign-and-verify-image
+    with:
+      image: ${{ steps.setup-vars.outputs.container-with-digest }}
