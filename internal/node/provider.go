@@ -1,6 +1,6 @@
 // MIT License
 //
-// Copyright (c) 2023 Matheus Pimenta
+// Copyright (c) 2024 Matheus Pimenta
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -20,36 +20,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package server
+package node
 
 import (
-	"fmt"
-	"net"
-	"net/http"
+	"context"
 
-	pkghttp "github.com/matheuscscp/gke-metadata-server/internal/http"
+	corev1 "k8s.io/api/core/v1"
 )
 
-func (s *Server) emuPodGoogleCredConfigAPI(w http.ResponseWriter, r *http.Request) {
-	podGoogleServiceAccountEmail, r, err := s.getPodGoogleServiceAccountEmail(w, r)
-	if err != nil {
-		return
-	}
-	localAddr := r.Context().Value(http.LocalAddrContextKey).(net.Addr)
-	credConfig := s.opts.GoogleCredentialsConfig.Get(podGoogleServiceAccountEmail, map[string]any{
-		"format": map[string]string{"type": "text"},
-		"url":    fmt.Sprintf("http://%s%s", localAddr.String(), emuPodServiceAccountTokenAPI),
-		"headers": map[string]string{
-			metadataFlavorHeader: metadataFlavorEmulator,
-		},
-	})
-	pkghttp.RespondJSON(w, r, http.StatusOK, credConfig)
-}
-
-func (s *Server) emuPodServiceAccountTokenAPI(w http.ResponseWriter, r *http.Request) {
-	saToken, r, err := s.getPodServiceAccountToken(w, r)
-	if err != nil {
-		return
-	}
-	pkghttp.RespondText(w, r, http.StatusOK, saToken)
+type Provider interface {
+	Get(ctx context.Context) (*corev1.Node, error)
 }

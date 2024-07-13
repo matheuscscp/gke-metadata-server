@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/matheuscscp/gke-metadata-server/internal/googlecredentials"
+	"github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts"
 	"github.com/matheuscscp/gke-metadata-server/internal/serviceaccounttokens"
 
 	"golang.org/x/oauth2"
@@ -55,13 +56,13 @@ func NewProvider(opts ProviderOptions) serviceaccounttokens.Provider {
 	return &Provider{opts}
 }
 
-func (p *Provider) GetServiceAccountToken(ctx context.Context, namespace, name string) (string, time.Duration, error) {
+func (p *Provider) GetServiceAccountToken(ctx context.Context, ref *serviceaccounts.Reference) (string, time.Duration, error) {
 	expSecs := int64(p.opts.GoogleCredentialsConfig.TokenExpirationSeconds())
 	resp, err := p.opts.
 		KubeClient.
 		CoreV1().
-		ServiceAccounts(namespace).
-		CreateToken(ctx, name, &authnv1.TokenRequest{
+		ServiceAccounts(ref.Namespace).
+		CreateToken(ctx, ref.Name, &authnv1.TokenRequest{
 			Spec: authnv1.TokenRequestSpec{
 				Audiences:         []string{p.opts.GoogleCredentialsConfig.WorkloadIdentityProviderAudience()},
 				ExpirationSeconds: &expSecs,

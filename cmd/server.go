@@ -31,9 +31,12 @@ import (
 	"github.com/matheuscscp/gke-metadata-server/internal/googlecredentials"
 	"github.com/matheuscscp/gke-metadata-server/internal/logging"
 	"github.com/matheuscscp/gke-metadata-server/internal/metrics"
+	getnode "github.com/matheuscscp/gke-metadata-server/internal/node/get"
+	watchnode "github.com/matheuscscp/gke-metadata-server/internal/node/watch"
 	listpods "github.com/matheuscscp/gke-metadata-server/internal/pods/list"
 	watchpods "github.com/matheuscscp/gke-metadata-server/internal/pods/watch"
 	"github.com/matheuscscp/gke-metadata-server/internal/server"
+	"github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts"
 	getserviceaccount "github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts/get"
 	watchserviceaccounts "github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts/watch"
 	cacheserviceaccounttokens "github.com/matheuscscp/gke-metadata-server/internal/serviceaccounttokens/cache"
@@ -54,10 +57,15 @@ func newServerCommand() *cobra.Command {
 		serverAddr                          string
 		webhookAddr                         string
 		workloadIdentityProvider            string
+		defaultNodeServiceAccountName       string
+		defaultNodeServiceAccountNamespace  string
 		initNetworkImage                    string
 		watchPods                           bool
 		watchPodsResyncPeriod               time.Duration
 		watchPodsDisableFallback            bool
+		watchNode                           bool
+		watchNodeResyncPeriod               time.Duration
+		watchNodeDisableFallback            bool
 		watchServiceAccounts                bool
 		watchServiceAccountsResyncPeriod    time.Duration
 		watchServiceAccountsDisableFallback bool
@@ -74,6 +82,16 @@ func newServerCommand() *cobra.Command {
 			nodeName := os.Getenv("NODE_NAME")
 			if nodeName == "" {
 				return fmt.Errorf("NODE_NAME environment variable must be specified")
+			}
+			if defaultNodeServiceAccountName == "" {
+				return fmt.Errorf("default-node-service-account-name argument must be specified")
+			}
+			if defaultNodeServiceAccountNamespace == "" {
+				return fmt.Errorf("default-node-service-account-namespace argument must be specified")
+			}
+			defaultNodeServiceAccount := &serviceaccounts.Reference{
+				Name:      defaultNodeServiceAccountName,
+				Namespace: defaultNodeServiceAccountNamespace,
 			}
 			googleCredentialsConfig, err := googlecredentials.NewConfig(googlecredentials.ConfigOptions{
 				TokenExpirationSeconds:   tokenExpirationSeconds,
@@ -127,6 +145,28 @@ func newServerCommand() *cobra.Command {
 				pods = wp
 			}
 
+			// create node provider
+			node := getnode.NewProvider(getnode.ProviderOptions{
+				NodeName:   nodeName,
+				KubeClient: kubeClient,
+			})
+			var wn *watchnode.Provider
+			if watchNode {
+				opts := watchnode.ProviderOptions{
+					FallbackSource:        node,
+					NodeName:              nodeName,
+					KubeClient:            kubeClient,
+					ResyncPeriod:          watchNodeResyncPeriod,
+					DefaultServiceAccount: defaultNodeServiceAccount,
+				}
+				if watchNodeDisableFallback {
+					opts.FallbackSource = nil
+				}
+				wn = watchnode.NewProvider(opts)
+				defer wn.Close()
+				node = wn
+			}
+
 			// create service account provider
 			serviceAccounts := getserviceaccount.NewProvider(getserviceaccount.ProviderOptions{
 				KubeClient: kubeClient,
@@ -165,6 +205,9 @@ func newServerCommand() *cobra.Command {
 				if wp != nil {
 					wp.AddListener(p)
 				}
+				if wn != nil {
+					wn.AddListener(p)
+				}
 				if wsa != nil {
 					wsa.AddListener(p)
 				}
@@ -175,18 +218,23 @@ func newServerCommand() *cobra.Command {
 			if wp != nil {
 				wp.Start(ctx)
 			}
+			if wn != nil {
+				wn.Start(ctx)
+			}
 			if wsa != nil {
 				wsa.Start(ctx)
 			}
 			s := server.New(ctx, server.ServerOptions{
-				NodeName:                nodeName,
-				ServerAddr:              serverAddr,
-				MetricsSubsystem:        metricsSubsystem,
-				Pods:                    pods,
-				ServiceAccounts:         serviceAccounts,
-				ServiceAccountTokens:    serviceAccountTokens,
-				GoogleCredentialsConfig: googleCredentialsConfig,
-				MetricsRegistry:         metricsRegistry,
+				NodeName:                  nodeName,
+				ServerAddr:                serverAddr,
+				MetricsSubsystem:          metricsSubsystem,
+				Pods:                      pods,
+				Node:                      node,
+				ServiceAccounts:           serviceAccounts,
+				ServiceAccountTokens:      serviceAccountTokens,
+				GoogleCredentialsConfig:   googleCredentialsConfig,
+				MetricsRegistry:           metricsRegistry,
+				DefaultNodeServiceAccount: defaultNodeServiceAccount,
 			})
 
 			webhookServer := webhook.New(ctx, webhook.ServerOptions{
@@ -214,20 +262,30 @@ func newServerCommand() *cobra.Command {
 		"Network address where the webhook server must listen on")
 	cmd.Flags().StringVar(&workloadIdentityProvider, "workload-identity-provider", "",
 		"Mandatory fully-qualified resource name of the GCP Workload Identity Provider (projects/<project_number>/locations/global/workloadIdentityPools/<pool_name>/providers/<provider_name>)")
+	cmd.Flags().StringVar(&defaultNodeServiceAccountName, "default-node-service-account-name", "gke-metadata-server",
+		"Name of the default service account to be used by pods running on the host network")
+	cmd.Flags().StringVar(&defaultNodeServiceAccountNamespace, "default-node-service-account-namespace", "kube-system",
+		"Namespace of the default service account to be used by pods running on the host network")
 	cmd.Flags().StringVar(&initNetworkImage, "init-network-image", "ghcr.io/matheuscscp/gke-metadata-server:0.6.0",
 		"Image to be used for the init container that sets up the network namespace for reaching the metadata server")
 	cmd.Flags().BoolVar(&watchPods, "watch-pods", false,
 		"Whether or not to watch the pods running on the same node (default false)")
-	cmd.Flags().BoolVar(&watchPodsDisableFallback, "watch-pods-disable-fallback", false,
-		"When watching the pods running on the same node, whether or not to disable the use of a simple fallback method for retrieving pods upon cache misses (default false)")
 	cmd.Flags().DurationVar(&watchPodsResyncPeriod, "watch-pods-resync-period", 10*time.Minute,
 		"When watching the pods running on the same node, how often to fully resync")
+	cmd.Flags().BoolVar(&watchPodsDisableFallback, "watch-pods-disable-fallback", false,
+		"When watching the pods running on the same node, whether or not to disable the use of a simple fallback method for retrieving pods upon cache misses (default false)")
+	cmd.Flags().BoolVar(&watchNode, "watch-node", false,
+		"Whether or not to watch the node where the metadata server is running (default false)")
+	cmd.Flags().DurationVar(&watchNodeResyncPeriod, "watch-node-resync-period", time.Hour,
+		"When watching the node where the metadata server is running, how often to fully resync")
+	cmd.Flags().BoolVar(&watchNodeDisableFallback, "watch-node-disable-fallback", false,
+		"When watching the node where the metadata server is running, whether or not to disable the use of a simple fallback method for retrieving the node upon cache misses (default false)")
 	cmd.Flags().BoolVar(&watchServiceAccounts, "watch-service-accounts", false,
 		"Whether or not to watch all the service accounts of the cluster (default false)")
-	cmd.Flags().BoolVar(&watchServiceAccountsDisableFallback, "watch-service-accounts-disable-fallback", false,
-		"When watching service accounts, whether or not to disable the use of a simple fallback method for retrieving service accounts upon cache misses (default false)")
 	cmd.Flags().DurationVar(&watchServiceAccountsResyncPeriod, "watch-service-accounts-resync-period", time.Hour,
 		"When watching service accounts, how often to fully resync")
+	cmd.Flags().BoolVar(&watchServiceAccountsDisableFallback, "watch-service-accounts-disable-fallback", false,
+		"When watching service accounts, whether or not to disable the use of a simple fallback method for retrieving service accounts upon cache misses (default false)")
 	cmd.Flags().BoolVar(&cacheTokens, "cache-tokens", false,
 		"Whether or not to proactively cache tokens for the service accounts used by the pods running on the same node (default false)")
 	cmd.Flags().IntVar(&cacheTokensConcurrency, "cache-tokens-concurrency", 10,

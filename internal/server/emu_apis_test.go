@@ -24,7 +24,9 @@ package server_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"os"
 	"testing"
 	"time"
 
@@ -34,7 +36,11 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-const emuMetadataFlavor = "Emulator"
+const (
+	emuMetadataFlavor = "Emulator"
+
+	workloadIdentityProviderAudience = "//iam.googleapis.com/projects/637293746831/locations/global/workloadIdentityPools/test-kind-cluster/providers/TEST_ID"
+)
 
 var emuHeaders = http.Header{
 	"Metadata-Flavor": []string{emuMetadataFlavor},
@@ -42,6 +48,8 @@ var emuHeaders = http.Header{
 
 func TestEmuPodGoogleCredConfigAPI(t *testing.T) {
 	const url = "http://metadata.google.internal/gkeMetadataEmulator/v1/pod/service-account/google-cred-config"
+
+	credSourceEndpoint := fmt.Sprintf("%s:%s", os.Getenv("DAEMONSET_IP"), os.Getenv("DAEMONSET_PORT"))
 
 	var respBody struct {
 		Type                           string `json:"type"`
@@ -72,7 +80,7 @@ func TestEmuPodGoogleCredConfigAPI(t *testing.T) {
 	assert.Equal(t, "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/test-sa@gke-metadata-server.iam.gserviceaccount.com:generateAccessToken", respBody.ServiceAccountImpersonationURL)
 	assert.Equal(t, 3600, respBody.ServiceAccountImpersonation.TokenLifetimeSeconds)
 	assert.Equal(t, "text", respBody.CredentialSource.Format.Type)
-	assert.Equal(t, "http://metadata.google.internal/gkeMetadataEmulator/v1/pod/service-account/token", respBody.CredentialSource.URL)
+	assert.Equal(t, "http://"+credSourceEndpoint+"/gkeMetadataEmulator/v1/pod/service-account/token", respBody.CredentialSource.URL)
 	assert.Equal(t, "Emulator", respBody.CredentialSource.Headers.MetadataFlavor)
 }
 
@@ -81,7 +89,7 @@ func TestEmuPodServiceAccountTokenAPI(t *testing.T) {
 
 	const aud = workloadIdentityProviderAudience
 	const iss = "https://kubernetes.default.svc.cluster.local"
-	const sub = "system:serviceaccount:default:test"
+	sub := os.Getenv("SERVICE_ACCOUNT_SUBJECT")
 
 	rawToken := pkgtesting.RequestIDToken(t, emuHeaders, url, "pod serviceaccount token", emuMetadataFlavor, aud, iss, sub)
 
@@ -100,5 +108,3 @@ func TestEmuPodServiceAccountTokenAPI(t *testing.T) {
 		t.Fatalf("error verifying pod serviceaccount token: %v", err)
 	}
 }
-
-const workloadIdentityProviderAudience = "//iam.googleapis.com/projects/637293746831/locations/global/workloadIdentityPools/test-kind-cluster/providers/TEST_ID"

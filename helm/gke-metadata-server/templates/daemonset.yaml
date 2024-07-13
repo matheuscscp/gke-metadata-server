@@ -57,6 +57,8 @@ spec:
         args:
         - server
         - --workload-identity-provider={{ .Values.config.workloadIdentityProvider }}
+        - --default-node-service-account-name=gke-metadata-server
+        - --default-node-service-account-namespace={{ .Values.namespace }}
         {{- if .Values.config.serverAddr }}
         - --server-addr={{ .Values.config.serverAddr }}
         {{- end }}
@@ -78,6 +80,15 @@ spec:
         {{- end }}
         {{- if .Values.config.watchPods.resyncPeriod }}
         - --watch-pods-resync-period={{ .Values.config.watchPods.resyncPeriod }}
+        {{- end }}
+        {{- end }}
+        {{- if (.Values.config.watchNode | default dict).enabled }}
+        - --watch-node
+        {{- if .Values.config.watchNode.disableFallback }}
+        - --watch-node-disable-fallback
+        {{- end }}
+        {{- if .Values.config.watchNode.resyncPeriod }}
+        - --watch-node-resync-period={{ .Values.config.watchNode.resyncPeriod }}
         {{- end }}
         {{- end }}
         {{- if (.Values.config.watchServiceAccounts | default dict).enabled }}

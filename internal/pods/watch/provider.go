@@ -31,6 +31,7 @@ import (
 	"github.com/matheuscscp/gke-metadata-server/internal/logging"
 	"github.com/matheuscscp/gke-metadata-server/internal/metrics"
 	"github.com/matheuscscp/gke-metadata-server/internal/pods"
+	"github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts"
 
 	"github.com/prometheus/client_golang/prometheus"
 	corev1 "k8s.io/api/core/v1"
@@ -61,8 +62,8 @@ type (
 	}
 
 	Listener interface {
-		AddPod(*corev1.Pod)
-		DeletePod(*corev1.Pod)
+		AddPodServiceAccount(*serviceaccounts.Reference)
+		DeletePodServiceAccount(*serviceaccounts.Reference)
 	}
 )
 
@@ -116,14 +117,16 @@ func NewProvider(opts ProviderOptions) *Provider {
 	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			numPods.Inc()
+			saRef := serviceaccounts.ReferenceFromPod(obj.(*corev1.Pod))
 			for _, l := range p.listeners {
-				l.AddPod(obj.(*corev1.Pod))
+				l.AddPodServiceAccount(saRef)
 			}
 		},
 		DeleteFunc: func(obj interface{}) {
 			numPods.Dec()
+			saRef := serviceaccounts.ReferenceFromPod(obj.(*corev1.Pod))
 			for _, l := range p.listeners {
-				l.DeletePod(obj.(*corev1.Pod))
+				l.DeletePodServiceAccount(saRef)
 			}
 		},
 	})

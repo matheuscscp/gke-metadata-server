@@ -30,7 +30,6 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/sirupsen/logrus"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
 )
 
@@ -73,15 +72,6 @@ func IntoRequest(r *http.Request, l logrus.FieldLogger) *http.Request {
 
 func IntoContext(ctx context.Context, l logrus.FieldLogger) context.Context {
 	return context.WithValue(ctx, loggerContextKey{}, l)
-}
-
-func Pod(pod *corev1.Pod) logrus.Fields {
-	return logrus.Fields{
-		"name":            pod.Name,
-		"namespace":       pod.Namespace,
-		"service_account": pod.Spec.ServiceAccountName,
-		"ip":              pod.Status.PodIP,
-	}
 }
 
 func InitKLog(l logrus.FieldLogger, level logrus.Level) {

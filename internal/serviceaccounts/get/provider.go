@@ -46,8 +46,8 @@ func NewProvider(opts ProviderOptions) serviceaccounts.Provider {
 	return &Provider{opts}
 }
 
-func (p *Provider) Get(ctx context.Context, namespace, name string) (*corev1.ServiceAccount, error) {
+func (p *Provider) Get(ctx context.Context, ref *serviceaccounts.Reference) (*corev1.ServiceAccount, error) {
 	return p.opts.KubeClient.CoreV1().
-		ServiceAccounts(namespace).
-		Get(ctx, name, metav1.GetOptions{})
+		ServiceAccounts(ref.Namespace).
+		Get(ctx, ref.Name, metav1.GetOptions{})
 }

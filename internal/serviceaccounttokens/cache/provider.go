@@ -24,6 +24,7 @@ package cacheserviceaccounttokens
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"time"
@@ -35,20 +36,20 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/prometheus/client_golang/prometheus"
-	corev1 "k8s.io/api/core/v1"
 )
 
 type (
 	Provider struct {
-		opts            ProviderOptions
-		numTokens       prometheus.Gauge
-		cacheMisses     prometheus.Counter
-		serviceAccounts map[serviceAccountName]*serviceAccount
-		ctx             context.Context
-		cancelCtx       context.CancelFunc
-		mu              sync.RWMutex
-		wg              sync.WaitGroup
-		semaphore       chan struct{}
+		opts                  ProviderOptions
+		numTokens             prometheus.Gauge
+		cacheMisses           prometheus.Counter
+		serviceAccounts       map[serviceaccounts.Reference]*serviceAccount
+		nodeServiceAccountRef *serviceaccounts.Reference
+		ctx                   context.Context
+		cancelCtx             context.CancelFunc
+		mu                    sync.Mutex
+		wg                    sync.WaitGroup
+		semaphore             chan struct{}
 	}
 
 	ProviderOptions struct {
@@ -59,14 +60,11 @@ type (
 		Concurrency      int
 	}
 
-	serviceAccountName struct {
-		Namespace string `json:"namespace"`
-		Name      string `json:"name"`
-	}
-
 	serviceAccount struct {
-		serviceAccountName
+		serviceaccounts.Reference
 		podCount              int
+		nodeIsUsing           bool
+		deleted               bool
 		token                 string
 		accessToken           string
 		tokenExpiration       time.Time
@@ -74,6 +72,8 @@ type (
 		externalRequests      chan chan struct{}
 	}
 )
+
+var errServiceAccountDeleted = errors.New("service account was deleted")
 
 func NewProvider(ctx context.Context, opts ProviderOptions) *Provider {
 	numTokens := prometheus.NewGauge(prometheus.GaugeOpts{
@@ -97,7 +97,7 @@ func NewProvider(ctx context.Context, opts ProviderOptions) *Provider {
 		opts:            opts,
 		numTokens:       numTokens,
 		cacheMisses:     cacheMisses,
-		serviceAccounts: make(map[serviceAccountName]*serviceAccount),
+		serviceAccounts: make(map[serviceaccounts.Reference]*serviceAccount),
 		ctx:             ctx,
 		cancelCtx:       cancel,
 		semaphore:       make(chan struct{}, opts.Concurrency),
@@ -110,13 +110,16 @@ func (p *Provider) Close() error {
 	return nil
 }
 
-func (p *Provider) GetServiceAccountToken(ctx context.Context, namespace, name string) (string, time.Duration, error) {
-	k := serviceAccountName{namespace, name}
-
+func (p *Provider) GetServiceAccountToken(ctx context.Context, ref *serviceaccounts.Reference) (string, time.Duration, error) {
 	p.mu.Lock()
-	sa, ok := p.serviceAccounts[k]
+	sa, ok := p.serviceAccounts[*ref]
 	if !ok {
-		sa = p.addServiceAccount(k, 0 /*podCount*/)
+		const podCount = 0
+		const nodeIsUsing = false
+		sa = p.addServiceAccount(ref, podCount, nodeIsUsing)
+	} else if sa.deleted {
+		p.mu.Unlock()
+		return "", 0, errServiceAccountDeleted
 	}
 	p.mu.Unlock()
 
@@ -131,16 +134,21 @@ func (p *Provider) GetServiceAccountToken(ctx context.Context, namespace, name s
 }
 
 func (p *Provider) GetGoogleAccessToken(ctx context.Context, saToken, googleEmail string) (string, time.Duration, error) {
-	// here we know the token is valid, we're only extracting the sa name
+	// here we know the token is already verified, we're only extracting the sa name
 	tok, _, _ := jwt.NewParser().ParseUnverified(saToken, jwt.MapClaims{})
 	sub, _ := tok.Claims.GetSubject()
 	s := strings.Split(sub, ":") // system:serviceaccount:{namespace}:{name}
-	k := serviceAccountName{s[2], s[3]}
+	ref := &serviceaccounts.Reference{Namespace: s[2], Name: s[3]}
 
 	p.mu.Lock()
-	sa, ok := p.serviceAccounts[k]
+	sa, ok := p.serviceAccounts[*ref]
 	if !ok {
-		sa = p.addServiceAccount(k, 0 /*podCount*/)
+		const podCount = 0
+		const nodeIsUsing = false
+		sa = p.addServiceAccount(ref, podCount, nodeIsUsing)
+	} else if sa.deleted {
+		p.mu.Unlock()
+		return "", 0, errServiceAccountDeleted
 	}
 	p.mu.Unlock()
 
@@ -159,68 +167,95 @@ func (p *Provider) GetGoogleIdentityToken(ctx context.Context, saToken, googleEm
 	return p.opts.Source.GetGoogleIdentityToken(ctx, saToken, googleEmail, audience)
 }
 
-func (p *Provider) addServiceAccount(k serviceAccountName, podCount int) *serviceAccount {
+func (p *Provider) addServiceAccount(ref *serviceaccounts.Reference, podCount int, nodeIsUsing bool) *serviceAccount {
 	sa := &serviceAccount{
-		serviceAccountName: k,
-		podCount:           podCount,
-		externalRequests:   make(chan chan struct{}, 1),
+		Reference:        *ref,
+		podCount:         podCount,
+		nodeIsUsing:      nodeIsUsing,
+		externalRequests: make(chan chan struct{}, 1),
 	}
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
 		sa.cache(p)
 	}()
-	p.serviceAccounts[k] = sa
+	p.serviceAccounts[*ref] = sa
 	p.numTokens.Inc()
 	return sa
 }
 
-func podServiceAccountName(pod *corev1.Pod) serviceAccountName {
-	return serviceAccountName{
-		Namespace: pod.Namespace,
-		Name:      pod.Spec.ServiceAccountName,
-	}
-}
-
-func (p *Provider) AddPod(pod *corev1.Pod) {
-	k := podServiceAccountName(pod)
-
+func (p *Provider) AddPodServiceAccount(ref *serviceaccounts.Reference) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	sa, ok := p.serviceAccounts[k]
-	if ok {
+	if sa, ok := p.serviceAccounts[*ref]; ok {
 		sa.podCount++
 		return
 	}
 
-	p.addServiceAccount(k, 1 /*podCount*/)
+	const podCount = 1
+	const nodeIsUsing = false
+	p.addServiceAccount(ref, podCount, nodeIsUsing)
 }
 
-func (p *Provider) DeletePod(pod *corev1.Pod) {
-	k := podServiceAccountName(pod)
-
+func (p *Provider) DeletePodServiceAccount(ref *serviceaccounts.Reference) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	sa, ok := p.serviceAccounts[k]
-	if ok && sa.podCount > 0 {
+	if sa, ok := p.serviceAccounts[*ref]; ok && sa.podCount > 0 {
 		sa.podCount--
 	}
 }
 
-func (p *Provider) UpdateServiceAccount(ksa *corev1.ServiceAccount) {
-	k := serviceAccountName{ksa.Namespace, ksa.Name}
+func (p *Provider) UpdateNodeServiceAccount(ref *serviceaccounts.Reference) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
-	// here we use a read lock because we are watching all the service
-	// accounts of the cluster, so a bit of optimization is appreciated
-	p.mu.RLock()
-	defer p.mu.RUnlock()
+	if cur := p.nodeServiceAccountRef; cur != nil {
+		if *cur == *ref {
+			return
+		}
+		if sa, ok := p.serviceAccounts[*cur]; ok {
+			sa.nodeIsUsing = false
+		}
+	}
+	p.nodeServiceAccountRef = ref
 
-	sa, ok := p.serviceAccounts[k]
+	if sa, ok := p.serviceAccounts[*ref]; ok {
+		sa.nodeIsUsing = true
+		return
+	}
+
+	const podCount = 0
+	const nodeIsUsing = true
+	p.addServiceAccount(ref, podCount, nodeIsUsing)
+}
+
+func (p *Provider) UpdateServiceAccount(ref *serviceaccounts.Reference) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	sa, ok := p.serviceAccounts[*ref]
 	if !ok {
 		return
 	}
+	sa.deleted = false
+
+	select {
+	case sa.externalRequests <- nil:
+	default:
+	}
+}
+
+func (p *Provider) DeleteServiceAccount(ref *serviceaccounts.Reference) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	sa, ok := p.serviceAccounts[*ref]
+	if !ok {
+		return
+	}
+	sa.deleted = true
 
 	select {
 	case sa.externalRequests <- nil:
@@ -229,14 +264,14 @@ func (p *Provider) UpdateServiceAccount(ksa *corev1.ServiceAccount) {
 }
 
 func (s *serviceAccount) cache(p *Provider) {
-	l := logging.FromContext(p.ctx).WithField("service_account", s.serviceAccountName)
+	l := logging.FromContext(p.ctx).WithField("service_account", s.Reference)
 
 	var retries int
 	var externalRequest chan struct{}
 	for {
 		p.mu.Lock()
-		if s.podCount == 0 {
-			delete(p.serviceAccounts, s.serviceAccountName)
+		if (s.podCount == 0 && !s.nodeIsUsing) || s.deleted {
+			delete(p.serviceAccounts, s.Reference)
 			p.numTokens.Dec()
 			p.mu.Unlock()
 			return
@@ -248,7 +283,7 @@ func (s *serviceAccount) cache(p *Provider) {
 		var sleepDuration time.Duration
 
 		// first, cache service account token
-		token, tokenDuration, err := p.opts.Source.GetServiceAccountToken(p.ctx, s.Namespace, s.Name)
+		token, tokenDuration, err := p.opts.Source.GetServiceAccountToken(p.ctx, &s.Reference)
 		if err != nil {
 			sleepDuration = (1 << retries) * time.Second
 			l.WithError(err).Errorf("error creating token for kubernetes service account, will retry after %s...", sleepDuration.String())
@@ -261,7 +296,7 @@ func (s *serviceAccount) cache(p *Provider) {
 			l.WithField("token_duration", tokenDuration.String()).Info("cached service account token")
 
 			// success, cache google access token as well
-			ksa, err := p.opts.ServiceAccounts.Get(p.ctx, s.Namespace, s.Name)
+			ksa, err := p.opts.ServiceAccounts.Get(p.ctx, &s.Reference)
 			if err != nil {
 				l.WithError(err).Error("error getting service account for caching google access token")
 			} else if email, err := serviceaccounts.GoogleEmail(ksa); err == nil {

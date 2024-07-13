@@ -27,6 +27,10 @@ TEST_IMAGE := ghcr.io/matheuscscp/gke-metadata-server/test
 .PHONY: all
 all: tidy cluster build test
 
+.PHONY: clean
+clean:
+	rm -rf *.json *.txt *.logs *.tgz
+
 .PHONY: test-id.txt
 test-id.txt:
 	echo "test-$$(openssl rand -hex 12)" | tee test-id.txt
@@ -108,7 +112,6 @@ run-test:
 	sed "s|<TEST_ID>|${TEST_ID}|g" k8s/test-helm-values-${HELM_TEST_CASE}.yaml | \
 		sed "s|<CONTAINER_DIGEST>|$$(cat container-digest.txt)|g" | \
 		tee >(helm --kube-context kind-kind -n kube-system upgrade --install --wait gke-metadata-server $$(cat helm-package.txt) -f -)
-	kubectl --context kind-kind -n default delete po test || true
 	while : ; do \
 		sleep_secs=10; \
 		echo "Sleeping for $$sleep_secs secs and checking DaemonSet status..."; \
@@ -118,8 +121,19 @@ run-test:
 			break; \
 		fi; \
 	done
+	make run-pod-test TEST_ID=${TEST_ID} HOST_NETWORK=false SERVICE_ACCOUNT_SUBJECT=system:serviceaccount:default:test
+	make run-pod-test TEST_ID=${TEST_ID} HOST_NETWORK=true SERVICE_ACCOUNT_SUBJECT=system:serviceaccount:kube-system:gke-metadata-server
+
+.PHONY: run-pod-test
+run-pod-test:
+	@if [ "${TEST_ID}" == "" ]; then echo "TEST_ID variable is required."; exit -1; fi
+	@if [ "${HOST_NETWORK}" == "" ]; then echo "HOST_NETWORK variable is required."; exit -1; fi
+	@if [ "${SERVICE_ACCOUNT_SUBJECT}" == "" ]; then echo "SERVICE_ACCOUNT_SUBJECT variable is required."; exit -1; fi
+	kubectl --context kind-kind -n default delete po test || true
 	sed "s|<TEST_ID>|${TEST_ID}|g" k8s/test-pod.yaml | \
 		sed "s|<GO_TEST_DIGEST>|$$(cat go-test-digest.txt)|g" | \
+		sed "s|<HOST_NETWORK>|${HOST_NETWORK}|g" | \
+		sed "s|<SERVICE_ACCOUNT_SUBJECT>|${SERVICE_ACCOUNT_SUBJECT}|g" | \
 		tee >(kubectl --context kind-kind apply -f -)
 	while : ; do \
 		sleep_secs=10; \
