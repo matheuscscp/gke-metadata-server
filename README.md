@@ -163,7 +163,7 @@ Pods from being created with such high privileges in the majority of cases.)*
 In a cluster there may also be Pods running on the *host network*, i.e. Pods with the
 field `spec.hostNetwork` set to `true`. The emulator Pods themselves, for example, need
 to run on the host network in order to listen to TCP/IP connections coming from Pods
-running on the same Kubernetes node, which are the ones they will serve. Just like in
+running on the same Kubernetes Node, which are the ones they will serve. Just like in
 the GKE implementation, this design choice makes it such that the (unencrypted)
 communication never leaves the Node.
 
@@ -177,7 +177,7 @@ network by IP address.
 
 This project was not created by Google. Enterprise support from Google is
 not available. **Use this tool at your own risk.**
-*(But please do feel free to report bugs and CVEs, to request help and new features, and to
+*(But please do feel free to report bugs and CVEs, request help, new features and
 [contribute](https://github.com/matheuscscp/gke-metadata-server/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22).)*
 
 Furthermore, this tool is *not necessary* for using GCP Workload Identity Federation inside
