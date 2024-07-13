@@ -20,20 +20,21 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-apiVersion: v2
-name: gke-metadata-server-helm
-description: |
-  A Helm chart for Kubernetes that deploys gke-metadata-server, an add-on for enabling
-  GCP Workload Identity in non-GKE clusters.
-type: application
+inputs:
+  image:
+    required: true
 
-# This is the chart version. This version number should be incremented each time you make changes
-# to the chart and its templates, including the app version.
-# Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 0.6.2
-
-# This is the version number of the application being deployed. This version number should be
-# incremented each time you make changes to the application. Versions are not expected to
-# follow Semantic Versioning. They should reflect the version the application is using.
-# It is recommended to use it with quotes.
-appVersion: "0.6.2"
+runs:
+  using: composite
+  steps:
+  - run: echo "image=$image" >> $GITHUB_ENV
+    shell: bash
+    env:
+      image: ${{ inputs.image }}
+  - run: cosign sign --yes $image
+    shell: bash
+  - run: |
+      cosign verify $image \
+        --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+        --certificate-identity=https://github.com/matheuscscp/gke-metadata-server/.github/workflows/release.yml@refs/heads/main
+    shell: bash

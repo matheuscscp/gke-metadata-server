@@ -27,18 +27,15 @@ inputs:
 runs:
   using: composite
   steps:
-  - run: |
-      helm push $(cat helm-package.txt) oci://${registry}/matheuscscp 2>&1 | tee helm-push.logs
+  - id: release
+    run: |
+      helm push $(cat helm-package.txt) oci://${repository} 2>&1 | tee helm-push.logs
       cat helm-push.logs | grep Digest: | awk '{print $NF}' > helm-digest.txt
-      echo "HELM_WITH_DIGEST=${image}@$(cat helm-digest.txt)" >> $GITHUB_ENV
+      echo "helm-with-digest=${repository}/${image}@$(cat helm-digest.txt)" >> $GITHUB_OUTPUT
     shell: bash
     env:
-      registry: ${{ inputs.registry }}
-      image: ${{ inputs.registry }}/matheuscscp/gke-metadata-server-helm
-  - run: cosign sign --yes $HELM_WITH_DIGEST
-    shell: bash
-  - run: |
-      cosign verify $HELM_WITH_DIGEST \
-        --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
-        --certificate-identity=https://github.com/matheuscscp/gke-metadata-server/.github/workflows/release.yml@refs/heads/main
-    shell: bash
+      repository: ${{ inputs.registry }}/matheuscscp
+      image: gke-metadata-server-helm
+  - uses: ../sign-and-verify-image
+    with:
+      image: ${{ steps.release.outputs.helm-with-digest }}
