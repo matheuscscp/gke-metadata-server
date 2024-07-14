@@ -22,10 +22,10 @@ Steps:
 
 Steps:
 1. Create a Workload Identity Pool and Provider pair for the cluster.
-2. Grant Kubernetes ServiceAccounts permissions to impersonate Google Service Accounts.
+2. Grant Kubernetes ServiceAccounts permission to impersonate Google Service Accounts.
 
-Official docs and examples:
-[link](https://cloud.google.com/iam/docs/workload-identity-federation-with-kubernetes).
+Official docs and examples are
+[here](https://cloud.google.com/iam/docs/workload-identity-federation-with-kubernetes#kubernetes).
 
 More examples for all the configuration described in this section are available here:
 [`./terraform/test.tf`](./terraform/test.tf). This is where we provision the
@@ -33,64 +33,71 @@ infrastructure required for testing this project in CI and development.
 
 #### Create a Workload Identity Pool and Provider pair for the cluster
 
-In order to map Kubernetes ServiceAccounts to Google Service Accounts, one must first create
-a Workload Identity Pool and Provider. A Pool is a namespace for Subjects and Providers,
-where Subjects represent the identities to whom permissions to impersonate Google Service
-Accounts will be granted, i.e. the Kubernetes ServiceAccounts in this case. The Provider
-stores the OIDC configuration parameters retrieved from the cluster for allowing Google to
-verify the ServiceAccount JWT Tokens issued by Kubernetes. The Subject is mapped from the
-`sub` claim of the JWT. For enforcing a strong authentication system, be sure to create
-exactly one Provider per Pool, i.e. create a single Pool + Provider pair for each Kubernetes
-cluster.
+Before granting ServiceAccounts of a Kubernetes cluster permission to impersonate Google
+Service Accounts, a Workload Identity Pool and Provider pair must be created for the cluster
+in Google Cloud Platform.
 
-Specifically for the creation of the Provider, see an example in the
-[`./Makefile`](./Makefile), target `kind-cluster`.
+A Pool is a namespace for Subjects and Providers, where Subjects represent the identities to
+whom permission to impersonate Google Service Accounts are granted, i.e. the Kubernetes
+ServiceAccounts in this case.
 
-**Attention 1**: The Google Subject can have at most 127 characters
-([docs](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/iam_workload_identity_pool_provider#google.subject)). The format of the `sub` claim in
-the ServiceAccount JWT Tokens is `system:serviceaccount:{k8s_namespace}:{k8s_sa_name}`.
+A Provider stores the OpenID Connect configuration parameters retrieved from the cluster for
+allowing Google to verify ServiceAccount Tokens issued by the cluster. Specifically for the
+creation of a Provider, see an example in the [`./Makefile`](./Makefile), target
+`create-or-update-provider`.
 
-**Attention 2**: Please make sure not to specify any *audiences* when creating the Pool
-Provider. This project uses the default audience assigned by Google to a Provider when
-creating the ServiceAccount Tokens. This default audience contains the full resource
-name of the Provider, which is a good/strict security rule:
+The ServiceAccount Tokens issued by Kubernetes are JWT tokens. Each such token is exchanged
+for an OAuth 2.0 Access Token that impersonates a Google Service Account. During a token
+exchange, the Subject is mapped from the `sub` claim of the JWT (achieved in the `Makefile`
+example by `--attribute-mapping=google.subject=assertion.sub`). In this case the Subject
+has the following format:
 
-`//iam.googleapis.com/{pool_full_name}/providers/{pool_provider_short_name}`
+`system:serviceaccount:{k8s_namespace}:{k8s_sa_name}`
 
-Where `{pool_full_name}` has the form:
+The Subject total length cannot exceed 127 characters
+([docs](https://cloud.google.com/iam/docs/reference/rest/v1/projects.locations.workloadIdentityPools.providers#WorkloadIdentityPoolProvider.FIELDS.attribute_mapping)).
+
+**Attention 1:** If you update the private keys of the ServiceAccount Issuer of the cluster
+you must update the Provider with the new OpenID Connect configuration, *otherwise service
+will be disrupted*.
+
+**Attention 2:** Please make sure not to specify any audiences when creating the Provider.
+The emulator uses the *default audience* when issuing the ServiceAccount Tokens. The default
+audience contains the full name of the Provider, which is a strong restriction:
+
+`//iam.googleapis.com/{provider_full_name}`
+
+where `{provider_full_name}` has the form:
+
+`{pool_full_name}/providers/{provider_short_name}`
+
+and `{pool_full_name}` has the form:
 
 `projects/{gcp_project_number}/locations/global/workloadIdentityPools/{pool_short_name}`
 
-The Pool full name can be retrieved on its Google Cloud Console webpage.
+#### Grant Kubernetes ServiceAccounts permission to impersonate Google Service Accounts
 
-#### Grant Kubernetes ServiceAccounts permissions to impersonate Google Service Accounts
-
-For allowing the `{gcp_service_account}@{gcp_project_id}.iam.gserviceaccount.com` Google Service Account
-to be impersonated by the Kubernetes ServiceAccount `{k8s_sa_name}` of Namespace `{k8s_namespace}`,
-create an IAM Policy Binding for the IAM Role `roles/iam.workloadIdentityUser` and the following membership
-string on the respective Google Service Account:
+For allowing the Kubernetes ServiceAccount `{k8s_sa_name}` from the namespace `{k8s_namespace}`
+to impersonate the Google Service Account `{gcp_service_account}@{gcp_project_id}.iam.gserviceaccount.com`,
+grant the IAM Role `roles/iam.workloadIdentityUser` on this Service Account to the following
+principal:
 
 `principal://iam.googleapis.com/{pool_full_name}/subject/system:serviceaccount:{k8s_namespace}:{k8s_sa_name}`
 
-This membership encoding the Kubernetes ServiceAccount will be reflected as a Subject in the Google Cloud
-Console webpage of the Pool. It allows a Kubernetes ServiceAccount Token issued for the *audience* of the
-Pool Provider (see previous section) to be exchanged for an OAuth 2.0 Access Token for the Google Service
-Account.
+This principal will be reflected as a Subject in the Google Cloud Console webpage of the Pool.
 
-Add also a second IAM Policy Binding for the IAM Role `roles/iam.serviceAccountOpenIdTokenCreator` and the
-membership string below *on the Google Service Account itself*:
+If you plan to use the `GET /computeMetadata/v1/instance/service-accounts/default/identity`
+API for issuing Google OpenID Connect Tokens to use in external systems, you must also grant
+the IAM Role `roles/iam.serviceAccountOpenIdTokenCreator` on the Google Service Account to
+the Google Service Account itself, i.e. the following principal:
 
 `serviceAccount:{gcp_service_account}@{gcp_project_id}.iam.gserviceaccount.com`
 
-This "self-impersonation" IAM Policy Binding is optional, and only necessary for the
-`GET /computeMetadata/v1/instance/service-accounts/*/identity` API to work.
-
-Finally, add the following annotation to the Kuberentes ServiceAccount (just like you would in GKE):
-
-`iam.gke.io/gcp-service-account: {gcp_service_account}@{gcp_project_id}.iam.gserviceaccount.com`
-
-If this bijection between the Google Service Account and the Kubernetes ServiceAccount is correctly
-configured and `gke-metadata-server` is properly deployed in your cluster, you're good to go.
+This "self-impersonation" permission is necessary because the `gke-metadata-server` emulator
+retrieves the Google OpenID Connect Token in a 2-step process: first it retrieves the Google
+Service Account OAuth 2.0 Access Token using the Kubernetes ServiceAccount Token, and then it
+retrieves the Google OpenID Connect Token using the Google Service Account OAuth 2.0 Access
+Token.
 
 ### Deploy `gke-metadata-server` in your cluster
 
@@ -98,17 +105,18 @@ A Helm Chart is available in the following [Helm OCI Repository](https://helm.sh
 
 `ghcr.io/matheuscscp/gke-metadata-server-helm:{helm_version}` (GitHub Container Registry)
 
-Where `{helm_version}` is a Helm Chart SemVer, i.e. the field `.version` at
+Here `{helm_version}` is a Helm Chart SemVer, i.e. the field `.version` at
 [`./helm/gke-metadata-server/Chart.yaml`](./helm/gke-metadata-server/Chart.yaml). Check available releases
 in the [GitHub Releases Page](https://github.com/matheuscscp/gke-metadata-server/releases).
 
 See the Helm Values API at [`./helm/gke-metadata-server/values.yaml`](./helm/gke-metadata-server/values.yaml).
+Make sure to specify at least the full name of the Workload Identity Provider.
 
 Alternatively, you can write your own Kubernetes manifests and consume only the container image:
 
 `ghcr.io/matheuscscp/gke-metadata-server:{container_version}` (GitHub Container Registry)
 
-Where `{container_version}` is the app version, i.e. the field `.appVersion` at
+Here `{container_version}` is the app version, i.e. the field `.appVersion` at
 [`./helm/gke-metadata-server/Chart.yaml`](./helm/gke-metadata-server/Chart.yaml). Check available releases
 in the [GitHub Releases Page](https://github.com/matheuscscp/gke-metadata-server/releases).
 
@@ -117,7 +125,7 @@ in the [GitHub Releases Page](https://github.com/matheuscscp/gke-metadata-server
 For verifying the images above use the [`cosign`](https://github.com/sigstore/cosign) CLI tool.
 
 For verifying the image of a given Container GitHub Release (tags `v{container_version}`), fetch the
-digest file `container-digest.txt` attached to the release and use it with `cosign`:
+digest file `container-digest.txt` attached to the Github Release and use it with `cosign`:
 
 ```bash
 cosign verify ghcr.io/matheuscscp/gke-metadata-server@$(cat container-digest.txt) \
@@ -126,7 +134,7 @@ cosign verify ghcr.io/matheuscscp/gke-metadata-server@$(cat container-digest.txt
 ```
 
 For verifying the image of a given Helm Chart GitHub Release (tags `helm-v{helm_version}`), fetch the
-digest file `helm-digest.txt` attached to the release and use it with `cosign`:
+digest file `helm-digest.txt` attached to the Github Release and use it with `cosign`:
 
 ```bash
 cosign verify ghcr.io/matheuscscp/gke-metadata-server-helm@$(cat helm-digest.txt) \
@@ -185,8 +193,8 @@ the chart manifest). The syntax is:
 
 ```yaml
 annotations: # or labels
-  gke-metadata-server.matheuscscp.io/serviceAccountName: <k8s_service_account_name>
-  gke-metadata-server.matheuscscp.io/serviceAccountNamespace: <k8s_service_account_namespace>
+  gke-metadata-server.matheuscscp.io/serviceAccountName: <k8s_sa_name>
+  gke-metadata-server.matheuscscp.io/serviceAccountNamespace: <k8s_namespace>
 ```
 
 Prefer using annotations since they are less impactful than labels to the cluster.
