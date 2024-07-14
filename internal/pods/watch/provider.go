@@ -184,10 +184,10 @@ func (p *Provider) getByIP(ipAddr string) (*corev1.Pod, error) {
 
 func (p *Provider) Start(ctx context.Context) {
 	go func() {
+		logging.FromContext(ctx).Info("starting watch pods...")
 		p.informer.Run(p.closeChannel)
 		close(p.closedChannel)
 	}()
-	logging.FromContext(ctx).Info("watch pods started")
 }
 
 func (p *Provider) Close() error {

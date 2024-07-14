@@ -12,11 +12,16 @@ automatically by Google in the `kube-system` namespace of GKE clusters that have
 ## Usage
 
 Steps:
-1. Install [cert-manager](https://cert-manager.io/docs/installation/) in the cluster. This dependency is used for bootstrapping a self-signed CA and TLS certificate for a `MutatingWebhook` that adds networking configurations to the user Pods. You can opt-out from this feature by ignoring the Helm Chart distributed here and writing your own Kubernetes manifests.
+1. (Optional) Install [cert-manager](https://cert-manager.io/docs/installation/) in the cluster.
+This dependency is used for bootstrapping a self-signed CA and TLS certificate for a `MutatingWebhook`
+that adds required networking configurations to the user Pods. To opt-out of this feature, see
+[The `iptables` rules](#the-iptables-rules) section.
 2. Configure GCP Workload Identity Federation for Kubernetes.
-3. Deploy `gke-metadata-server` in the cluster using the Workload Identity Provider full name, obtained after step 2.
+3. Deploy `gke-metadata-server` in the cluster using the Workload Identity Provider full name,
+obtained after step 2.
 4. (Optional but highly recommended) Verify the supply chain signatures.
-5. See [`./k8s/test-pod.yaml`](./k8s/test-pod.yaml) for an example of how to configure your Pods.
+5. See [`./k8s/test-pod.yaml`](./k8s/test-pod.yaml) for an example of how to configure your Pods
+and their ServiceAccounts.
 
 ### Configure GCP Workload Identity Federation for Kubernetes
 
@@ -142,13 +147,15 @@ cosign verify ghcr.io/matheuscscp/gke-metadata-server-helm@$(cat helm-digest.txt
     --certificate-identity=https://github.com/matheuscscp/gke-metadata-server/.github/workflows/release.yml@refs/heads/main
 ```
 
+#### Automatic verification
+
 If you are using *Kyverno* for enforcing policies you can automate the container verification using
 [Keyless Verification](https://kyverno.io/docs/writing-policies/verify-images/sigstore/#keyless-signing-and-verification).
 
 If you are using *FluxCD* for deploying Helm Charts you can automate the chart verification using
 [Keyless Verification](https://fluxcd.io/flux/components/source/helmcharts/#keyless-verification).
 
-## Limitations and Security Risks
+## Security Risks and Limitations
 
 ### Pod identification by IP address
 
@@ -198,28 +205,32 @@ annotations: # or labels
 ```
 
 Prefer using annotations since they are less impactful than labels to the cluster.
-Unfortunaly, as of July 2024, most cloud providers support customizing only labels
-in node pool templates, and some don't even support any customization of this nature
-at all. It's up to you how you annotate your Nodes. You may also simply assign a
-Google Service Account to the Kubernetes ServiceAccount of the emulator and use it
-for all Pods running on the host network through the Helm Chart value
-`config.googleServiceAccount`.
+Unfortunately, as of July 2024, most cloud providers support customizing only labels
+in node pool templates, and some don't even support any customization of labels or
+annotations at all. It's up to you how you annotate your Nodes.
+
+You may also simply assign a Google Service Account to the Kubernetes ServiceAccount
+of the emulator and use it for all the Pods running on the host network of the cluster
+through the Helm Chart value `config.googleServiceAccount`. *But be careful, try to
+avoid using shared identities!*
 
 ### The `iptables` rules
 
-***Attention:*** The `iptables` rules installed in mutated Pods will redirect outbound
-traffic in the Pod network namespace targeting 169.254.169.254:80 to the emulator port.
+***Attention:*** The `iptables` rules installed in mutated Pods redirect outbound traffic
+in the network namespace of the Pod targeting 169.254.169.254:80 to the emulator port.
 If you are using similar tools or equivalent Workload Identity features of managed
-Kubernetes from other clouds this configuration may have a direct conflict with other
-such tools/features. *This may disrupt authentication in your production Pods.*
-Especially when mutating Pods that will run on the host network, *the `iptables` rules
-will be installed on the Node network namespace.* Please be sure to know what you are
-doing when using this tool inside complex environments.
+Kubernetes from other clouds, *this configuration may have a direct conflict with other
+such tools and features.* Especially when mutating Pods that will run on the host network,
+*these `iptables` rules will be installed on the network namespace of the Node!*
+Please be sure to know what you are doing when using this tool inside complex environments.
 
 An alternative to avoid messing with the network stack of your Pods is to add an init
 container that downloads the Google Credential Configuration targeting the Node IP
-address directly rather than `metadata.google.internal` and runs `gcloud auth login`,
-see the second container example in the [test Pod](./k8s/test-pod.yaml).
+address and emulator port directly rather than `metadata.google.internal:80` and runs
+`gcloud auth login`, see the second container example in the [test Pod](./k8s/test-pod.yaml).
+If you choose this alternative, you can disable the `MutatingWebhook` feature by setting
+`config.mutatingWebhook.enabled` to `false` in the Helm Chart values. This will also
+eliminate the need for the `cert-manager` dependency.
 
 ## Disclaimer
 

@@ -34,7 +34,9 @@ config:
   googleServiceAccount: ""
   logLevel: info # Log level. Accepted values: panic, fatal, error, warning, info, debug, trace
   serverAddr: :8080 # Network address where the HTTP server will listen on.
-  webhookAddr: :8081 # Network address where the Mutating Webhook server will listen on.
+  mutatingWebhook:
+    enabled: true # Whether or not to enable the MutatingWebhook feature.
+    serverAddr: :8081 # Network address where the MutatingWebhook server will listen on.
   watchPods:
     enabled: true # Whether or not to watch and cache the Pods running on the same Node.
     disableFallback: false # Whether or not to disable the simple fallback method for looking up Pods upon cache misses.
