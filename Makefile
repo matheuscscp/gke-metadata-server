@@ -24,16 +24,12 @@ SHELL := /bin/bash
 
 TEST_IMAGE := ghcr.io/matheuscscp/gke-metadata-server/test
 
-.PHONY: all
-all: tidy cluster build test
+.PHONY: dev
+dev: tidy dev-cluster build dev-test
 
 .PHONY: clean
 clean:
 	rm -rf *.json *.txt *.logs *.tgz
-
-.PHONY: test-id.txt
-test-id.txt:
-	echo "test-$$(openssl rand -hex 12)" | tee test-id.txt
 
 .PHONY: tidy
 tidy:
@@ -44,21 +40,34 @@ tidy:
 	./scripts/license.sh
 	git status
 
-.PHONY: kind-cluster
-kind-cluster:
+.PHONY: dev-cluster
+dev-cluster:
+	kind delete cluster || true
+	make cluster TEST_ID=test PROVIDER_COMMAND=update
+	kubens kube-system
+
+.PHONY: ci-cluster
+ci-cluster:
+	echo "test-$$(openssl rand -hex 12)" | tee ci-test-id.txt
+	make cluster TEST_ID=$$(cat ci-test-id.txt) PROVIDER_COMMAND=create
+
+.PHONY: dev-test
+dev-test:
+	make test TEST_ID=test HELM_TEST_CASE=no-watch
+	make test TEST_ID=test HELM_TEST_CASE=watch
+
+.PHONY: ci-test
+ci-test:
+	make test TEST_ID=$$(cat ci-test-id.txt) HELM_TEST_CASE=no-watch
+	make test TEST_ID=$$(cat ci-test-id.txt) HELM_TEST_CASE=watch
+
+.PHONY: cluster
+cluster:
 	@if [ "${TEST_ID}" == "" ]; then echo "TEST_ID variable is required."; exit -1; fi
 	@if [ "${PROVIDER_COMMAND}" == "" ]; then echo "PROVIDER_COMMAND variable is required."; exit -1; fi
 	kind create cluster --config k8s/test-kind-config.yaml
+	make create-or-update-provider TEST_ID=${TEST_ID} PROVIDER_COMMAND=${PROVIDER_COMMAND}
 	kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.15.1/cert-manager.yaml
-	kubectl --context kind-kind apply -f k8s/test-anon-oidc-rbac.yaml
-	kubectl --context kind-kind get --raw /openid/v1/jwks > jwks.json
-	gcloud iam workload-identity-pools providers ${PROVIDER_COMMAND}-oidc ${TEST_ID} \
-		--project=gke-metadata-server \
-		--location=global \
-		--workload-identity-pool=test-kind-cluster \
-		--issuer-uri=$$(kubectl --context kind-kind get --raw /.well-known/openid-configuration | jq -r .issuer) \
-		--attribute-mapping=google.subject=assertion.sub \
-		--jwk-json-path=jwks.json
 	while : ; do \
 		sleep_secs=10; \
 		echo "Sleeping for $$sleep_secs secs and checking cert-manager webhook status..."; \
@@ -68,16 +77,20 @@ kind-cluster:
 			break; \
 		fi; \
 	done
+	kubectl --context kind-kind apply -f k8s/test-anon-oidc-rbac.yaml
 
-.PHONY: cluster
-cluster:
-	kind delete cluster || true
-	make kind-cluster TEST_ID=test PROVIDER_COMMAND=update
-	kubens kube-system
-
-.PHONY: ci-cluster
-ci-cluster: test-id.txt
-	make kind-cluster TEST_ID=$$(cat test-id.txt) PROVIDER_COMMAND=create
+.PHONY: create-or-update-provider
+create-or-update-provider:
+	@if [ "${TEST_ID}" == "" ]; then echo "TEST_ID variable is required."; exit -1; fi
+	@if [ "${PROVIDER_COMMAND}" == "" ]; then echo "PROVIDER_COMMAND variable is required."; exit -1; fi
+	kubectl --context kind-kind get --raw /openid/v1/jwks > jwks.json
+	gcloud iam workload-identity-pools providers ${PROVIDER_COMMAND}-oidc ${TEST_ID} \
+		--project=gke-metadata-server \
+		--location=global \
+		--workload-identity-pool=test-kind-cluster \
+		--issuer-uri=$$(kubectl --context kind-kind get --raw /.well-known/openid-configuration | jq -r .issuer) \
+		--attribute-mapping=google.subject=assertion.sub \
+		--jwk-json-path=jwks.json
 
 .PHONY: build
 build:
@@ -97,16 +110,6 @@ build:
 
 .PHONY: test
 test:
-	make run-test TEST_ID=test HELM_TEST_CASE=no-watch
-	make run-test TEST_ID=test HELM_TEST_CASE=watch
-
-.PHONY: ci-test
-ci-test:
-	make run-test TEST_ID=$$(cat test-id.txt) HELM_TEST_CASE=no-watch
-	make run-test TEST_ID=$$(cat test-id.txt) HELM_TEST_CASE=watch
-
-.PHONY: run-test
-run-test:
 	@if [ "${TEST_ID}" == "" ]; then echo "TEST_ID variable is required."; exit -1; fi
 	@if [ "${HELM_TEST_CASE}" == "" ]; then echo "HELM_TEST_CASE variable is required."; exit -1; fi
 	sed "s|<TEST_ID>|${TEST_ID}|g" k8s/test-helm-values-${HELM_TEST_CASE}.yaml | \
