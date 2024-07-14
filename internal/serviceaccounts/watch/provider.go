@@ -159,10 +159,10 @@ func (p *Provider) get(namespace, name string) (*corev1.ServiceAccount, error) {
 
 func (p *Provider) Start(ctx context.Context) {
 	go func() {
+		logging.FromContext(ctx).Info("starting watch service accounts...")
 		p.informer.Run(p.closeChannel)
 		close(p.closedChannel)
 	}()
-	logging.FromContext(ctx).Info("watch service accounts started")
 }
 
 func (p *Provider) Close() error {

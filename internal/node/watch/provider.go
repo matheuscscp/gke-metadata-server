@@ -129,10 +129,10 @@ func (p *Provider) get() (*corev1.Node, error) {
 
 func (p *Provider) Start(ctx context.Context) {
 	go func() {
+		logging.FromContext(ctx).Info("starting watch node...")
 		p.informer.Run(p.closeChannel)
 		close(p.closedChannel)
 	}()
-	logging.FromContext(ctx).Info("watch node started")
 }
 
 func (p *Provider) Close() error {
