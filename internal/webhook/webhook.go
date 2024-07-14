@@ -44,7 +44,6 @@ type ServerOptions struct {
 }
 
 type Server struct {
-	opts       ServerOptions
 	httpServer *http.Server
 }
 
@@ -72,10 +71,7 @@ func New(ctx context.Context, opts ServerOptions) *Server {
 		}
 	}()
 
-	return &Server{
-		opts:       opts,
-		httpServer: httpServer,
-	}
+	return &Server{httpServer}
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {

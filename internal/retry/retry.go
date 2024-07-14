@@ -44,6 +44,7 @@ type (
 		Description    string
 		FailureCounter prometheus.Counter
 		Func           func() error
+		IsRetryable    func(error) bool
 	}
 
 	maxAttemptsError struct {
@@ -60,13 +61,16 @@ type (
 
 func Do(ctx context.Context, op Operation) error {
 	if op.Description == "" {
-		return fmt.Errorf("the retryable operation must have a description")
+		return fmt.Errorf("a retryable operation must have a description")
 	}
 	if op.Func == nil {
-		return fmt.Errorf("the retryable operation must have a function to be called")
+		return fmt.Errorf("a retryable operation must have a function to be called")
 	}
 	if op.FailureCounter == nil {
-		return fmt.Errorf("the retryable operation must have a failure counter for observability")
+		return fmt.Errorf("a retryable operation must have a failure counter for observability")
+	}
+	if op.IsRetryable == nil {
+		return fmt.Errorf("a retryable operation must have a function to check if an error is retryable")
 	}
 
 	if op.MaxAttempts == 0 {
@@ -85,8 +89,8 @@ func Do(ctx context.Context, op Operation) error {
 	l := logging.FromContext(ctx)
 	for i := 1; op.MaxAttempts < 0 || i <= op.MaxAttempts; i++ {
 		err := op.Func()
-		if err == nil {
-			return nil
+		if err == nil || !op.IsRetryable(err) {
+			return err
 		}
 		op.FailureCounter.Inc()
 		if i == op.MaxAttempts {

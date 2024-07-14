@@ -148,6 +148,6 @@ func CheckRegex(t *testing.T, name, pattern, value string) {
 
 func AssertExpirationSeconds(t *testing.T, secs int) {
 	t.Helper()
-	assert.LessOrEqual(t, 3500, secs)
+	assert.LessOrEqual(t, 3400, secs)
 	assert.LessOrEqual(t, secs, 3600)
 }

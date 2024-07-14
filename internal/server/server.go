@@ -35,6 +35,7 @@ import (
 	pkghttp "github.com/matheuscscp/gke-metadata-server/internal/http"
 	"github.com/matheuscscp/gke-metadata-server/internal/logging"
 	"github.com/matheuscscp/gke-metadata-server/internal/metrics"
+	"github.com/matheuscscp/gke-metadata-server/internal/node"
 	"github.com/matheuscscp/gke-metadata-server/internal/pods"
 	"github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts"
 	"github.com/matheuscscp/gke-metadata-server/internal/serviceaccounttokens"
@@ -51,18 +52,21 @@ type (
 	}
 
 	ServerOptions struct {
-		NodeName                string
-		ServerAddr              string
-		MetricsSubsystem        string
-		Pods                    pods.Provider
-		ServiceAccounts         serviceaccounts.Provider
-		ServiceAccountTokens    serviceaccounttokens.Provider
-		GoogleCredentialsConfig *googlecredentials.Config
-		MetricsRegistry         *prometheus.Registry
+		NodeName                  string
+		ServerAddr                string
+		MetricsSubsystem          string
+		Pods                      pods.Provider
+		Node                      node.Provider
+		ServiceAccounts           serviceaccounts.Provider
+		ServiceAccountTokens      serviceaccounttokens.Provider
+		GoogleCredentialsConfig   *googlecredentials.Config
+		MetricsRegistry           *prometheus.Registry
+		DefaultNodeServiceAccount *serviceaccounts.Reference
 	}
 
 	serverMetrics struct {
-		getPodFailures *prometheus.CounterVec
+		lookupPodFailures *prometheus.CounterVec
+		getNodeFailures   prometheus.Counter
 	}
 )
 
@@ -90,13 +94,22 @@ const (
 func New(ctx context.Context, opts ServerOptions) *Server {
 	latencyMillis := metrics.NewLatencyMillis(opts.MetricsSubsystem, []string{"method", "path", "status"})
 	opts.MetricsRegistry.MustRegister(latencyMillis)
-	getPodFailures := prometheus.NewCounterVec(prometheus.CounterOpts{
+
+	lookupPodFailures := prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: metrics.Namespace,
 		Subsystem: opts.MetricsSubsystem,
-		Name:      "get_pod_failures_total",
-		Help:      "Total failures when looking up Pod objects to serve requests.",
+		Name:      "lookup_pod_failures_total",
+		Help:      "Total failures when looking up Pod objects by IP to serve requests.",
 	}, []string{"client_ip"})
-	opts.MetricsRegistry.MustRegister(getPodFailures)
+	opts.MetricsRegistry.MustRegister(lookupPodFailures)
+
+	getNodeFailures := prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: metrics.Namespace,
+		Subsystem: opts.MetricsSubsystem,
+		Name:      "get_node_failures_total",
+		Help:      "Total failures when getting the current Node object to serve requests.",
+	})
+	opts.MetricsRegistry.MustRegister(getNodeFailures)
 
 	// create server
 	l := logging.FromContext(ctx).WithField("server_addr", opts.ServerAddr)
@@ -105,7 +118,8 @@ func New(ctx context.Context, opts ServerOptions) *Server {
 	s := &Server{
 		opts: opts,
 		metrics: serverMetrics{
-			getPodFailures: getPodFailures,
+			lookupPodFailures: lookupPodFailures,
+			getNodeFailures:   getNodeFailures,
 		},
 		httpServer: &http.Server{
 			Addr: opts.ServerAddr,

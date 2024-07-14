@@ -25,10 +25,12 @@ package serviceaccounttokens
 import (
 	"context"
 	"time"
+
+	"github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts"
 )
 
 type Provider interface {
-	GetServiceAccountToken(ctx context.Context, namespace, name string) (string, time.Duration, error)
+	GetServiceAccountToken(ctx context.Context, ref *serviceaccounts.Reference) (string, time.Duration, error)
 	GetGoogleAccessToken(ctx context.Context, saToken, googleEmail string) (string, time.Duration, error)
 	GetGoogleIdentityToken(ctx context.Context, saToken, googleEmail, audience string) (string, time.Duration, error)
 }

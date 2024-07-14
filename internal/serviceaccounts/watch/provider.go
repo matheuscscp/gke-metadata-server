@@ -58,7 +58,8 @@ type (
 	}
 
 	Listener interface {
-		UpdateServiceAccount(*corev1.ServiceAccount)
+		UpdateServiceAccount(*serviceaccounts.Reference)
+		DeleteServiceAccount(*serviceaccounts.Reference)
 	}
 )
 
@@ -97,24 +98,32 @@ func NewProvider(ctx context.Context, opts ProviderOptions) *Provider {
 	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			numServiceAccounts.Inc()
+			saRef := serviceaccounts.ReferenceFromObject(obj.(*corev1.ServiceAccount))
 			for _, l := range p.listeners {
-				l.UpdateServiceAccount(obj.(*corev1.ServiceAccount))
+				l.UpdateServiceAccount(saRef)
 			}
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
+			saRef := serviceaccounts.ReferenceFromObject(newObj.(*corev1.ServiceAccount))
 			for _, l := range p.listeners {
-				l.UpdateServiceAccount(newObj.(*corev1.ServiceAccount))
+				l.UpdateServiceAccount(saRef)
 			}
 		},
 		DeleteFunc: func(obj interface{}) {
 			numServiceAccounts.Dec()
+			saRef := serviceaccounts.ReferenceFromObject(obj.(*corev1.ServiceAccount))
+			for _, l := range p.listeners {
+				l.DeleteServiceAccount(saRef)
+			}
 		},
 	})
 
 	return p
 }
 
-func (p *Provider) Get(ctx context.Context, namespace, name string) (*corev1.ServiceAccount, error) {
+func (p *Provider) Get(ctx context.Context, ref *serviceaccounts.Reference) (*corev1.ServiceAccount, error) {
+	namespace, name := ref.Namespace, ref.Name
+
 	sa, err := p.get(namespace, name)
 	if err == nil {
 		return sa, nil
@@ -129,7 +138,7 @@ func (p *Provider) Get(ctx context.Context, namespace, name string) (*corev1.Ser
 		WithField("service_account", fmt.Sprintf("%s/%s", namespace, name)).
 		Error("error getting service account from cache, delegating request to fallback source")
 
-	sa, err = p.opts.FallbackSource.Get(ctx, namespace, name)
+	sa, err = p.opts.FallbackSource.Get(ctx, ref)
 	if err != nil {
 		return nil, err
 	}

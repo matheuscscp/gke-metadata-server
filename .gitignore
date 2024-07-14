@@ -1,10 +1,6 @@
+.terraform*
+terraform.*
 *.json
 *.txt
 *.logs
 *.tgz
-.terraform*
-terraform.*
-*.key
-*.crt
-*.pem
-openssl.cnf

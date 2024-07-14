@@ -32,7 +32,7 @@ metadata:
   namespace: default
   annotations:
     # This annotation is how Workload Identity is configured in GKE.
-    # This project also uses this annotation to know which Google Service Account to impersonate.
+    # This project uses the same annotation to know which Google Service Account to impersonate.
     iam.gke.io/gcp-service-account: test-sa@gke-metadata-server.iam.gserviceaccount.com
 ---
 apiVersion: v1
@@ -42,13 +42,18 @@ metadata:
   namespace: default
   labels:
     # This label is used by the MutatingWebhookConfiguration to select which Pods to mutate.
-    # The mutation injects metadata.google.internal->169.254.169.254 to .spec.hostAliases and
-    # an initContainer that creates iptables rules to redirect outbound traffic targeting
-    # metadata.google.internal to the emulator.
+    # The mutation injects the host alias metadata.google.internal ---> 169.254.169.254 and
+    # an initContainer that installs iptables rules in the Pod network namespace to redirect
+    # outbound traffic targeting 169.254.169.254:80 to the emulator port on the Node.
     gke-metadata-server.matheuscscp.io/webhook: Mutate
 spec:
-  serviceAccountName: test
+  serviceAccountName: test # Use the ServiceAccount created above.
+
+  # All the configuration below is test-only, i.e. not needed in production.
+
   restartPolicy: Never
+  hostNetwork: <HOST_NETWORK>
+  dnsPolicy: ClusterFirstWithHostNet
 
   # This container demonstrates that automatic authentication using Google libraries works.
   # The tests running here perform authentication by simply communicating with the well-known
@@ -60,28 +65,41 @@ spec:
     env:
     - name: TEST_ID
       value: <TEST_ID>
+    - name: SERVICE_ACCOUNT_SUBJECT
+      value: <SERVICE_ACCOUNT_SUBJECT>
+    - name: DAEMONSET_IP
+      valueFrom:
+        fieldRef:
+          fieldPath: status.hostIP
+    - name: DAEMONSET_PORT
+      value: "8080"
 
   # This container demonstrates vanilla "Workload Identity Federation with Kubernetes".
   # The custom API of the emulator shown below returns a (non-secret) JSON with a
-  # Google credential configuration, containing the full name of the Workload Identity
+  # Google Credential Configuration, containing the full name of the Workload Identity
   # Provider resource. The "gcloud auth login" command below configures the Pod with
-  # the credentials that can be acquired by the parameters described inside this JSON
-  # file. After performing login the container uses this authentication to make calls
-  # to the GCS API via the gsutil binary from the Google CloudSDK image below. The
-  # choice of gsutil here has meaning: gsutil does not work seamlessly with GKE's
-  # native implementation of Workload Identity ("gcloud storage" does). This test
-  # demonstrates how our Google Credential Configuration API allows gsutil to work
-  # with Workload Identity. gsutil should not be used, though. Use "gcloud storage"
-  # instead.
+  # the credentials that can be acquired from the parameters contained inside this JSON
+  # file. After performing login, the container uses this authentication to make calls
+  # to the GCS API via the gsutil binary from the Google CloudSDK image below. This test
+  # demonstrates how our custom API for retrieving a Google Credential Configuration
+  # can be used to login using the gcloud CLI inside a container. This method does not
+  # require the networking configuration injected by the mutation.
   - name: test-gcloud
     image: google/cloud-sdk:457.0.0-slim
     command: [/bin/bash]
+    env:
+    - name: DAEMONSET_IP
+      valueFrom:
+        fieldRef:
+          fieldPath: status.hostIP
+    - name: DAEMONSET_PORT
+      value: "8080"
     args:
     - -c
     - |
       set -ex
 
-      METADATA_ENDPOINT="http://metadata.google.internal"
+      METADATA_ENDPOINT="http://${DAEMONSET_IP}:${DAEMONSET_PORT}"
       CRED_CONFIG_API="/gkeMetadataEmulator/v1/pod/service-account/google-cred-config"
       curl -H "Metadata-Flavor: Emulator" "${METADATA_ENDPOINT}${CRED_CONFIG_API}?pretty" > creds.json
       cat creds.json

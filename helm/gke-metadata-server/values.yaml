@@ -29,6 +29,9 @@ config:
   # This full name can be retrieved on the Google Cloud Console webpage for the provider.
   # Must match the pattern: projects/<gcp_project_number>/locations/global/workloadIdentityPools/<pool_name>/providers/<provider_name>
   workloadIdentityProvider: ""
+  # Optional Google Service Account email to add on the gke-metadata-server ServiceAccount annotation.
+  # This is useful for using the gke-metadata-server with Pods running on the host network (see README.md).
+  googleServiceAccount: ""
   logLevel: info # Log level. Accepted values: panic, fatal, error, warning, info, debug, trace
   serverAddr: :8080 # Network address where the HTTP server will listen on.
   webhookAddr: :8081 # Network address where the Mutating Webhook server will listen on.
@@ -36,6 +39,10 @@ config:
     enabled: true # Whether or not to watch and cache the Pods running on the same Node.
     disableFallback: false # Whether or not to disable the simple fallback method for looking up Pods upon cache misses.
     resyncPeriod: 10m # How often to fully resync.
+  watchNode:
+    enabled: true # Whether or not to watch and cache the Node where the server is running.
+    disableFallback: false # Whether or not to disable the simple fallback method for looking up the Node upon cache misses.
+    resyncPeriod: 1h # How often to fully resync.
   watchServiceAccounts:
     enabled: true # Whether or not to watch and cache all the Service Accounts of the cluster.
     disableFallback: false # Whether or not to disable the simple fallback method for looking up Service Accounts upon cache misses.

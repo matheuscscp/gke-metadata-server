@@ -53,6 +53,12 @@ resource "google_service_account_iam_member" "workload_identity_user" {
   member             = "principal://iam.googleapis.com/${google_iam_workload_identity_pool.test_kind_cluster.name}/subject/system:serviceaccount:default:test"
 }
 
+resource "google_service_account_iam_member" "gke_metadata_server_workload_identity_user" {
+  service_account_id = google_service_account.test.name
+  role               = local.wi_user_role
+  member             = "principal://iam.googleapis.com/${google_iam_workload_identity_pool.test_kind_cluster.name}/subject/system:serviceaccount:kube-system:gke-metadata-server"
+}
+
 # this allows an OAuth 2.0 Access Token for the Google Service Account to be exchanged
 # for an OpenID Connect ID Token for the Google Service Account. this is necessary
 # for the GET /computeMetadata/v1/instance/service-accounts/*/identity API to work
