@@ -6,7 +6,7 @@ require (
 	cloud.google.com/go/compute/metadata v0.5.0
 	cloud.google.com/go/storage v1.43.0
 	github.com/coreos/go-oidc/v3 v3.11.0
-	github.com/go-logr/logr v1.4.1
+	github.com/go-logr/logr v1.4.2
 	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/google/uuid v1.6.0
 	github.com/prometheus/client_golang v1.19.1
