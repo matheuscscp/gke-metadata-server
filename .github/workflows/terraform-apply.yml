@@ -24,10 +24,6 @@ on:
   push:
     branches: [main]
 
-concurrency:
-  group: terraform # additional lock for terraform state
-  cancel-in-progress: false
-
 jobs:
   terraform-apply:
     runs-on: ubuntu-latest
