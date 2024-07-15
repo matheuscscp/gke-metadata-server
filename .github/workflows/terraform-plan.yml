@@ -22,10 +22,6 @@
 
 on: [pull_request]
 
-concurrency:
-  group: terraform # additional lock for terraform state
-  cancel-in-progress: false
-
 jobs:
   terraform-plan:
     runs-on: ubuntu-latest
