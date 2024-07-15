@@ -119,7 +119,7 @@ func (p *Provider) runWithGoogleCredentialsFromKubernetesServiceAccountToken(ctx
 	tokenFile := file.Name()
 	defer os.Remove(tokenFile)
 	file.Close()
-	if err := os.WriteFile(tokenFile, []byte(token), 0644); err != nil {
+	if err := os.WriteFile(tokenFile, []byte(token), 0600); err != nil {
 		return fmt.Errorf("error writing service account token to temporary file %q: %w", tokenFile, err)
 	}
 
