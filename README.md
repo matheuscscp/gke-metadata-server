@@ -212,8 +212,8 @@ It's up to you how you annotate/label your Nodes.
 You may also simply assign a Google Service Account to the Kubernetes ServiceAccount
 of the emulator and use it for all the Pods of the cluster that are running on the
 host network. This can be done through the Helm Chart value `config.googleServiceAccount`.
-*But be careful and try to avoid using shared identities like this! This is obviously
-dangerous!*
+
+*Be careful and try to avoid using shared identities! This is obviously dangerous!*
 
 ### The `iptables` rules
 
