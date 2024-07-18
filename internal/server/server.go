@@ -71,24 +71,12 @@ type (
 )
 
 const (
-	// GCE/GKE-compatible APIs. Enfortunately, not all APIs of the
-	// gke-metadata-server can be emulated for non-GKE clusters. below
-	// are the ones that can.
 	gkeNodeNameAPI               = "/computeMetadata/v1/instance/name"
 	gkeServiceAccountAliasesAPI  = "/computeMetadata/v1/instance/service-accounts/$service_account/aliases"
 	gkeServiceAccountEmailAPI    = "/computeMetadata/v1/instance/service-accounts/$service_account/email"
 	gkeServiceAccountIdentityAPI = "/computeMetadata/v1/instance/service-accounts/$service_account/identity"
 	gkeServiceAccountScopesAPI   = "/computeMetadata/v1/instance/service-accounts/$service_account/scopes"
 	gkeServiceAccountTokenAPI    = "/computeMetadata/v1/instance/service-accounts/$service_account/token"
-
-	// Emulator-only APIs. Even though Google tools are not aware of the two APIs below,
-	// together they make it very easy for a Pod to use the gcloud CLI. All that is
-	// required is "curl"ing the first API, storing the returned JSON in a file, then
-	// run "gcloud auth login --cred-file=path/to/config.json". This is how the server
-	// internally runs authenticated commands, e.g. for implementing the GCP Access and
-	// ID Token APIs.
-	emuPodGoogleCredConfigAPI    = "/gkeMetadataEmulator/v1/pod/service-account/google-cred-config"
-	emuPodServiceAccountTokenAPI = "/gkeMetadataEmulator/v1/pod/service-account/token"
 )
 
 func New(ctx context.Context, opts ServerOptions) *Server {
@@ -171,30 +159,49 @@ func New(ctx context.Context, opts ServerOptions) *Server {
 	}
 
 	// gke apis
-	metadataDirectory.Handle(gkeNodeNameAPI, googleFlavorMiddleware(s.gkeNodeNameAPI))
-	metadataDirectory.Handle(gkeServiceAccountAliasesAPI, googleFlavorMiddleware(s.gkeServiceAccountAliasesAPI),
-		s.listPodGoogleServiceAccounts)
-	metadataDirectory.Handle(gkeServiceAccountEmailAPI, googleFlavorMiddleware(s.gkeServiceAccountEmailAPI),
-		s.listPodGoogleServiceAccounts)
-	metadataDirectory.Handle(gkeServiceAccountIdentityAPI, googleFlavorMiddleware(s.gkeServiceAccountIdentityAPI),
-		s.listPodGoogleServiceAccounts)
-	metadataDirectory.Handle(gkeServiceAccountScopesAPI, googleFlavorMiddleware(s.gkeServiceAccountScopesAPI),
-		s.listPodGoogleServiceAccounts)
-	metadataDirectory.Handle(gkeServiceAccountTokenAPI, googleFlavorMiddleware(s.gkeServiceAccountTokenAPI),
-		s.listPodGoogleServiceAccounts)
+	metadataFlavorMiddleware := func(next http.HandlerFunc) http.Handler {
+		const (
+			metadataFlavorHeader = "Metadata-Flavor"
+			metadataFlavorGoogle = "Google"
+		)
 
-	// emulator-only apis
-	metadataDirectory.Handle(emuPodGoogleCredConfigAPI, emulatorFlavorMiddleware(s.emuPodGoogleCredConfigAPI))
-	metadataDirectory.Handle(emuPodServiceAccountTokenAPI, emulatorFlavorMiddleware(s.emuPodServiceAccountTokenAPI))
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			metadataFlavor := r.Header.Get(metadataFlavorHeader)
+			if metadataFlavor == metadataFlavorGoogle {
+				w.Header().Set(metadataFlavorHeader, metadataFlavorGoogle)
+				w.Header().Set("Server", "GKE Metadata Server")
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			msg := fmt.Sprintf("Missing required header %q: %q\n", metadataFlavorHeader, metadataFlavorGoogle)
+			w.WriteHeader(http.StatusForbidden)
+			w.Write([]byte(msg))
+		})
+	}
+	metadataDirectory.Handle(gkeNodeNameAPI, metadataFlavorMiddleware(s.gkeNodeNameAPI))
+	metadataDirectory.Handle(gkeServiceAccountAliasesAPI, metadataFlavorMiddleware(s.gkeServiceAccountAliasesAPI),
+		s.listPodGoogleServiceAccounts)
+	metadataDirectory.Handle(gkeServiceAccountEmailAPI, metadataFlavorMiddleware(s.gkeServiceAccountEmailAPI),
+		s.listPodGoogleServiceAccounts)
+	metadataDirectory.Handle(gkeServiceAccountIdentityAPI, metadataFlavorMiddleware(s.gkeServiceAccountIdentityAPI),
+		s.listPodGoogleServiceAccounts)
+	metadataDirectory.Handle(gkeServiceAccountScopesAPI, metadataFlavorMiddleware(s.gkeServiceAccountScopesAPI),
+		s.listPodGoogleServiceAccounts)
+	metadataDirectory.Handle(gkeServiceAccountTokenAPI, metadataFlavorMiddleware(s.gkeServiceAccountTokenAPI),
+		s.listPodGoogleServiceAccounts)
 
 	l.WithField("metadata_directory", metadataDirectory).Info("metadata directory")
 
 	// internal endpoints
-	internalServeMux.Handle("/schema", s.health(metadataDirectory))
-	internalServeMux.Handle("/healthz", s.health(metadataDirectory))
-	internalServeMux.Handle("/health", s.health(metadataDirectory))
-	internalServeMux.Handle("/readyz", s.health(metadataDirectory))
-	internalServeMux.Handle("/ready", s.health(metadataDirectory))
+	health := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		pkghttp.RespondJSON(w, r, http.StatusOK, metadataDirectory)
+	})
+	internalServeMux.Handle("/schema", health)
+	internalServeMux.Handle("/healthz", health)
+	internalServeMux.Handle("/health", health)
+	internalServeMux.Handle("/readyz", health)
+	internalServeMux.Handle("/ready", health)
 	internalServeMux.Handle("/metrics", metrics.HandlerFor(opts.MetricsRegistry, l))
 
 	// start server

@@ -124,44 +124,43 @@ test:
 			break; \
 		fi; \
 	done
-	make run-pod-test TEST_ID=${TEST_ID} HOST_NETWORK=false SERVICE_ACCOUNT_SUBJECT=system:serviceaccount:default:test
-	make run-pod-test TEST_ID=${TEST_ID} HOST_NETWORK=true SERVICE_ACCOUNT_SUBJECT=system:serviceaccount:kube-system:gke-metadata-server
-
-.PHONY: run-pod-test
-run-pod-test:
-	@if [ "${TEST_ID}" == "" ]; then echo "TEST_ID variable is required."; exit -1; fi
-	@if [ "${HOST_NETWORK}" == "" ]; then echo "HOST_NETWORK variable is required."; exit -1; fi
-	@if [ "${SERVICE_ACCOUNT_SUBJECT}" == "" ]; then echo "SERVICE_ACCOUNT_SUBJECT variable is required."; exit -1; fi
-	kubectl --context kind-kind -n default delete po test || true
-	sed "s|<TEST_ID>|${TEST_ID}|g" k8s/test-pod.yaml | \
-		sed "s|<GO_TEST_DIGEST>|$$(cat go-test-digest.txt)|g" | \
-		sed "s|<HOST_NETWORK>|${HOST_NETWORK}|g" | \
-		sed "s|<SERVICE_ACCOUNT_SUBJECT>|${SERVICE_ACCOUNT_SUBJECT}|g" | \
-		tee >(kubectl --context kind-kind apply -f -)
+	make start-test-pod HOST_NETWORK=false
+	make start-test-pod HOST_NETWORK=true
 	while : ; do \
 		sleep_secs=10; \
 		echo "Sleeping for $$sleep_secs secs and checking test Pod status..."; \
 		sleep $$sleep_secs; \
-		EXIT_CODE_1=$$(kubectl --context kind-kind -n default get po test -o jsonpath='{.status.containerStatuses[0].state.terminated.exitCode}'); \
-		EXIT_CODE_2=$$(kubectl --context kind-kind -n default get po test -o jsonpath='{.status.containerStatuses[1].state.terminated.exitCode}'); \
+		EXIT_CODE_1=$$(kubectl --context kind-kind -n default get po test-host-network-false -o jsonpath='{.status.containerStatuses[0].state.terminated.exitCode}'); \
+		EXIT_CODE_2=$$(kubectl --context kind-kind -n default get po test-host-network-true -o jsonpath='{.status.containerStatuses[0].state.terminated.exitCode}'); \
 		if [ -n "$$EXIT_CODE_1" ] && [ -n "$$EXIT_CODE_2" ]; then \
-			echo "Both containers exited"; \
+			echo "All containers exited"; \
 			break; \
 		fi; \
 	done; \
 	kubectl --context kind-kind -n kube-system describe $$(kubectl --context kind-kind -n kube-system get po -o name | grep gke); \
-	kubectl --context kind-kind -n default describe po test; \
 	kubectl --context kind-kind -n kube-system logs ds/gke-metadata-server; \
-	kubectl --context kind-kind -n default logs test -c init-gke-metadata-server; \
-	kubectl --context kind-kind -n default logs test -c test -f; \
-	kubectl --context kind-kind -n default logs test -c test-gcloud -f; \
-	echo "Container 'test'        exit code: $$EXIT_CODE_1"; \
-	echo "Container 'test-gcloud' exit code: $$EXIT_CODE_2"; \
+	kubectl --context kind-kind -n default describe po test-host-network-false; \
+	kubectl --context kind-kind -n default logs test-host-network-false -c init-gke-metadata-server; \
+	kubectl --context kind-kind -n default logs test-host-network-false -c test -f; \
+	kubectl --context kind-kind -n default describe po test-host-network-true; \
+	kubectl --context kind-kind -n default logs test-host-network-true -c init-gke-metadata-server; \
+	kubectl --context kind-kind -n default logs test-host-network-true -c test -f; \
+	echo "Pod 'test-host-network-false' exit code: $$EXIT_CODE_1"; \
+	echo "Pod 'test-host-network-true'  exit code: $$EXIT_CODE_2"; \
 	if [ "$$EXIT_CODE_1" != "0" ] || [ "$$EXIT_CODE_2" != "0" ]; then \
 		echo "Failure."; \
 		exit 1; \
 	fi; \
 	echo "Success."
+
+.PHONY: start-test-pod
+start-test-pod:
+	@if [ "${HOST_NETWORK}" == "" ]; then echo "HOST_NETWORK variable is required."; exit -1; fi
+	kubectl --context kind-kind -n default delete po test-host-network-${HOST_NETWORK} || true
+	sed "s|<POD_NAME>|test-host-network-${HOST_NETWORK}|g" k8s/test-pod.yaml | \
+		sed "s|<HOST_NETWORK>|${HOST_NETWORK}|g" | \
+		sed "s|<GO_TEST_DIGEST>|$$(cat go-test-digest.txt)|g" | \
+		tee >(kubectl --context kind-kind apply -f -)
 
 .PHONY: helm-diff
 helm-diff:

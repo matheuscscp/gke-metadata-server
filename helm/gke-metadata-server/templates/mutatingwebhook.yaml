@@ -20,7 +20,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-{{- if .Values.config.mutatingWebhook.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -31,7 +30,7 @@ spec:
     app: gke-metadata-server
   ports:
   - port: 443
-    targetPort: {{ index (split ":" .Values.config.mutatingWebhook.serverAddr) "_1" }}
+    targetPort: {{ index (split ":" .Values.config.webhookAddr) "_1" }}
     protocol: TCP
 ---
 apiVersion: admissionregistration.k8s.io/v1
@@ -118,4 +117,3 @@ spec:
     name: gke-metadata-server-tls
     kind: Issuer
     group: cert-manager.io
-{{- end }}

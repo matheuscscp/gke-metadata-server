@@ -62,14 +62,13 @@ spec:
         {{- if .Values.config.serverAddr }}
         - --server-addr={{ .Values.config.serverAddr }}
         {{- end }}
-        {{- if .Values.config.mutatingWebhook.enabled }}
-        - --enable-webhook
-        - --webhook-addr={{ .Values.config.mutatingWebhook.serverAddr }}
+        {{- if .Values.config.webhookAddr }}
+        - --webhook-addr={{ .Values.config.webhookAddr }}
+        {{- end }}
         {{- if .Values.image.digest }}
         - --webhook-init-network-image={{ .Values.image.repository }}@{{ .Values.image.digest }}
         {{- else }}
         - --webhook-init-network-image={{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
-        {{- end }}
         {{- end }}
         {{- if .Values.config.logLevel }}
         - --log-level={{ .Values.config.logLevel }}
@@ -116,11 +115,9 @@ spec:
         - name: http
           containerPort: {{ index (split ":" .Values.config.serverAddr) "_1" }}
           protocol: TCP
-        {{- if .Values.config.mutatingWebhook.enabled }}
         - name: webhook
-          containerPort: {{ index (split ":" .Values.config.mutatingWebhook.serverAddr) "_1" }}
+          containerPort: {{ index (split ":" .Values.config.webhookAddr) "_1" }}
           protocol: TCP
-        {{- end }}
         livenessProbe:
           initialDelaySeconds: 3
           httpGet:
@@ -136,17 +133,13 @@ spec:
         volumeMounts:
         - name: tmpfs
           mountPath: /tmp
-        {{- if .Values.config.mutatingWebhook.enabled }}
         - name: tls
           mountPath: /etc/gke-metadata-server/certs
           readOnly: true
-        {{- end }}
       volumes:
       - name: tmpfs
         emptyDir:
           medium: Memory
-      {{- if .Values.config.mutatingWebhook.enabled }}
       - name: tls
         secret:
           secretName: gke-metadata-server-tls
-      {{- end }}
