@@ -59,7 +59,6 @@ func newServerCommand() *cobra.Command {
 		defaultNodeServiceAccountName       string
 		defaultNodeServiceAccountNamespace  string
 		webhookInitNetworkImage             string
-		enableWebhook                       bool
 		watchPods                           bool
 		watchPodsResyncPeriod               time.Duration
 		watchPodsDisableFallback            bool
@@ -234,24 +233,19 @@ func newServerCommand() *cobra.Command {
 				DefaultNodeServiceAccount: defaultNodeServiceAccount,
 			})
 
-			var webhookServer *webhook.Server
-			if enableWebhook {
-				webhookServer = webhook.New(ctx, webhook.ServerOptions{
-					ServerAddr:       webhookAddr,
-					InitNetworkImage: webhookInitNetworkImage,
-					DaemonSetPort:    strings.Split(serverAddr, ":")[1],
-				})
-			}
+			webhookServer := webhook.New(ctx, webhook.ServerOptions{
+				ServerAddr:       webhookAddr,
+				InitNetworkImage: webhookInitNetworkImage,
+				DaemonSetPort:    strings.Split(serverAddr, ":")[1],
+			})
 
 			ctx, cancel := waitForShutdown(ctx)
 			defer cancel()
 			if err := s.Shutdown(ctx); err != nil {
 				return fmt.Errorf("error in server graceful shutdown: %w", err)
 			}
-			if webhookServer != nil {
-				if err := webhookServer.Shutdown(ctx); err != nil {
-					return fmt.Errorf("error in webhook graceful shutdown: %w", err)
-				}
+			if err := webhookServer.Shutdown(ctx); err != nil {
+				return fmt.Errorf("error in webhook graceful shutdown: %w", err)
 			}
 
 			return nil
@@ -270,8 +264,6 @@ func newServerCommand() *cobra.Command {
 		"Namespace of the default service account to be used by pods running on the host network")
 	cmd.Flags().StringVar(&webhookInitNetworkImage, "webhook-init-network-image", "ghcr.io/matheuscscp/gke-metadata-server:0.6.0",
 		"Image to be used for the init container that sets up the network namespace for reaching the metadata server")
-	cmd.Flags().BoolVar(&enableWebhook, "enable-webhook", false,
-		"Whether or not to enable the webhook server (default false)")
 	cmd.Flags().BoolVar(&watchPods, "watch-pods", false,
 		"Whether or not to watch the pods running on the same node (default false)")
 	cmd.Flags().DurationVar(&watchPodsResyncPeriod, "watch-pods-resync-period", 10*time.Minute,

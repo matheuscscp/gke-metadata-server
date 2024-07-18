@@ -38,7 +38,7 @@ metadata:
 apiVersion: v1
 kind: Pod
 metadata:
-  name: test
+  name: <POD_NAME>
   namespace: default
   labels:
     # This label is used by the MutatingWebhookConfiguration to select which Pods to mutate.
@@ -49,81 +49,11 @@ metadata:
 spec:
   serviceAccountName: test # Use the ServiceAccount created above.
 
-  # All the configuration below is test-only, i.e. not needed in production.
+  # ATTENTION: All the configuration below is test-only and not needed in production!
 
   restartPolicy: Never
   hostNetwork: <HOST_NETWORK>
   dnsPolicy: ClusterFirstWithHostNet
-
-  # This container demonstrates that automatic authentication using Google libraries works.
-  # The tests running here perform authentication by simply communicating with the well-known
-  # GCE/GKE Metadata APIs backed by the emulator, which are installed by an init container
-  # added by the mutation mentioned above. The custom APIs of the emulator are also tested.
   containers:
   - name: test
     image: ghcr.io/matheuscscp/gke-metadata-server/test@<GO_TEST_DIGEST>
-    env:
-    - name: TEST_ID
-      value: <TEST_ID>
-    - name: SERVICE_ACCOUNT_SUBJECT
-      value: <SERVICE_ACCOUNT_SUBJECT>
-    - name: DAEMONSET_IP
-      valueFrom:
-        fieldRef:
-          fieldPath: status.hostIP
-    - name: DAEMONSET_PORT
-      value: "8080"
-
-  # This container demonstrates vanilla "Workload Identity Federation with Kubernetes".
-  # The custom API of the emulator shown below returns a (non-secret) JSON with a
-  # Google Credential Configuration, containing the full name of the Workload Identity
-  # Provider resource. The "gcloud auth login" command below configures the Pod with
-  # the credentials that can be acquired from the parameters contained inside this JSON
-  # file. After performing login, the container uses this authentication to make calls
-  # to the GCS API via the gsutil binary from the Google CloudSDK image below. This test
-  # demonstrates how our custom API for retrieving a Google Credential Configuration
-  # can be used to login using the gcloud CLI inside a container. This method does not
-  # require the networking configuration injected by the mutation.
-  - name: test-gcloud
-    image: google/cloud-sdk:457.0.0-slim
-    command: [/bin/bash]
-    env:
-    - name: DAEMONSET_IP
-      valueFrom:
-        fieldRef:
-          fieldPath: status.hostIP
-    - name: DAEMONSET_PORT
-      value: "8080"
-    args:
-    - -c
-    - |
-      set -ex
-
-      METADATA_ENDPOINT="http://${DAEMONSET_IP}:${DAEMONSET_PORT}"
-      CRED_CONFIG_API="/gkeMetadataEmulator/v1/pod/service-account/google-cred-config"
-      curl -H "Metadata-Flavor: Emulator" "${METADATA_ENDPOINT}${CRED_CONFIG_API}?pretty" > creds.json
-      cat creds.json
-      gcloud auth login --cred-file=creds.json
-
-      # upload a random object to gcs
-      BUCKET="gke-metadata-server-test"
-      while :; do
-        key=$(openssl rand -hex 16)
-        value=$(openssl rand -hex 16)
-        echo -n $value > ./localfile.txt
-        output=$(gsutil cp -n ./localfile.txt gs://${BUCKET}/${key} 2>&1)
-        if [[ $output == *"Skipping existing item:"* ]]; then
-          continue
-        else
-          break
-        fi
-      done
-
-      # check if upload was successful
-      if [ "$(gsutil cat gs://${BUCKET}/${key})" != "$value" ]; then
-        echo "Error: Retrieved value does not match the expected value."
-        gsutil rm gs://${BUCKET}/${key}
-        exit 1
-      fi
-      echo "Retrieved value matches the expected value. Success!"
-      gsutil rm gs://${BUCKET}/${key}

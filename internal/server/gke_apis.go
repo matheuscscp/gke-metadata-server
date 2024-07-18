@@ -23,6 +23,8 @@
 package server
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -30,6 +32,8 @@ import (
 	"github.com/matheuscscp/gke-metadata-server/internal/googlecredentials"
 	pkghttp "github.com/matheuscscp/gke-metadata-server/internal/http"
 	"github.com/matheuscscp/gke-metadata-server/internal/logging"
+
+	"google.golang.org/api/googleapi"
 )
 
 func (s *Server) gkeNodeNameAPI(w http.ResponseWriter, r *http.Request) {
@@ -98,4 +102,38 @@ func (s *Server) gkeServiceAccountTokenAPI(w http.ResponseWriter, r *http.Reques
 		"expires_in":   int(tokenDuration.Seconds()),
 		"token_type":   "Bearer",
 	})
+}
+
+func respondGoogleAPIErrorf(w http.ResponseWriter, r *http.Request, format string, err error) {
+	const oauthSubstring = "oauth2/google: status code "
+
+	statusCode := http.StatusInternalServerError
+	var bodyString string
+
+	switch apiErr, strErr := (*googleapi.Error)(nil), err.Error(); {
+	case errors.As(err, &apiErr):
+		err = apiErr
+		statusCode = apiErr.Code
+		bodyString = apiErr.Body
+	case strings.Contains(strErr, oauthSubstring):
+		strErr = strErr[strings.Index(strErr, oauthSubstring)+len(oauthSubstring):]
+		if idx := strings.Index(strErr, ":"); idx >= 0 {
+			fmt.Sscan(strErr[:idx], &statusCode)
+			bodyString = strErr[idx+2:]
+		}
+	}
+	err = fmt.Errorf(format, err)
+
+	var body any
+	if json.Unmarshal([]byte(bodyString), &body) == nil && body != nil {
+		pkghttp.RespondError(w, r, statusCode, err, body)
+		return
+	}
+
+	if bodyString != "" {
+		pkghttp.RespondError(w, r, statusCode, err, bodyString)
+		return
+	}
+
+	pkghttp.RespondError(w, r, statusCode, err)
 }
