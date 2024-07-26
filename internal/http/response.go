@@ -68,7 +68,7 @@ func RespondError(w http.ResponseWriter, r *http.Request, statusCode int, err er
 	RespondJSON(w, r, statusCode, resp)
 
 	t0 := r.Context().Value(reqStartTimeContextKey{}).(time.Time) // let this panic if a time is not present
-	l = l.WithField("latency", time.Since(t0).String())
+	l = l.WithField("latency", LatencyLogFields(t0))
 	if statusCode < 500 {
 		l.Info("client error")
 	} else {
@@ -132,6 +132,14 @@ func ResponseLogFields(statusCode int) logrus.Fields {
 	return logrus.Fields{
 		"status":      status,
 		"status_code": statusCode,
+	}
+}
+
+func LatencyLogFields(t0 time.Time) logrus.Fields {
+	latency := time.Since(t0)
+	return logrus.Fields{
+		"string": latency.String(),
+		"nanos":  latency.Nanoseconds(),
 	}
 }
 

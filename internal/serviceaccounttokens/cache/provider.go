@@ -25,7 +25,7 @@ package cacheserviceaccounttokens
 import (
 	"context"
 	"errors"
-	"strings"
+	"fmt"
 	"sync"
 	"time"
 
@@ -34,7 +34,6 @@ import (
 	"github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts"
 	"github.com/matheuscscp/gke-metadata-server/internal/serviceaccounttokens"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -62,14 +61,23 @@ type (
 
 	serviceAccount struct {
 		serviceaccounts.Reference
-		podCount              int
-		nodeIsUsing           bool
-		deleted               bool
+		podCount         int
+		nodeIsUsing      bool
+		deleted          bool
+		tokens           *tokens
+		externalRequests chan chan<- *tokensAndError
+	}
+
+	tokens struct {
 		token                 string
 		accessToken           string
 		tokenExpiration       time.Time
 		accessTokenExpiration time.Time
-		externalRequests      chan chan struct{}
+	}
+
+	tokensAndError struct {
+		tokens *tokens
+		err    error
 	}
 )
 
@@ -111,55 +119,20 @@ func (p *Provider) Close() error {
 }
 
 func (p *Provider) GetServiceAccountToken(ctx context.Context, ref *serviceaccounts.Reference) (string, time.Duration, error) {
-	p.mu.Lock()
-	sa, ok := p.serviceAccounts[*ref]
-	if !ok {
-		const podCount = 0
-		const nodeIsUsing = false
-		sa = p.addServiceAccount(ref, podCount, nodeIsUsing)
-	} else if sa.deleted {
-		p.mu.Unlock()
-		return "", 0, errServiceAccountDeleted
+	tokens, err := p.requestTokens(ctx, ref)
+	if err != nil {
+		return "", 0, err
 	}
-	p.mu.Unlock()
-
-	if sa.token == "" || time.Now().After(sa.tokenExpiration) {
-		p.cacheMisses.Inc()
-		if err := sa.wakeUpCacher(ctx); err != nil {
-			return "", 0, err
-		}
-	}
-
-	return sa.token, time.Until(sa.tokenExpiration), nil
+	return tokens.token, time.Until(tokens.tokenExpiration), nil
 }
 
 func (p *Provider) GetGoogleAccessToken(ctx context.Context, saToken, googleEmail string) (string, time.Duration, error) {
-	// here we know the token is already verified, we're only extracting the sa name
-	tok, _, _ := jwt.NewParser().ParseUnverified(saToken, jwt.MapClaims{})
-	sub, _ := tok.Claims.GetSubject()
-	s := strings.Split(sub, ":") // system:serviceaccount:{namespace}:{name}
-	ref := &serviceaccounts.Reference{Namespace: s[2], Name: s[3]}
-
-	p.mu.Lock()
-	sa, ok := p.serviceAccounts[*ref]
-	if !ok {
-		const podCount = 0
-		const nodeIsUsing = false
-		sa = p.addServiceAccount(ref, podCount, nodeIsUsing)
-	} else if sa.deleted {
-		p.mu.Unlock()
-		return "", 0, errServiceAccountDeleted
+	ref := serviceaccounts.ReferenceFromToken(saToken)
+	tokens, err := p.requestTokens(ctx, ref)
+	if err != nil {
+		return "", 0, err
 	}
-	p.mu.Unlock()
-
-	if sa.accessToken == "" || time.Now().After(sa.accessTokenExpiration) {
-		p.cacheMisses.Inc()
-		if err := sa.wakeUpCacher(ctx); err != nil {
-			return "", 0, err
-		}
-	}
-
-	return sa.accessToken, time.Until(sa.accessTokenExpiration), nil
+	return tokens.accessToken, time.Until(tokens.accessTokenExpiration), nil
 }
 
 func (p *Provider) GetGoogleIdentityToken(ctx context.Context, saToken, googleEmail, audience string) (string, time.Duration, error) {
@@ -167,20 +140,86 @@ func (p *Provider) GetGoogleIdentityToken(ctx context.Context, saToken, googleEm
 	return p.opts.Source.GetGoogleIdentityToken(ctx, saToken, googleEmail, audience)
 }
 
+func (p *Provider) requestTokens(ctx context.Context, ref *serviceaccounts.Reference) (*tokens, error) {
+	p.mu.Lock()
+	sa, ok := p.serviceAccounts[*ref]
+	if !ok {
+		const podCount = 0
+		const nodeIsUsing = false
+		sa = p.addServiceAccount(ref, podCount, nodeIsUsing)
+	} else if sa.deleted {
+		p.mu.Unlock()
+		return nil, errServiceAccountDeleted
+	}
+	p.mu.Unlock()
+
+	tokens, now := sa.tokens, time.Now()
+	if tokens == nil || now.After(tokens.tokenExpiration) || now.After(tokens.accessTokenExpiration) {
+		p.cacheMisses.Inc()
+		tokens, err := sa.requestTokens(ctx, p.ctx)
+		if err != nil {
+			return nil, err
+		}
+		return tokens, nil
+	}
+
+	return tokens, nil
+}
+
+func (s *serviceAccount) requestTokens(reqCtx, providerCtx context.Context) (*tokens, error) {
+	req := make(chan *tokensAndError, 1)
+
+	timer := time.NewTimer(time.Minute)
+	defer timer.Stop()
+
+	select {
+	case s.externalRequests <- req:
+	case <-reqCtx.Done():
+		close(req)
+		return nil, fmt.Errorf("request context done while dispatching request for service account tokens: %w",
+			reqCtx.Err())
+	case <-providerCtx.Done():
+		close(req)
+		return nil, fmt.Errorf("provider context done while dispatching request for service account tokens: %w",
+			providerCtx.Err())
+	case <-timer.C:
+		close(req)
+		return nil, fmt.Errorf("timeout while dispatching request for service account tokens")
+	}
+
+	select {
+	case resp := <-req:
+		if resp.err != nil {
+			return nil, resp.err
+		}
+		return resp.tokens, nil
+	case <-reqCtx.Done():
+		return nil, fmt.Errorf("request context done while waiting response with service account tokens: %w",
+			reqCtx.Err())
+	case <-providerCtx.Done():
+		return nil, fmt.Errorf("provider context done while waiting response with service account tokens: %w",
+			providerCtx.Err())
+	case <-timer.C:
+		return nil, fmt.Errorf("timeout while waiting response with service account tokens")
+	}
+}
+
 func (p *Provider) addServiceAccount(ref *serviceaccounts.Reference, podCount int, nodeIsUsing bool) *serviceAccount {
 	sa := &serviceAccount{
 		Reference:        *ref,
 		podCount:         podCount,
 		nodeIsUsing:      nodeIsUsing,
-		externalRequests: make(chan chan struct{}, 1),
+		externalRequests: make(chan chan<- *tokensAndError, 1),
 	}
+	p.serviceAccounts[sa.Reference] = sa
+	p.numTokens.Inc()
+
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
-		sa.cache(p)
+		p.cacheTokens(sa)
 	}()
-	p.serviceAccounts[*ref] = sa
-	p.numTokens.Inc()
+
 	return sa
 }
 
@@ -263,94 +302,148 @@ func (p *Provider) DeleteServiceAccount(ref *serviceaccounts.Reference) {
 	}
 }
 
-func (s *serviceAccount) cache(p *Provider) {
-	l := logging.FromContext(p.ctx).WithField("service_account", s.Reference)
+func (p *Provider) cacheTokens(sa *serviceAccount) (retErr error) {
+	l := logging.FromContext(p.ctx).WithField("service_account", sa.Reference)
+
+	var externalRequestsChannel <-chan chan<- *tokensAndError = sa.externalRequests
+	var externalRequests []chan<- *tokensAndError
+	sendResponse := func(resp *tokensAndError) {
+		for len(externalRequestsChannel) > 0 {
+			externalRequests = append(externalRequests, <-externalRequestsChannel)
+		}
+		for _, req := range externalRequests {
+			if req != nil {
+				req <- resp
+				close(req)
+			}
+		}
+		externalRequests = nil
+	}
+	defer sendResponse(&tokensAndError{err: retErr})
 
 	var retries int
-	var externalRequest chan struct{}
 	for {
-		p.mu.Lock()
-		if (s.podCount == 0 && !s.nodeIsUsing) || s.deleted {
-			delete(p.serviceAccounts, s.Reference)
-			p.numTokens.Dec()
-			p.mu.Unlock()
-			return
-		}
-		p.mu.Unlock()
-
-		p.semaphore <- struct{}{}
-
-		var sleepDuration time.Duration
-
-		// first, cache service account token
-		token, tokenDuration, err := p.opts.Source.GetServiceAccountToken(p.ctx, &s.Reference)
-		if err != nil {
-			sleepDuration = (1 << retries) * time.Second
-			l.WithError(err).Errorf("error creating token for kubernetes service account, will retry after %s...", sleepDuration.String())
-
-			if retries < 5 {
-				retries++
-			}
-		} else {
-			s.token, s.tokenExpiration = token, time.Now().Add(tokenDuration)
-			l.WithField("token_duration", tokenDuration.String()).Info("cached service account token")
-
-			// success, cache google access token as well
-			ksa, err := p.opts.ServiceAccounts.Get(p.ctx, &s.Reference)
-			if err != nil {
-				l.WithError(err).Error("error getting service account for caching google access token")
-			} else if email, err := serviceaccounts.GoogleEmail(ksa); err == nil {
-				l := l.WithField("google_email", email)
-				accessToken, accessTokenDuration, err := p.opts.Source.GetGoogleAccessToken(p.ctx, token, email)
-				if err != nil {
-					l.WithError(err).Error("error creating google access token from kubernetes service account token")
-				} else {
-					s.accessToken, s.accessTokenExpiration = accessToken, time.Now().Add(accessTokenDuration)
-					l.WithField("token_duration", accessTokenDuration.String()).Info("cached google access token")
-				}
-			}
-
-			// notify external request
-			if externalRequest != nil {
-				close(externalRequest)
-				externalRequest = nil
-			}
-
-			retries = 0
-
-			sleepDuration = tokenDuration
-			const safeDistance = time.Minute
-			if sleepDuration >= safeDistance {
-				sleepDuration -= safeDistance
-			}
+		if deleted := p.checkIfMustDeleteAndDelete(sa); deleted {
+			return errServiceAccountDeleted
 		}
 
+		// acquire semaphore to limit concurrency
+		select {
+		case p.semaphore <- struct{}{}:
+		case <-p.ctx.Done():
+			return fmt.Errorf("context done while acquiring semaphore: %w", p.ctx.Err())
+		}
+
+		// create tokens
+		tokens, email, err := p.createTokens(p.ctx, &sa.Reference)
+
+		// release semaphore
 		<-p.semaphore
+
+		// check if service account was deleted again since it may take some time to create tokens
+		if deleted := p.checkIfMustDeleteAndDelete(sa); deleted {
+			return errServiceAccountDeleted
+		}
+
+		// check error
+		var sleepDuration time.Duration
+		if err != nil {
+			// do not retry invalid GKE annotation errors
+			annotationMissing := errors.Is(err, serviceaccounts.ErrGKEAnnotationMissing)
+			annotationInvalid := errors.Is(err, serviceaccounts.ErrGKEAnnotationInvalid)
+			if annotationMissing || annotationInvalid {
+				sleepDuration = 10 * 365 * 24 * time.Hour // infinite
+				retries = 0
+				sendResponse(&tokensAndError{err: err})
+				if annotationMissing {
+					l.Debug("service account does not have GKE annotation, sleeping for a long time...")
+				} else {
+					l.WithError(err).Error("service account has invalid GKE annotation, will not retry")
+				}
+			} else { // retry any other error
+				sleepDuration = (1 << retries) * time.Second
+				if retries < 5 {
+					retries++
+				}
+				l.WithError(err).Errorf("error creating tokens for service account, will retry after %s...",
+					sleepDuration.String())
+			}
+		} else { // success
+			sleepDuration = tokens.sleepDurationUntilNextFetch()
+			retries = 0
+			sendResponse(&tokensAndError{tokens: tokens})
+			l.WithField("google_service_account", email).Info("cached tokens for service account")
+		}
+
+		// store tokens
+		sa.tokens = tokens
 
 		// sleep
 		t := time.NewTimer(sleepDuration)
 		select {
+		case <-t.C:
+		case req := <-externalRequestsChannel:
+			t.Stop()
+			externalRequests = append(externalRequests, req)
 		case <-p.ctx.Done():
 			t.Stop()
-			return
-		case <-t.C:
-		case externalRequest = <-s.externalRequests:
+			return fmt.Errorf("context done while waiting for next token refresh: %w", p.ctx.Err())
 		}
-		t.Stop()
 	}
 }
 
-func (s *serviceAccount) wakeUpCacher(ctx context.Context) error {
-	req := make(chan struct{})
-	select {
-	case s.externalRequests <- req:
-	case <-ctx.Done():
-		return ctx.Err()
+func (p *Provider) checkIfMustDeleteAndDelete(sa *serviceAccount) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if (sa.podCount == 0 && !sa.nodeIsUsing) || sa.deleted {
+		delete(p.serviceAccounts, sa.Reference)
+		p.numTokens.Dec()
+		return true
 	}
-	select {
-	case <-req:
-	case <-ctx.Done():
-		return ctx.Err()
+
+	return false
+}
+
+func (p *Provider) createTokens(ctx context.Context, saRef *serviceaccounts.Reference) (*tokens, string, error) {
+	now := time.Now()
+
+	sa, err := p.opts.ServiceAccounts.Get(ctx, saRef)
+	if err != nil {
+		return nil, "", fmt.Errorf("error getting kubernetes service account: %w", err)
 	}
-	return nil
+
+	email, err := serviceaccounts.GoogleEmail(sa)
+	if err != nil {
+		return nil, "", fmt.Errorf("error getting google service account from kubernetes service account: %w", err)
+	}
+
+	token, tokenDuration, err := p.opts.Source.GetServiceAccountToken(ctx, saRef)
+	if err != nil {
+		return nil, "", fmt.Errorf("error creating token for kubernetes service account: %w", err)
+	}
+
+	accessToken, accessTokenDuration, err := p.opts.Source.GetGoogleAccessToken(ctx, token, email)
+	if err != nil {
+		return nil, "", fmt.Errorf("error creating access token for google service account %s: %w", email, err)
+	}
+
+	return &tokens{
+		token:                 token,
+		accessToken:           accessToken,
+		tokenExpiration:       now.Add(tokenDuration),
+		accessTokenExpiration: now.Add(accessTokenDuration),
+	}, email, nil
+}
+
+func (t *tokens) sleepDurationUntilNextFetch() time.Duration {
+	sleepDuration := time.Until(t.tokenExpiration)
+	if d := time.Until(t.accessTokenExpiration); d < sleepDuration {
+		sleepDuration = d
+	}
+	const safeDistance = time.Minute
+	if sleepDuration >= safeDistance {
+		sleepDuration -= safeDistance
+	}
+	return sleepDuration
 }

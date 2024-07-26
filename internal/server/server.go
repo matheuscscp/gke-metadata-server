@@ -31,7 +31,6 @@ import (
 	"net/http/httptest"
 	"time"
 
-	"github.com/matheuscscp/gke-metadata-server/internal/googlecredentials"
 	pkghttp "github.com/matheuscscp/gke-metadata-server/internal/http"
 	"github.com/matheuscscp/gke-metadata-server/internal/logging"
 	"github.com/matheuscscp/gke-metadata-server/internal/metrics"
@@ -59,7 +58,6 @@ type (
 		Node                      node.Provider
 		ServiceAccounts           serviceaccounts.Provider
 		ServiceAccountTokens      serviceaccounttokens.Provider
-		GoogleCredentialsConfig   *googlecredentials.Config
 		MetricsRegistry           *prometheus.Registry
 		DefaultNodeServiceAccount *serviceaccounts.Reference
 	}
@@ -121,8 +119,8 @@ func New(ctx context.Context, opts ServerOptions) *Server {
 				statusRecorder := &pkghttp.StatusRecorder{ResponseWriter: w}
 				defer func() {
 					statusCode := fmt.Sprint(statusRecorder.StatusCode())
-					delta := time.Since(t0).Seconds() * 1000
-					latencyMillis.WithLabelValues(r.Method, r.URL.Path, statusCode).Observe(delta)
+					delta := time.Since(t0).Milliseconds()
+					latencyMillis.WithLabelValues(r.Method, r.URL.Path, statusCode).Observe(float64(delta))
 				}()
 
 				w = statusRecorder
@@ -149,7 +147,7 @@ func New(ctx context.Context, opts ServerOptions) *Server {
 					logging.
 						FromRequest(r).
 						WithFields(logrus.Fields{
-							"latency":       time.Since(t0).String(),
+							"latency":       pkghttp.LatencyLogFields(t0),
 							"http_response": pkghttp.ResponseLogFields(statusCode),
 						}).
 						Info("request")
