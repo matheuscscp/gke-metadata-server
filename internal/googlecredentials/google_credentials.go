@@ -59,11 +59,24 @@ func NewConfig(opts ConfigOptions) (*Config, error) {
 	return &Config{opts}, nil
 }
 
-func (c *Config) GetForFile(ctx context.Context, googleServiceAccountEmail, credFile string) (*google.Credentials, error) {
-	conf := c.Get(googleServiceAccountEmail, map[string]any{
-		"format": map[string]string{"type": "text"},
-		"file":   credFile,
-	})
+func (c *Config) Get(ctx context.Context, googleServiceAccountEmail, credFile string) (*google.Credentials, error) {
+	conf := map[string]any{
+		"type":               "external_account",
+		"audience":           c.WorkloadIdentityProviderAudience(),
+		"subject_token_type": "urn:ietf:params:oauth:token-type:jwt",
+		"token_url":          "https://sts.googleapis.com/v1/token",
+		"credential_source": map[string]any{
+			"format": map[string]string{"type": "text"},
+			"file":   credFile,
+		},
+		"service_account_impersonation_url": fmt.Sprintf(
+			"https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/%s:generateAccessToken",
+			googleServiceAccountEmail),
+		"service_account_impersonation": map[string]any{
+			"token_lifetime_seconds": c.TokenExpirationSeconds(),
+		},
+	}
+
 	b, err := json.Marshal(conf)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling google credentials config to json: %w", err)
@@ -73,24 +86,6 @@ func (c *Config) GetForFile(ctx context.Context, googleServiceAccountEmail, cred
 		return nil, fmt.Errorf("error creating google credentials from json: %w", err)
 	}
 	return creds, nil
-}
-
-func (c *Config) Get(googleServiceAccountEmail string, credSource map[string]any) any {
-	impersonationURL := fmt.Sprintf(
-		"https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/%s:generateAccessToken",
-		googleServiceAccountEmail)
-
-	return map[string]any{
-		"type":                              "external_account",
-		"audience":                          c.WorkloadIdentityProviderAudience(),
-		"subject_token_type":                "urn:ietf:params:oauth:token-type:jwt",
-		"token_url":                         "https://sts.googleapis.com/v1/token",
-		"credential_source":                 credSource,
-		"service_account_impersonation_url": impersonationURL,
-		"service_account_impersonation": map[string]any{
-			"token_lifetime_seconds": c.TokenExpirationSeconds(),
-		},
-	}
 }
 
 func (c *Config) WorkloadIdentityProviderAudience() string {

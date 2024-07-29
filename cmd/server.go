@@ -228,7 +228,6 @@ func newServerCommand() *cobra.Command {
 				Node:                      node,
 				ServiceAccounts:           serviceAccounts,
 				ServiceAccountTokens:      serviceAccountTokens,
-				GoogleCredentialsConfig:   googleCredentialsConfig,
 				MetricsRegistry:           metricsRegistry,
 				DefaultNodeServiceAccount: defaultNodeServiceAccount,
 			})

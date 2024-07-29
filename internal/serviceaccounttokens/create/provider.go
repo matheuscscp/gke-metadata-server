@@ -124,7 +124,7 @@ func (p *Provider) runWithGoogleCredentialsFromKubernetesServiceAccountToken(ctx
 	}
 
 	// get the credential config with k8s sa token file as the credential source
-	creds, err := p.opts.GoogleCredentialsConfig.GetForFile(ctx, email, tokenFile)
+	creds, err := p.opts.GoogleCredentialsConfig.Get(ctx, email, tokenFile)
 	if err != nil {
 		return err
 	}
