@@ -23,6 +23,7 @@
 on:
   push:
     branches: [main]
+  workflow_dispatch: # for manual trigger in the UI
 
 jobs:
   terraform-apply:
