@@ -95,24 +95,26 @@ func (p *Provider) Close() error {
 	return nil
 }
 
-func (p *Provider) GetServiceAccountToken(ctx context.Context, ref *serviceaccounts.Reference) (string, time.Duration, error) {
+func (p *Provider) GetServiceAccountToken(ctx context.Context, ref *serviceaccounts.Reference) (string, time.Time, error) {
 	tokens, err := p.requestTokens(ctx, ref)
 	if err != nil {
-		return "", 0, err
+		return "", time.Time{}, err
 	}
-	return tokens.token, time.Until(tokens.tokenExpiration), nil
+	token := tokens.serviceAccountToken
+	return token.token, token.expiration, nil
 }
 
-func (p *Provider) GetGoogleAccessToken(ctx context.Context, saToken, googleEmail string) (string, time.Duration, error) {
+func (p *Provider) GetGoogleAccessToken(ctx context.Context, saToken, googleEmail string) (string, time.Time, error) {
 	ref := serviceaccounts.ReferenceFromToken(saToken)
 	tokens, err := p.requestTokens(ctx, ref)
 	if err != nil {
-		return "", 0, err
+		return "", time.Time{}, err
 	}
-	return tokens.accessToken, time.Until(tokens.accessTokenExpiration), nil
+	token := tokens.googleAccessToken
+	return token.token, token.expiration, nil
 }
 
-func (p *Provider) GetGoogleIdentityToken(ctx context.Context, saToken, googleEmail, audience string) (string, time.Duration, error) {
+func (p *Provider) GetGoogleIdentityToken(ctx context.Context, saToken, googleEmail, audience string) (string, time.Time, error) {
 	// we dont cache identity tokens for now since they depend on external input (the target audience)
 	return p.opts.Source.GetGoogleIdentityToken(ctx, saToken, googleEmail, audience)
 }
@@ -130,8 +132,8 @@ func (p *Provider) requestTokens(ctx context.Context, ref *serviceaccounts.Refer
 	}
 	p.mu.Unlock()
 
-	tokens, now := sa.tokens, time.Now()
-	if tokens == nil || now.After(tokens.tokenExpiration) || now.After(tokens.accessTokenExpiration) {
+	tokens := sa.tokens
+	if tokens == nil || tokens.serviceAccountToken.isExpired() || tokens.googleAccessToken.isExpired() {
 		p.cacheMisses.Inc()
 		tokens, err := sa.requestTokens(ctx, p.ctx)
 		if err != nil {

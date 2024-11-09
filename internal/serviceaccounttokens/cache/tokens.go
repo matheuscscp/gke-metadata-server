@@ -30,11 +30,14 @@ import (
 	"github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts"
 )
 
+type tokenAndExpiration struct {
+	token      string
+	expiration time.Time
+}
+
 type tokens struct {
-	token                 string
-	accessToken           string
-	tokenExpiration       time.Time
-	accessTokenExpiration time.Time
+	serviceAccountToken *tokenAndExpiration
+	googleAccessToken   *tokenAndExpiration
 }
 
 type tokensAndError struct {
@@ -43,8 +46,6 @@ type tokensAndError struct {
 }
 
 func (p *Provider) createTokens(ctx context.Context, saRef *serviceaccounts.Reference) (*tokens, string, error) {
-	now := time.Now()
-
 	sa, err := p.opts.ServiceAccounts.Get(ctx, saRef)
 	if err != nil {
 		return nil, "", fmt.Errorf("error getting kubernetes service account: %w", err)
@@ -55,27 +56,35 @@ func (p *Provider) createTokens(ctx context.Context, saRef *serviceaccounts.Refe
 		return nil, "", fmt.Errorf("error getting google service account from kubernetes service account: %w", err)
 	}
 
-	token, tokenDuration, err := p.opts.Source.GetServiceAccountToken(ctx, saRef)
+	saToken, saTokenExpiration, err := p.opts.Source.GetServiceAccountToken(ctx, saRef)
 	if err != nil {
 		return nil, "", fmt.Errorf("error creating token for kubernetes service account: %w", err)
 	}
 
-	accessToken, accessTokenDuration, err := p.opts.Source.GetGoogleAccessToken(ctx, token, email)
+	accessToken, accessTokenExpiration, err := p.opts.Source.GetGoogleAccessToken(ctx, saToken, email)
 	if err != nil {
 		return nil, "", fmt.Errorf("error creating access token for google service account %s: %w", email, err)
 	}
 
 	return &tokens{
-		token:                 token,
-		accessToken:           accessToken,
-		tokenExpiration:       now.Add(tokenDuration),
-		accessTokenExpiration: now.Add(accessTokenDuration),
+		serviceAccountToken: &tokenAndExpiration{
+			token:      saToken,
+			expiration: saTokenExpiration,
+		},
+		googleAccessToken: &tokenAndExpiration{
+			token:      accessToken,
+			expiration: accessTokenExpiration,
+		},
 	}, email, nil
 }
 
+func (t *tokenAndExpiration) isExpired() bool {
+	return time.Now().After(t.expiration)
+}
+
 func (t *tokens) sleepDurationUntilNextFetch() time.Duration {
-	sleepDuration := time.Until(t.tokenExpiration)
-	if d := time.Until(t.accessTokenExpiration); d < sleepDuration {
+	sleepDuration := time.Until(t.serviceAccountToken.expiration)
+	if d := time.Until(t.googleAccessToken.expiration); d < sleepDuration {
 		sleepDuration = d
 	}
 	const safeDistance = time.Minute
