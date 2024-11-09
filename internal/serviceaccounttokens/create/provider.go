@@ -58,7 +58,7 @@ func NewProvider(opts ProviderOptions) serviceaccounttokens.Provider {
 
 func (p *Provider) GetServiceAccountToken(ctx context.Context, ref *serviceaccounts.Reference) (string, time.Duration, error) {
 	expSecs := int64(p.opts.GoogleCredentialsConfig.TokenExpirationSeconds())
-	resp, err := p.opts.
+	tokenRequest, err := p.opts.
 		KubeClient.
 		CoreV1().
 		ServiceAccounts(ref.Namespace).
@@ -71,7 +71,8 @@ func (p *Provider) GetServiceAccountToken(ctx context.Context, ref *serviceaccou
 	if err != nil {
 		return "", 0, err
 	}
-	return resp.Status.Token, time.Duration(expSecs) * time.Second, nil
+	status := tokenRequest.Status
+	return status.Token, time.Until(status.ExpirationTimestamp.Time), nil
 }
 
 func (p *Provider) GetGoogleAccessToken(ctx context.Context, saToken, googleEmail string) (string, time.Duration, error) {
