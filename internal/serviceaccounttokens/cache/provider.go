@@ -101,7 +101,7 @@ func (p *Provider) GetServiceAccountToken(ctx context.Context, ref *serviceaccou
 		return "", time.Time{}, err
 	}
 	token := tokens.serviceAccountToken
-	return token.token, token.expiration, nil
+	return token.token, token.expiration(), nil
 }
 
 func (p *Provider) GetGoogleAccessToken(ctx context.Context, saToken, googleEmail string) (string, time.Time, error) {
@@ -111,7 +111,7 @@ func (p *Provider) GetGoogleAccessToken(ctx context.Context, saToken, googleEmai
 		return "", time.Time{}, err
 	}
 	token := tokens.googleAccessToken
-	return token.token, token.expiration, nil
+	return token.token, token.expiration(), nil
 }
 
 func (p *Provider) GetGoogleIdentityToken(ctx context.Context, saToken, googleEmail, audience string) (string, time.Time, error) {
@@ -212,7 +212,11 @@ func (p *Provider) cacheTokens(sa *serviceAccount) (retErr error) {
 					sleepDuration.String())
 			}
 		} else { // success
-			sleepDuration = tokens.sleepDurationUntilNextFetch()
+			sleepDuration = tokens.timeUntilExpiration()
+			const safeDistance = time.Minute
+			if sleepDuration >= safeDistance {
+				sleepDuration -= safeDistance
+			}
 			retries = 0
 			sendResponse(&tokensAndError{tokens: tokens})
 			l.WithField("google_service_account", email).Info("cached tokens for service account")

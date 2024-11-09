@@ -31,8 +31,9 @@ import (
 )
 
 type tokenAndExpiration struct {
-	token      string
-	expiration time.Time
+	token               string
+	monotonicExpiration time.Time
+	wallClockExpiration time.Time
 }
 
 type tokens struct {
@@ -67,29 +68,38 @@ func (p *Provider) createTokens(ctx context.Context, saRef *serviceaccounts.Refe
 	}
 
 	return &tokens{
-		serviceAccountToken: &tokenAndExpiration{
-			token:      saToken,
-			expiration: saTokenExpiration,
-		},
-		googleAccessToken: &tokenAndExpiration{
-			token:      accessToken,
-			expiration: accessTokenExpiration,
-		},
+		serviceAccountToken: newTokenAndExpiration(saToken, saTokenExpiration),
+		googleAccessToken:   newTokenAndExpiration(accessToken, accessTokenExpiration),
 	}, email, nil
 }
 
-func (t *tokenAndExpiration) isExpired() bool {
-	return time.Now().After(t.expiration)
+func newTokenAndExpiration(token string, monotonicExpiration time.Time) *tokenAndExpiration {
+	return &tokenAndExpiration{
+		token:               token,
+		monotonicExpiration: monotonicExpiration,
+		wallClockExpiration: time.Unix(monotonicExpiration.Unix(), 0),
+	}
 }
 
-func (t *tokens) sleepDurationUntilNextFetch() time.Duration {
-	sleepDuration := time.Until(t.serviceAccountToken.expiration)
-	if d := time.Until(t.googleAccessToken.expiration); d < sleepDuration {
-		sleepDuration = d
+func (t *tokenAndExpiration) expiration() time.Time {
+	if time.Until(t.monotonicExpiration) < time.Until(t.wallClockExpiration) {
+		return t.monotonicExpiration
 	}
-	const safeDistance = time.Minute
-	if sleepDuration >= safeDistance {
-		sleepDuration -= safeDistance
+	return t.wallClockExpiration
+}
+
+func (t *tokenAndExpiration) timeUntilExpiration() time.Duration {
+	return time.Until(t.expiration())
+}
+
+func (t *tokenAndExpiration) isExpired() bool {
+	return t.timeUntilExpiration() <= 0
+}
+
+func (t *tokens) timeUntilExpiration() time.Duration {
+	d := t.serviceAccountToken.timeUntilExpiration()
+	if google := t.googleAccessToken.timeUntilExpiration(); google < d {
+		d = google
 	}
-	return sleepDuration
+	return d
 }
