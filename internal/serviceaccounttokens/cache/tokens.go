@@ -46,6 +46,11 @@ type tokensAndError struct {
 	err    error
 }
 
+type googleIDTokenReference struct {
+	email    string
+	audience string
+}
+
 func (p *Provider) createTokens(ctx context.Context, saRef *serviceaccounts.Reference) (*tokens, string, error) {
 	sa, err := p.opts.ServiceAccounts.Get(ctx, saRef)
 	if err != nil {
@@ -68,12 +73,12 @@ func (p *Provider) createTokens(ctx context.Context, saRef *serviceaccounts.Refe
 	}
 
 	return &tokens{
-		serviceAccountToken: newTokenAndExpiration(saToken, saTokenExpiration),
-		googleAccessToken:   newTokenAndExpiration(accessToken, accessTokenExpiration),
+		serviceAccountToken: newToken(saToken, saTokenExpiration),
+		googleAccessToken:   newToken(accessToken, accessTokenExpiration),
 	}, email, nil
 }
 
-func newTokenAndExpiration(token string, monotonicExpiration time.Time) *tokenAndExpiration {
+func newToken(token string, monotonicExpiration time.Time) *tokenAndExpiration {
 	return &tokenAndExpiration{
 		token:               token,
 		monotonicExpiration: monotonicExpiration,

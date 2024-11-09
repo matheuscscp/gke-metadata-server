@@ -42,10 +42,12 @@ type Provider struct {
 	numTokens             prometheus.Gauge
 	cacheMisses           prometheus.Counter
 	serviceAccounts       map[serviceaccounts.Reference]*serviceAccount
+	googleIDTokens        map[googleIDTokenReference]*tokenAndExpiration
 	nodeServiceAccountRef *serviceaccounts.Reference
 	ctx                   context.Context
 	cancelCtx             context.CancelFunc
-	mu                    sync.Mutex
+	serviceAccountsMutex  sync.Mutex
+	googleIDTokensMutex   sync.RWMutex
 	wg                    sync.WaitGroup
 	semaphore             chan struct{}
 }
@@ -76,17 +78,44 @@ func NewProvider(ctx context.Context, opts ProviderOptions) *Provider {
 	})
 	opts.MetricsRegistry.MustRegister(cacheMisses)
 
-	newCtxWithLogger := logging.IntoContext(context.Background(), logging.FromContext(ctx))
-	ctx, cancel := context.WithCancel(newCtxWithLogger)
-	return &Provider{
+	// create a new background context for the goroutines with logging from the parent context
+	backgroundCtx := logging.IntoContext(context.Background(), logging.FromContext(ctx))
+	backgroundCtx, cancel := context.WithCancel(backgroundCtx)
+
+	p := &Provider{
 		opts:            opts,
 		numTokens:       numTokens,
 		cacheMisses:     cacheMisses,
 		serviceAccounts: make(map[serviceaccounts.Reference]*serviceAccount),
-		ctx:             ctx,
+		googleIDTokens:  make(map[googleIDTokenReference]*tokenAndExpiration),
+		ctx:             backgroundCtx,
 		cancelCtx:       cancel,
 		semaphore:       make(chan struct{}, opts.Concurrency),
 	}
+
+	// start garbage collector for google ID tokens
+	p.wg.Add(1)
+	go func() {
+		defer p.wg.Done()
+		for {
+			sleep := time.NewTimer(time.Minute)
+			select {
+			case <-p.ctx.Done():
+				sleep.Stop()
+				return
+			case <-sleep.C:
+				p.googleIDTokensMutex.Lock()
+				for ref, token := range p.googleIDTokens {
+					if token.isExpired() {
+						delete(p.googleIDTokens, ref)
+					}
+				}
+				p.googleIDTokensMutex.Unlock()
+			}
+		}
+	}()
+
+	return p
 }
 
 func (p *Provider) Close() error {
@@ -96,7 +125,7 @@ func (p *Provider) Close() error {
 }
 
 func (p *Provider) GetServiceAccountToken(ctx context.Context, ref *serviceaccounts.Reference) (string, time.Time, error) {
-	tokens, err := p.requestTokens(ctx, ref)
+	tokens, err := p.getTokens(ctx, ref)
 	if err != nil {
 		return "", time.Time{}, err
 	}
@@ -106,7 +135,7 @@ func (p *Provider) GetServiceAccountToken(ctx context.Context, ref *serviceaccou
 
 func (p *Provider) GetGoogleAccessToken(ctx context.Context, saToken, googleEmail string) (string, time.Time, error) {
 	ref := serviceaccounts.ReferenceFromToken(saToken)
-	tokens, err := p.requestTokens(ctx, ref)
+	tokens, err := p.getTokens(ctx, ref)
 	if err != nil {
 		return "", time.Time{}, err
 	}
@@ -115,34 +144,41 @@ func (p *Provider) GetGoogleAccessToken(ctx context.Context, saToken, googleEmai
 }
 
 func (p *Provider) GetGoogleIdentityToken(ctx context.Context, saToken, googleEmail, audience string) (string, time.Time, error) {
-	// we dont cache identity tokens for now since they depend on external input (the target audience)
-	return p.opts.Source.GetGoogleIdentityToken(ctx, saToken, googleEmail, audience)
-}
+	ref := googleIDTokenReference{email: googleEmail, audience: audience}
 
-func (p *Provider) requestTokens(ctx context.Context, ref *serviceaccounts.Reference) (*tokens, error) {
-	p.mu.Lock()
-	sa, ok := p.serviceAccounts[*ref]
-	if !ok {
-		const podCount = 0
-		const nodeIsUsing = false
-		sa = p.addServiceAccount(ref, podCount, nodeIsUsing)
-	} else if sa.deleted {
-		p.mu.Unlock()
-		return nil, errServiceAccountDeleted
-	}
-	p.mu.Unlock()
-
-	tokens := sa.tokens
-	if tokens == nil || tokens.serviceAccountToken.isExpired() || tokens.googleAccessToken.isExpired() {
-		p.cacheMisses.Inc()
-		tokens, err := sa.requestTokens(ctx, p.ctx)
-		if err != nil {
-			return nil, err
-		}
-		return tokens, nil
+	// check cache first
+	p.googleIDTokensMutex.RLock()
+	token, ok := p.googleIDTokens[ref]
+	p.googleIDTokensMutex.RUnlock()
+	if ok && !token.isExpired() {
+		return token.token, token.expiration(), nil
 	}
 
-	return tokens, nil
+	// cache miss or token expired. need to cache a new token, so acquire semaphore to limit concurrency
+	select {
+	case p.semaphore <- struct{}{}:
+	case <-ctx.Done():
+		return "", time.Time{}, fmt.Errorf("request context done while acquiring semaphore: %w", ctx.Err())
+	case <-p.ctx.Done():
+		return "", time.Time{}, fmt.Errorf("process terminated while acquiring semaphore: %w", p.ctx.Err())
+	}
+
+	tokenString, expiration, err := p.opts.Source.GetGoogleIdentityToken(ctx, saToken, googleEmail, audience)
+
+	// release concurrency semaphore
+	<-p.semaphore
+
+	// check error
+	if err != nil {
+		return "", time.Time{}, err
+	}
+
+	// token issued successfully. cache it and return
+	token = newToken(tokenString, expiration)
+	p.googleIDTokensMutex.Lock()
+	p.googleIDTokens[ref] = token
+	p.googleIDTokensMutex.Unlock()
+	return token.token, token.expiration(), nil
 }
 
 func (p *Provider) cacheTokens(sa *serviceAccount) (retErr error) {

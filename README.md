@@ -226,6 +226,19 @@ this endpoint to implement such features. Especially when mutating Pods that wil
 on the host network, *the rules will be installed on the network namespace of the Node!*
 Please be sure to know what you are doing when using this tool inside complex environments.
 
+### Token Caching
+
+When the emulator is configured to cache tokens, the issued Google OAuth 2.0 Access and
+OpenID Connect Identity Tokens are kept and returned to client Pods until their expiration.
+
+This means that if even you remove the required permissions for the Kubernetes ServiceAccount
+to issue those tokens, the client Pods will still get those tokens from the emulator until
+they expire. This is a limitation of how the permissions are evaluated: they are evaluated
+only when the tokens are issued, which is what caching tries to avoid. If your use case
+requires immediate revocation of permissions, then you should not use token caching.
+
+Tokens usually expire in 1 hour.
+
 ## Disclaimer
 
 This project was not created by Google. Enterprise support from Google is
