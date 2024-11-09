@@ -232,7 +232,7 @@ When the emulator is configured to cache tokens, the issued Google OAuth 2.0 Acc
 OpenID Connect Identity Tokens are cached and returned to client Pods on every request
 until their expiration.
 
-This means that even if you remove the required permissions for the Kubernetes ServiceAccount
+This means that even if you revoke the required permissions for the Kubernetes ServiceAccount
 to issue those tokens, the client Pods will still get those tokens from the emulator until
 they expire. This is a limitation of how the permissions are evaluated: they are evaluated
 only when the tokens are issued, which is what caching tries to avoid. If your use case
