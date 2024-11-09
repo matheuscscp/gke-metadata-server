@@ -229,7 +229,8 @@ Please be sure to know what you are doing when using this tool inside complex en
 ### Token Caching
 
 When the emulator is configured to cache tokens, the issued Google OAuth 2.0 Access and
-OpenID Connect Identity Tokens are kept and returned to client Pods until their expiration.
+OpenID Connect Identity Tokens are cached and returned to client Pods on every request
+until their expiration.
 
 This means that if even you remove the required permissions for the Kubernetes ServiceAccount
 to issue those tokens, the client Pods will still get those tokens from the emulator until
