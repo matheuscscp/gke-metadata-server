@@ -25,7 +25,6 @@ package cacheserviceaccounttokens
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts"
 )
@@ -42,9 +41,6 @@ type serviceAccount struct {
 func (s *serviceAccount) requestTokens(reqCtx, providerCtx context.Context) (*tokens, error) {
 	req := make(chan *tokensAndError, 1)
 
-	timer := time.NewTimer(time.Minute)
-	defer timer.Stop()
-
 	select {
 	case s.externalRequests <- req:
 	case <-reqCtx.Done():
@@ -55,9 +51,6 @@ func (s *serviceAccount) requestTokens(reqCtx, providerCtx context.Context) (*to
 		close(req)
 		return nil, fmt.Errorf("provider context done while dispatching request for service account tokens: %w",
 			providerCtx.Err())
-	case <-timer.C:
-		close(req)
-		return nil, fmt.Errorf("timeout while dispatching request for service account tokens")
 	}
 
 	select {
@@ -72,8 +65,6 @@ func (s *serviceAccount) requestTokens(reqCtx, providerCtx context.Context) (*to
 	case <-providerCtx.Done():
 		return nil, fmt.Errorf("provider context done while waiting response with service account tokens: %w",
 			providerCtx.Err())
-	case <-timer.C:
-		return nil, fmt.Errorf("timeout while waiting response with service account tokens")
 	}
 }
 
