@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/matheuscscp/gke-metadata-server/internal/googlecredentials"
 	pkghttp "github.com/matheuscscp/gke-metadata-server/internal/http"
@@ -91,7 +92,7 @@ func (s *Server) gkeServiceAccountTokenAPI(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		return
 	}
-	token, tokenDuration, err := s.opts.ServiceAccountTokens.GetGoogleAccessToken(
+	token, expiresAt, err := s.opts.ServiceAccountTokens.GetGoogleAccessToken(
 		r.Context(), saToken, podGoogleServiceAccountEmail)
 	if err != nil {
 		respondGoogleAPIErrorf(w, r, "error getting google access token: %w", err)
@@ -99,7 +100,7 @@ func (s *Server) gkeServiceAccountTokenAPI(w http.ResponseWriter, r *http.Reques
 	}
 	pkghttp.RespondJSON(w, r, http.StatusOK, map[string]any{
 		"access_token": token,
-		"expires_in":   int(tokenDuration.Seconds()),
+		"expires_in":   int(time.Until(expiresAt).Seconds()),
 		"token_type":   "Bearer",
 	})
 }

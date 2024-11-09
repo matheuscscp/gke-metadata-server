@@ -56,9 +56,9 @@ func NewProvider(opts ProviderOptions) serviceaccounttokens.Provider {
 	return &Provider{opts}
 }
 
-func (p *Provider) GetServiceAccountToken(ctx context.Context, ref *serviceaccounts.Reference) (string, time.Duration, error) {
+func (p *Provider) GetServiceAccountToken(ctx context.Context, ref *serviceaccounts.Reference) (string, time.Time, error) {
 	expSecs := int64(p.opts.GoogleCredentialsConfig.TokenExpirationSeconds())
-	resp, err := p.opts.
+	tokenRequest, err := p.opts.
 		KubeClient.
 		CoreV1().
 		ServiceAccounts(ref.Namespace).
@@ -69,24 +69,25 @@ func (p *Provider) GetServiceAccountToken(ctx context.Context, ref *serviceaccou
 			},
 		}, metav1.CreateOptions{})
 	if err != nil {
-		return "", 0, err
+		return "", time.Time{}, err
 	}
-	return resp.Status.Token, time.Duration(expSecs) * time.Second, nil
+	status := tokenRequest.Status
+	return status.Token, status.ExpirationTimestamp.Time, nil
 }
 
-func (p *Provider) GetGoogleAccessToken(ctx context.Context, saToken, googleEmail string) (string, time.Duration, error) {
+func (p *Provider) GetGoogleAccessToken(ctx context.Context, saToken, googleEmail string) (string, time.Time, error) {
 	var token *oauth2.Token
 	err := p.runWithGoogleCredentialsFromKubernetesServiceAccountToken(ctx, saToken, googleEmail, func(ctx context.Context, c *google.Credentials) (err error) {
 		token, err = c.TokenSource.Token()
 		return
 	})
 	if err != nil {
-		return "", 0, err
+		return "", time.Time{}, err
 	}
-	return token.AccessToken, time.Until(token.Expiry), nil
+	return token.AccessToken, token.Expiry, nil
 }
 
-func (p *Provider) GetGoogleIdentityToken(ctx context.Context, saToken, googleEmail, audience string) (string, time.Duration, error) {
+func (p *Provider) GetGoogleIdentityToken(ctx context.Context, saToken, googleEmail, audience string) (string, time.Time, error) {
 	var token *oauth2.Token
 	err := p.runWithGoogleCredentialsFromKubernetesServiceAccountToken(ctx, saToken, googleEmail, func(ctx context.Context, c *google.Credentials) (err error) {
 		source, err := idtoken.NewTokenSource(ctx, audience, option.WithCredentials(c))
@@ -97,9 +98,9 @@ func (p *Provider) GetGoogleIdentityToken(ctx context.Context, saToken, googleEm
 		return
 	})
 	if err != nil {
-		return "", 0, err
+		return "", time.Time{}, err
 	}
-	return token.AccessToken, time.Until(token.Expiry), nil
+	return token.AccessToken, token.Expiry, nil
 }
 
 // runWithGoogleCredentialsFromKubernetesServiceAccountToken creates
