@@ -38,6 +38,32 @@ type serviceAccount struct {
 	externalRequests chan chan<- *tokensAndError
 }
 
+func (p *Provider) getTokens(ctx context.Context, ref *serviceaccounts.Reference) (*tokens, error) {
+	p.serviceAccountsMutex.Lock()
+	sa, ok := p.serviceAccounts[*ref]
+	if !ok {
+		const podCount = 0
+		const nodeIsUsing = false
+		sa = p.addServiceAccount(ref, podCount, nodeIsUsing)
+	} else if sa.deleted {
+		p.serviceAccountsMutex.Unlock()
+		return nil, errServiceAccountDeleted
+	}
+	p.serviceAccountsMutex.Unlock()
+
+	tokens := sa.tokens
+	if tokens == nil || tokens.serviceAccountToken.isExpired() || tokens.googleAccessToken.isExpired() {
+		p.cacheMisses.Inc()
+		tokens, err := sa.requestTokens(ctx, p.ctx)
+		if err != nil {
+			return nil, err
+		}
+		return tokens, nil
+	}
+
+	return tokens, nil
+}
+
 func (s *serviceAccount) requestTokens(reqCtx, providerCtx context.Context) (*tokens, error) {
 	req := make(chan *tokensAndError, 1)
 
@@ -49,7 +75,7 @@ func (s *serviceAccount) requestTokens(reqCtx, providerCtx context.Context) (*to
 			reqCtx.Err())
 	case <-providerCtx.Done():
 		close(req)
-		return nil, fmt.Errorf("provider context done while dispatching request for service account tokens: %w",
+		return nil, fmt.Errorf("process terminated while dispatching request for service account tokens: %w",
 			providerCtx.Err())
 	}
 
@@ -63,7 +89,7 @@ func (s *serviceAccount) requestTokens(reqCtx, providerCtx context.Context) (*to
 		return nil, fmt.Errorf("request context done while waiting response with service account tokens: %w",
 			reqCtx.Err())
 	case <-providerCtx.Done():
-		return nil, fmt.Errorf("provider context done while waiting response with service account tokens: %w",
+		return nil, fmt.Errorf("process terminated while waiting response with service account tokens: %w",
 			providerCtx.Err())
 	}
 }
@@ -88,8 +114,8 @@ func (p *Provider) addServiceAccount(ref *serviceaccounts.Reference, podCount in
 }
 
 func (p *Provider) AddPodServiceAccount(ref *serviceaccounts.Reference) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	p.serviceAccountsMutex.Lock()
+	defer p.serviceAccountsMutex.Unlock()
 
 	if sa, ok := p.serviceAccounts[*ref]; ok {
 		sa.podCount++
@@ -102,8 +128,8 @@ func (p *Provider) AddPodServiceAccount(ref *serviceaccounts.Reference) {
 }
 
 func (p *Provider) DeletePodServiceAccount(ref *serviceaccounts.Reference) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	p.serviceAccountsMutex.Lock()
+	defer p.serviceAccountsMutex.Unlock()
 
 	if sa, ok := p.serviceAccounts[*ref]; ok && sa.podCount > 0 {
 		sa.podCount--
@@ -111,8 +137,8 @@ func (p *Provider) DeletePodServiceAccount(ref *serviceaccounts.Reference) {
 }
 
 func (p *Provider) UpdateNodeServiceAccount(ref *serviceaccounts.Reference) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	p.serviceAccountsMutex.Lock()
+	defer p.serviceAccountsMutex.Unlock()
 
 	if cur := p.nodeServiceAccountRef; cur != nil {
 		if *cur == *ref {
@@ -135,8 +161,8 @@ func (p *Provider) UpdateNodeServiceAccount(ref *serviceaccounts.Reference) {
 }
 
 func (p *Provider) UpdateServiceAccount(ref *serviceaccounts.Reference) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	p.serviceAccountsMutex.Lock()
+	defer p.serviceAccountsMutex.Unlock()
 
 	sa, ok := p.serviceAccounts[*ref]
 	if !ok {
@@ -151,8 +177,8 @@ func (p *Provider) UpdateServiceAccount(ref *serviceaccounts.Reference) {
 }
 
 func (p *Provider) DeleteServiceAccount(ref *serviceaccounts.Reference) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	p.serviceAccountsMutex.Lock()
+	defer p.serviceAccountsMutex.Unlock()
 
 	sa, ok := p.serviceAccounts[*ref]
 	if !ok {
@@ -167,8 +193,8 @@ func (p *Provider) DeleteServiceAccount(ref *serviceaccounts.Reference) {
 }
 
 func (p *Provider) checkIfMustDeleteAndDelete(sa *serviceAccount) bool {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	p.serviceAccountsMutex.Lock()
+	defer p.serviceAccountsMutex.Unlock()
 
 	if (sa.podCount == 0 && !sa.nodeIsUsing) || sa.deleted {
 		delete(p.serviceAccounts, sa.Reference)
