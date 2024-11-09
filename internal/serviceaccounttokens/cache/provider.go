@@ -144,7 +144,8 @@ func (p *Provider) GetGoogleAccessToken(ctx context.Context, saToken, googleEmai
 }
 
 func (p *Provider) GetGoogleIdentityToken(ctx context.Context, saToken, googleEmail, audience string) (string, time.Time, error) {
-	ref := googleIDTokenReference{email: googleEmail, audience: audience}
+	saRef := serviceaccounts.ReferenceFromToken(saToken)
+	ref := googleIDTokenReference{*saRef, googleEmail, audience}
 
 	// check cache first
 	p.googleIDTokensMutex.RLock()

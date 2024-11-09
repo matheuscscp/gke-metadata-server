@@ -47,8 +47,9 @@ type tokensAndError struct {
 }
 
 type googleIDTokenReference struct {
-	email    string
-	audience string
+	serviceAccountRefernce serviceaccounts.Reference
+	email                  string
+	audience               string
 }
 
 func (p *Provider) createTokens(ctx context.Context, saRef *serviceaccounts.Reference) (*tokens, string, error) {
