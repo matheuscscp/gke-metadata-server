@@ -37,49 +37,26 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-type (
-	Provider struct {
-		opts                  ProviderOptions
-		numTokens             prometheus.Gauge
-		cacheMisses           prometheus.Counter
-		serviceAccounts       map[serviceaccounts.Reference]*serviceAccount
-		nodeServiceAccountRef *serviceaccounts.Reference
-		ctx                   context.Context
-		cancelCtx             context.CancelFunc
-		mu                    sync.Mutex
-		wg                    sync.WaitGroup
-		semaphore             chan struct{}
-	}
+type Provider struct {
+	opts                  ProviderOptions
+	numTokens             prometheus.Gauge
+	cacheMisses           prometheus.Counter
+	serviceAccounts       map[serviceaccounts.Reference]*serviceAccount
+	nodeServiceAccountRef *serviceaccounts.Reference
+	ctx                   context.Context
+	cancelCtx             context.CancelFunc
+	mu                    sync.Mutex
+	wg                    sync.WaitGroup
+	semaphore             chan struct{}
+}
 
-	ProviderOptions struct {
-		Source           serviceaccounttokens.Provider
-		ServiceAccounts  serviceaccounts.Provider
-		MetricsSubsystem string
-		MetricsRegistry  *prometheus.Registry
-		Concurrency      int
-	}
-
-	serviceAccount struct {
-		serviceaccounts.Reference
-		podCount         int
-		nodeIsUsing      bool
-		deleted          bool
-		tokens           *tokens
-		externalRequests chan chan<- *tokensAndError
-	}
-
-	tokens struct {
-		token                 string
-		accessToken           string
-		tokenExpiration       time.Time
-		accessTokenExpiration time.Time
-	}
-
-	tokensAndError struct {
-		tokens *tokens
-		err    error
-	}
-)
+type ProviderOptions struct {
+	Source           serviceaccounttokens.Provider
+	ServiceAccounts  serviceaccounts.Provider
+	MetricsSubsystem string
+	MetricsRegistry  *prometheus.Registry
+	Concurrency      int
+}
 
 var errServiceAccountDeleted = errors.New("service account was deleted")
 
@@ -164,142 +141,6 @@ func (p *Provider) requestTokens(ctx context.Context, ref *serviceaccounts.Refer
 	}
 
 	return tokens, nil
-}
-
-func (s *serviceAccount) requestTokens(reqCtx, providerCtx context.Context) (*tokens, error) {
-	req := make(chan *tokensAndError, 1)
-
-	timer := time.NewTimer(time.Minute)
-	defer timer.Stop()
-
-	select {
-	case s.externalRequests <- req:
-	case <-reqCtx.Done():
-		close(req)
-		return nil, fmt.Errorf("request context done while dispatching request for service account tokens: %w",
-			reqCtx.Err())
-	case <-providerCtx.Done():
-		close(req)
-		return nil, fmt.Errorf("provider context done while dispatching request for service account tokens: %w",
-			providerCtx.Err())
-	case <-timer.C:
-		close(req)
-		return nil, fmt.Errorf("timeout while dispatching request for service account tokens")
-	}
-
-	select {
-	case resp := <-req:
-		if resp.err != nil {
-			return nil, resp.err
-		}
-		return resp.tokens, nil
-	case <-reqCtx.Done():
-		return nil, fmt.Errorf("request context done while waiting response with service account tokens: %w",
-			reqCtx.Err())
-	case <-providerCtx.Done():
-		return nil, fmt.Errorf("provider context done while waiting response with service account tokens: %w",
-			providerCtx.Err())
-	case <-timer.C:
-		return nil, fmt.Errorf("timeout while waiting response with service account tokens")
-	}
-}
-
-func (p *Provider) addServiceAccount(ref *serviceaccounts.Reference, podCount int, nodeIsUsing bool) *serviceAccount {
-	sa := &serviceAccount{
-		Reference:        *ref,
-		podCount:         podCount,
-		nodeIsUsing:      nodeIsUsing,
-		externalRequests: make(chan chan<- *tokensAndError, 1),
-	}
-	p.serviceAccounts[sa.Reference] = sa
-	p.numTokens.Inc()
-
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
-		p.cacheTokens(sa)
-	}()
-
-	return sa
-}
-
-func (p *Provider) AddPodServiceAccount(ref *serviceaccounts.Reference) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	if sa, ok := p.serviceAccounts[*ref]; ok {
-		sa.podCount++
-		return
-	}
-
-	const podCount = 1
-	const nodeIsUsing = false
-	p.addServiceAccount(ref, podCount, nodeIsUsing)
-}
-
-func (p *Provider) DeletePodServiceAccount(ref *serviceaccounts.Reference) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	if sa, ok := p.serviceAccounts[*ref]; ok && sa.podCount > 0 {
-		sa.podCount--
-	}
-}
-
-func (p *Provider) UpdateNodeServiceAccount(ref *serviceaccounts.Reference) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	if cur := p.nodeServiceAccountRef; cur != nil {
-		if *cur == *ref {
-			return
-		}
-		if sa, ok := p.serviceAccounts[*cur]; ok {
-			sa.nodeIsUsing = false
-		}
-	}
-	p.nodeServiceAccountRef = ref
-
-	if sa, ok := p.serviceAccounts[*ref]; ok {
-		sa.nodeIsUsing = true
-		return
-	}
-
-	const podCount = 0
-	const nodeIsUsing = true
-	p.addServiceAccount(ref, podCount, nodeIsUsing)
-}
-
-func (p *Provider) UpdateServiceAccount(ref *serviceaccounts.Reference) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	sa, ok := p.serviceAccounts[*ref]
-	if !ok {
-		return
-	}
-	sa.deleted = false
-
-	select {
-	case sa.externalRequests <- nil:
-	default:
-	}
-}
-
-func (p *Provider) DeleteServiceAccount(ref *serviceaccounts.Reference) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	sa, ok := p.serviceAccounts[*ref]
-	if !ok {
-		return
-	}
-	sa.deleted = true
-
-	select {
-	case sa.externalRequests <- nil:
-	default:
-	}
 }
 
 func (p *Provider) cacheTokens(sa *serviceAccount) (retErr error) {
@@ -390,60 +231,4 @@ func (p *Provider) cacheTokens(sa *serviceAccount) (retErr error) {
 			return fmt.Errorf("context done while waiting for next token refresh: %w", p.ctx.Err())
 		}
 	}
-}
-
-func (p *Provider) checkIfMustDeleteAndDelete(sa *serviceAccount) bool {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	if (sa.podCount == 0 && !sa.nodeIsUsing) || sa.deleted {
-		delete(p.serviceAccounts, sa.Reference)
-		p.numTokens.Dec()
-		return true
-	}
-
-	return false
-}
-
-func (p *Provider) createTokens(ctx context.Context, saRef *serviceaccounts.Reference) (*tokens, string, error) {
-	now := time.Now()
-
-	sa, err := p.opts.ServiceAccounts.Get(ctx, saRef)
-	if err != nil {
-		return nil, "", fmt.Errorf("error getting kubernetes service account: %w", err)
-	}
-
-	email, err := serviceaccounts.GoogleEmail(sa)
-	if err != nil {
-		return nil, "", fmt.Errorf("error getting google service account from kubernetes service account: %w", err)
-	}
-
-	token, tokenDuration, err := p.opts.Source.GetServiceAccountToken(ctx, saRef)
-	if err != nil {
-		return nil, "", fmt.Errorf("error creating token for kubernetes service account: %w", err)
-	}
-
-	accessToken, accessTokenDuration, err := p.opts.Source.GetGoogleAccessToken(ctx, token, email)
-	if err != nil {
-		return nil, "", fmt.Errorf("error creating access token for google service account %s: %w", email, err)
-	}
-
-	return &tokens{
-		token:                 token,
-		accessToken:           accessToken,
-		tokenExpiration:       now.Add(tokenDuration),
-		accessTokenExpiration: now.Add(accessTokenDuration),
-	}, email, nil
-}
-
-func (t *tokens) sleepDurationUntilNextFetch() time.Duration {
-	sleepDuration := time.Until(t.tokenExpiration)
-	if d := time.Until(t.accessTokenExpiration); d < sleepDuration {
-		sleepDuration = d
-	}
-	const safeDistance = time.Minute
-	if sleepDuration >= safeDistance {
-		sleepDuration -= safeDistance
-	}
-	return sleepDuration
 }
