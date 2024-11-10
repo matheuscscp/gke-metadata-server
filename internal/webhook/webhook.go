@@ -116,7 +116,7 @@ func mutate(opts *ServerOptions) http.HandlerFunc {
 			Path  string `json:"path"`
 			Value any    `json:"value"`
 		}{
-			{ // TODO: support already present hostAliases containing metadata.google.internal or 169.254.169.254
+			{
 				Op:   "add",
 				Path: getPath(isHostAliasesPresent, "/spec/hostAliases"),
 				Value: getValue(isHostAliasesPresent, corev1.HostAlias{
