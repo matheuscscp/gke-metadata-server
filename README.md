@@ -20,8 +20,12 @@ that adds the required networking configuration to the user Pods.
 obtained after step 2.
 4. See [`./k8s/test-pod.yaml`](./k8s/test-pod.yaml) for an example of how to configure your Pods
 and their ServiceAccounts.
-5. (Optional but highly recommended) Verify the image signatures to make sure you are
-deploying authentic artifacts distributed by this project.
+5. (Optional but highly recommended) Verify gke-metadata-server's artifact signatures to make sure
+you are deploying authentic artifacts distributed by this project.
+
+If you don't want to depend on cert-manager and want to deploy the `MutatingWebhook` in a
+different way, the Helm chart offered here is not for you (but please feel free to copy and
+modify).
 
 ### Configure GCP Workload Identity Federation for Kubernetes
 
