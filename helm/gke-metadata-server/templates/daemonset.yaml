@@ -42,10 +42,6 @@ spec:
       priorityClassName: {{ .Values.priorityClass }}
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
-      {{- if .Values.initContainers }}
-      initContainers:
-      {{- toYaml .Values.initContainers | nindent 6 }}
-      {{- end }}
       containers:
       - name: server
         {{- if .Values.image.digest }}
@@ -73,7 +69,7 @@ spec:
         {{- if .Values.config.logLevel }}
         - --log-level={{ .Values.config.logLevel }}
         {{- end }}
-        {{- if (.Values.config.watchPods | default dict).enabled }}
+        {{- if (.Values.config.watchPods | default dict).enable }}
         - --watch-pods
         {{- if .Values.config.watchPods.disableFallback }}
         - --watch-pods-disable-fallback
@@ -82,7 +78,7 @@ spec:
         - --watch-pods-resync-period={{ .Values.config.watchPods.resyncPeriod }}
         {{- end }}
         {{- end }}
-        {{- if (.Values.config.watchNode | default dict).enabled }}
+        {{- if (.Values.config.watchNode | default dict).enable }}
         - --watch-node
         {{- if .Values.config.watchNode.disableFallback }}
         - --watch-node-disable-fallback
@@ -91,7 +87,7 @@ spec:
         - --watch-node-resync-period={{ .Values.config.watchNode.resyncPeriod }}
         {{- end }}
         {{- end }}
-        {{- if (.Values.config.watchServiceAccounts | default dict).enabled }}
+        {{- if (.Values.config.watchServiceAccounts | default dict).enable }}
         - --watch-service-accounts
         {{- if .Values.config.watchServiceAccounts.disableFallback }}
         - --watch-service-accounts-disable-fallback
@@ -100,7 +96,7 @@ spec:
         - --watch-service-accounts-resync-period={{ .Values.config.watchServiceAccounts.resyncPeriod }}
         {{- end }}
         {{- end }}
-        {{- if (.Values.config.cacheTokens | default dict).enabled }}
+        {{- if (.Values.config.cacheTokens | default dict).enable }}
         - --cache-tokens
         {{- if .Values.config.cacheTokens.concurrency }}
         - --cache-tokens-concurrency={{ .Values.config.cacheTokens.concurrency }}

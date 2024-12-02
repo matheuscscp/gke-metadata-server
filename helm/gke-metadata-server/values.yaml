@@ -31,24 +31,24 @@ config:
   workloadIdentityProvider: ""
   # Optional Google Service Account email to add on the gke-metadata-server ServiceAccount annotation.
   # This is useful for using the gke-metadata-server with Pods running on the host network (see README.md).
-  googleServiceAccount: ""
+  defaultNodeServiceAccount: ""
   logLevel: info # Log level. Accepted values: panic, fatal, error, warning, info, debug, trace
   serverAddr: :8080 # Network address where the HTTP server will listen on.
   webhookAddr: :8081 # Network address where the MutatingWebhook server will listen on.
   watchPods:
-    enabled: true # Whether or not to watch and cache the Pods running on the same Node.
+    enable: true # Whether or not to watch and cache the Pods running on the same Node.
     disableFallback: false # Whether or not to disable the simple fallback method for looking up Pods upon cache misses.
     resyncPeriod: 10m # How often to fully resync.
   watchNode:
-    enabled: true # Whether or not to watch and cache the Node where the server is running.
+    enable: true # Whether or not to watch and cache the Node where the server is running.
     disableFallback: false # Whether or not to disable the simple fallback method for looking up the Node upon cache misses.
     resyncPeriod: 1h # How often to fully resync.
   watchServiceAccounts:
-    enabled: true # Whether or not to watch and cache all the Service Accounts of the cluster.
+    enable: true # Whether or not to watch and cache all the Service Accounts of the cluster.
     disableFallback: false # Whether or not to disable the simple fallback method for looking up Service Accounts upon cache misses.
     resyncPeriod: 1h # How often to fully resync.
   cacheTokens:
-    enabled: true # Whether or not to proactively cache tokens for the Service Accounts used by the Pods running in the same Node.
+    enable: true # Whether or not to proactively cache tokens for the Service Accounts used by the Pods running in the same Node.
     concurrency: 10 # Maximum parallel caching operations.
 
 podAnnotations: {}

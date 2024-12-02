@@ -29,9 +29,10 @@ spec:
   selector:
     app: gke-metadata-server
   ports:
-  - port: 443
-    targetPort: {{ index (split ":" .Values.config.webhookAddr) "_1" }}
+  - name: webhook
+    port: 443
     protocol: TCP
+    targetPort: webhook
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration

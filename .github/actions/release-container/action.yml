@@ -33,7 +33,7 @@ runs:
   steps:
   - id: release
     run: |
-      container_with_tag=${image}:$(cat container-version.txt)
+      container_with_tag=${image}:$(yq .container versions.yaml)
       docker tag ghcr.io/matheuscscp/gke-metadata-server/test@$(cat container-digest.txt) $container_with_tag
       docker push $container_with_tag
 

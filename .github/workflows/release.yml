@@ -43,19 +43,21 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - uses: ./.github/actions/ci-login/
+    - uses: ./.github/actions/ci-setup/
       with:
         google-service-account-name: release
         github-token: ${{ secrets.GITHUB_TOKEN }}
 
     - id: check-new-releases
       uses: ./.github/actions/check-new-releases/
+      with:
+        registry: ghcr.io
 
     - uses: ./.github/actions/ci-checks/
-      if: steps.check-new-releases.outputs.release-container == 'yes' || steps.check-new-releases.outputs.release-helm == 'yes'
+      if: steps.check-new-releases.outputs.new-releases == 'yes'
 
     - uses: sigstore/cosign-installer@v3.3.0
-      if: steps.check-new-releases.outputs.release-container == 'yes' || steps.check-new-releases.outputs.release-helm == 'yes'
+      if: steps.check-new-releases.outputs.new-releases == 'yes'
 
     - name: Release Container in GitHub Container Registry
       id: release-container-ghcr
@@ -72,7 +74,7 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        gh release create v$(cat container-version.txt) \
+        gh release create v$(yq .container versions.yaml) \
           container-digest.txt \
           --repo="$GITHUB_REPOSITORY" \
           --generate-notes \
@@ -93,8 +95,29 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        gh release create helm-v$(cat helm-version.txt) \
+        gh release create helm-v$(yq .helm versions.yaml) \
           helm-digest.txt \
+          --repo="$GITHUB_REPOSITORY" \
+          --generate-notes \
+          --latest=false
+
+    - name: Release Timoni Module in GitHub Container Registry
+      id: release-timoni-ghcr
+      if: steps.check-new-releases.outputs.release-timoni == 'yes'
+      uses: ./.github/actions/release-timoni/
+      with:
+        registry: ghcr.io
+    - uses: ./.github/actions/sign-and-verify-image/
+      if: steps.check-new-releases.outputs.release-timoni == 'yes'
+      with:
+        image: ${{ steps.release-timoni-ghcr.outputs.timoni-with-digest }}
+    - name: Release Timoni Module in GitHub
+      if: steps.check-new-releases.outputs.release-timoni == 'yes'
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        gh release create timoni-v$(yq .timoni versions.yaml) \
+          timoni-digest.txt \
           --repo="$GITHUB_REPOSITORY" \
           --generate-notes \
           --latest=false
