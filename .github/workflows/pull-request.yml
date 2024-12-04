@@ -35,33 +35,43 @@ jobs:
       id-token: write
       packages: write
       pull-requests: write
+
     steps:
     - uses: actions/checkout@v4
 
-    - uses: ./.github/actions/ci-login/
+    - uses: ./.github/actions/ci-setup/
       with:
         google-service-account-name: pull-request
         github-token: ${{ secrets.GITHUB_TOKEN }}
 
     - id: check-new-releases
       uses: ./.github/actions/check-new-releases/
+      with:
+        registry: ghcr.io
 
     - name: Prepare New Releases Check PR Comment
       env:
-        RELEASE_CONTAINER: ${{ steps.check-new-releases.outputs.release-container }}
-        RELEASE_HELM: ${{ steps.check-new-releases.outputs.release-helm }}
+        release_helm: ${{ steps.check-new-releases.outputs.release-helm }}
+        release_timoni: ${{ steps.check-new-releases.outputs.release-timoni }}
+        release_container: ${{ steps.check-new-releases.outputs.release-container }}
       run: |
         touch new-releases-check.txt
-        if [ "$RELEASE_CONTAINER" == "yes" ]; then
-          echo "This pull request will release version $(cat container-version.txt) of the Container." >> new-releases-check.txt
+        if [ "$release_container" == "yes" ]; then
+          echo "This pull request will release version $(yq .container versions.yaml) of the Container." >> new-releases-check.txt
+          if [ "$release_helm" == "yes" ] || [ "$release_timoni" == "yes" ]; then
+            echo "" >> new-releases-check.txt
+          fi
         fi
-        if [ "$RELEASE_CONTAINER" == "yes" ] && [ "$RELEASE_HELM" == "yes" ]; then
-          echo "" >> new-releases-check.txt
+        if [ "$release_helm" == "yes" ]; then
+          echo "This pull request will release version $(yq .helm versions.yaml) of the Helm Chart." >> new-releases-check.txt
+          if [ "$release_timoni" == "yes" ]; then
+            echo "" >> new-releases-check.txt
+          fi
         fi
-        if [ "$RELEASE_HELM" == "yes" ]; then
-          echo "This pull request will release version $(cat helm-version.txt) of the Helm Chart." >> new-releases-check.txt
+        if [ "$release_timoni" == "yes" ]; then
+          echo "This pull request will release version $(yq .timoni versions.yaml) of the Timoni Module." >> new-releases-check.txt
         fi
-        if [ "$RELEASE_CONTAINER" == "no" ] && [ "$RELEASE_HELM" == "no" ]; then
+        if [ "$release_helm" == "no" ] && [ "$release_timoni" == "no" ] && [ "$release_container" == "no" ]; then
           echo "No version releases in this pull request." >> new-releases-check.txt
         fi
     - name: Comment New Releases Check on PR

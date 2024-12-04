@@ -24,8 +24,8 @@ and their ServiceAccounts.
 you are deploying authentic artifacts distributed by this project.
 
 If you don't want to depend on cert-manager and want to deploy the `MutatingWebhook` in a
-different way, the Helm chart offered here is not for you (but please feel free to copy and
-modify).
+different way, the Helm Chart or Timoni Module offered here is not for you (but please feel
+free to copy and modify).
 
 ### Configure GCP Workload Identity Federation for Kubernetes
 
@@ -110,54 +110,99 @@ Token.
 
 ### Deploy `gke-metadata-server` in your cluster
 
+#### Using the Helm Chart
+
 A Helm Chart is available in the following [Helm OCI Repository](https://helm.sh/docs/topics/registries/):
 
 `ghcr.io/matheuscscp/gke-metadata-server-helm:{helm_version}` (GitHub Container Registry)
 
-Here `{helm_version}` is a Helm Chart SemVer, i.e. the field `.version` at
-[`./helm/gke-metadata-server/Chart.yaml`](./helm/gke-metadata-server/Chart.yaml). Check available releases
+Here `{helm_version}` is a Helm Chart version, i.e. the field `.helm` in the file
+[`./versions.yaml`](./versions.yaml). Check available releases
 in the [GitHub Releases Page](https://github.com/matheuscscp/gke-metadata-server/releases).
 
-See the Helm Values API at [`./helm/gke-metadata-server/values.yaml`](./helm/gke-metadata-server/values.yaml).
+See the Helm Values API in the file [`./helm/gke-metadata-server/values.yaml`](./helm/gke-metadata-server/values.yaml).
 Make sure to specify at least the full name of the Workload Identity Provider.
+
+#### Using the Timoni Module
+
+If you prefer something newer and strongly typed, a Timoni Module is available in the following
+[Timoni OCI Repository](https://timoni.sh/concepts/#artifact):
+
+`ghcr.io/matheuscscp/gke-metadata-server-timoni:{timoni_version}` (GitHub Container Registry)
+
+Here `{timoni_version}` is a Timoni Module version, i.e. the field `.timoni` in the file
+[`./versions.yaml`](./versions.yaml). Check available releases
+in the [GitHub Releases Page](https://github.com/matheuscscp/gke-metadata-server/releases).
+
+See the Timoni Values API in the files [`./timoni/gke-metadata-server/templates/config.tpl.cue`](./timoni/gke-metadata-server/templates/config.tpl.cue)
+and [`./timoni/gke-metadata-server/templates/settings.cue`](./timoni/gke-metadata-server/templates/settings.cue).
+Make sure to specify at least the full name of the Workload Identity Provider.
+
+#### Using only the container image (with your own Kubernetes manifests)
 
 Alternatively, you can write your own Kubernetes manifests and consume only the container image:
 
 `ghcr.io/matheuscscp/gke-metadata-server:{container_version}` (GitHub Container Registry)
 
-Here `{container_version}` is the app version, i.e. the field `.appVersion` at
-[`./helm/gke-metadata-server/Chart.yaml`](./helm/gke-metadata-server/Chart.yaml). Check available releases
+Here `{container_version}` is an app container version, i.e. the field `.container` in the file
+[`./versions.yaml`](./versions.yaml). Check available releases
 in the [GitHub Releases Page](https://github.com/matheuscscp/gke-metadata-server/releases).
 
 ### Verify the image signatures
 
 For verifying the images above use the [`cosign`](https://github.com/sigstore/cosign) CLI tool.
 
-For verifying the image of a given Container GitHub Release (tags `v{container_version}`), fetch the
+#### Verify the container image
+
+For verifying the image of a given Container GitHub Release (tags `v{container_version}`), download the
 digest file `container-digest.txt` attached to the Github Release and use it with `cosign`:
 
 ```bash
 cosign verify ghcr.io/matheuscscp/gke-metadata-server@$(cat container-digest.txt) \
-    --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
-    --certificate-identity=https://github.com/matheuscscp/gke-metadata-server/.github/workflows/release.yml@refs/heads/main
+  --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+  --certificate-identity=https://github.com/matheuscscp/gke-metadata-server/.github/workflows/release.yml@refs/heads/main
 ```
 
-For verifying the image of a given Helm Chart GitHub Release (tags `helm-v{helm_version}`), fetch the
+##### Automatic verification
+
+If you are using Sigstore's *Policy Controller* for enforcing policies you can automate the image
+verification using [Keyless Authorities](https://docs.sigstore.dev/policy-controller/overview/#configuring-keyless-authorities).
+
+If you are using *Kyverno* for enforcing policies you can automate the image verification using
+[Keyless Verification](https://kyverno.io/docs/writing-policies/verify-images/sigstore/#keyless-signing-and-verification).
+
+#### Verify the Helm Chart image
+
+For verifying the image of a given Helm Chart GitHub Release (tags `helm-v{helm_version}`), download the
 digest file `helm-digest.txt` attached to the Github Release and use it with `cosign`:
 
 ```bash
 cosign verify ghcr.io/matheuscscp/gke-metadata-server-helm@$(cat helm-digest.txt) \
-    --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
-    --certificate-identity=https://github.com/matheuscscp/gke-metadata-server/.github/workflows/release.yml@refs/heads/main
+  --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+  --certificate-identity=https://github.com/matheuscscp/gke-metadata-server/.github/workflows/release.yml@refs/heads/main
 ```
 
-#### Automatic verification
+##### Automatic verification
 
-If you are using *Kyverno* for enforcing policies you can automate the container verification using
-[Keyless Verification](https://kyverno.io/docs/writing-policies/verify-images/sigstore/#keyless-signing-and-verification).
-
-If you are using *FluxCD* for deploying Helm Charts you can automate the chart verification using
+If you are using *Flux* for deploying Helm Charts you can automate the image verification using
 [Keyless Verification](https://fluxcd.io/flux/components/source/helmcharts/#keyless-verification).
+
+#### Verify the Timoni Module image
+
+For verifying the image of a given Timoni Module GitHub Release (tags `timoni-v{timoni_version}`), download the
+digest file `timoni-digest.txt` attached to the Github Release and use it with `cosign`:
+
+```bash
+cosign verify ghcr.io/matheuscscp/gke-metadata-server-timoni@$(cat timoni-digest.txt) \
+  --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+  --certificate-identity=https://github.com/matheuscscp/gke-metadata-server/.github/workflows/release.yml@refs/heads/main
+```
+
+##### Automatic verification
+
+If you are using the Timoni CLI to deploy Modules/Bundles you can automate the image verification
+using [Keyless Verification](https://timoni.sh/cue/module/signing/#sign-with-cosign-keyless).
+*(Timoni will have a Flux controller in the future.)*
 
 ## Security Risks and Limitations
 
@@ -199,8 +244,8 @@ To work around this limitation, Pods running on the host network are allowed to 
 ***shared*** Kubernetes ServiceAccount associated with the Node where they are running
 on. This ServiceAccount can be configured in the annotations or labels of the Node, and
 it defaults to the ServiceAccount of the emulator (or to a ServiceAccount specified in
-the emulator's CLI flags if not using the official Helm Chart distributed here, check
-the chart manifest). The syntax is:
+the emulator CLI flags if not using the official Helm Chart or Timoni Module
+distributed here). The syntax is:
 
 ```yaml
 annotations: # or labels
@@ -215,7 +260,8 @@ It's up to you how you annotate/label your Nodes.
 
 You may also simply assign a Google Service Account to the Kubernetes ServiceAccount
 of the emulator and use it for all the Pods of the cluster that are running on the
-host network. This can be done through the Helm Chart value `config.googleServiceAccount`.
+host network. This can be done through the Helm Chart value `config.defaultNodeServiceAccount`,
+or the Timoni Module value `values.settings.defaultNodeServiceAccount`.
 
 *Be careful and try to avoid using shared identities! This is obviously dangerous!*
 

@@ -253,7 +253,7 @@ func newServerCommand() *cobra.Command {
 
 	cmd.Flags().StringVar(&serverAddr, "server-addr", ":8080",
 		"Network address where the metadata server must listen on")
-	cmd.Flags().StringVar(&webhookAddr, "webhook-addr", "",
+	cmd.Flags().StringVar(&webhookAddr, "webhook-addr", ":8081",
 		"Network address where the webhook server must listen on")
 	cmd.Flags().StringVar(&workloadIdentityProvider, "workload-identity-provider", "",
 		"Mandatory fully-qualified resource name of the GCP Workload Identity Provider (projects/<project_number>/locations/global/workloadIdentityPools/<pool_name>/providers/<provider_name>)")
@@ -261,7 +261,7 @@ func newServerCommand() *cobra.Command {
 		"Name of the default service account to be used by pods running on the host network")
 	cmd.Flags().StringVar(&defaultNodeServiceAccountNamespace, "default-node-service-account-namespace", "kube-system",
 		"Namespace of the default service account to be used by pods running on the host network")
-	cmd.Flags().StringVar(&webhookInitNetworkImage, "webhook-init-network-image", "ghcr.io/matheuscscp/gke-metadata-server:0.6.0",
+	cmd.Flags().StringVar(&webhookInitNetworkImage, "webhook-init-network-image", "ghcr.io/matheuscscp/gke-metadata-server:0.10.0",
 		"Image to be used for the init container that sets up the network namespace for reaching the metadata server")
 	cmd.Flags().BoolVar(&watchPods, "watch-pods", false,
 		"Whether or not to watch the pods running on the same node (default false)")

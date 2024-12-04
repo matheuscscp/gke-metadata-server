@@ -4,3 +4,5 @@ terraform.*
 *.txt
 *.logs
 *.tgz
+Chart.yaml
+config.cue

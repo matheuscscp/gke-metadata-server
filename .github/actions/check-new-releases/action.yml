@@ -20,11 +20,19 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+inputs:
+  registry:
+    required: true
+
 outputs:
-  release-container:
-    value: ${{ steps.release-check.outputs.release-container }}
   release-helm:
     value: ${{ steps.release-check.outputs.release-helm }}
+  release-timoni:
+    value: ${{ steps.release-check.outputs.release-timoni }}
+  release-container:
+    value: ${{ steps.release-check.outputs.release-container }}
+  new-releases:
+    value: ${{ steps.release-check.outputs.new-releases }}
 
 runs:
   using: composite
@@ -32,31 +40,36 @@ runs:
   - name: Check new releases
     id: release-check
     shell: bash
+    env:
+      registry: ${{ inputs.registry }}
     run: |
-      chart_path=./helm/gke-metadata-server/Chart.yaml
+      profile_url=${registry}/matheuscscp
+      oci_url=oci://${profile_url}
 
-      yq e '.appVersion' $chart_path > container-version.txt
-      container_image=ghcr.io/matheuscscp/gke-metadata-server:$(cat container-version.txt)
+      helm_image=${oci_url}/gke-metadata-server-helm
+      timoni_image=${oci_url}/gke-metadata-server-timoni
+      container_image=${profile_url}/gke-metadata-server:$(yq .container versions.yaml)
 
-      yq e '.version' $chart_path > helm-version.txt
-      helm_image=oci://ghcr.io/matheuscscp/gke-metadata-server-helm
-      helm_version=$(cat helm-version.txt)
+      helm_version=$(yq .helm versions.yaml)
+      timoni_version=$(yq .timoni versions.yaml)
 
-      container_exists=$(docker pull $container_image > /dev/null && echo yes || echo no)
-      helm_exists=$(helm pull $helm_image --version $helm_version > /dev/null && echo yes || echo no)
-      if [ "$helm_exists" == "yes" ] && [ "$container_exists" == "no" ]; then
-        echo "Must bump .version inside $chart_path when bumping .appVersion."
-        exit 1
-      elif [ "$helm_exists" == "no" ] && [ "$container_exists" == "yes" ]; then
-        echo "Need to release new version of the Helm Chart image."
-        echo "release-container=no" >> $GITHUB_OUTPUT
-        echo "release-helm=yes" >> $GITHUB_OUTPUT
-      elif [ "$helm_exists" == "no" ] && [ "$container_exists" == "no" ]; then
-        echo "Need to release new versions for both images."
-        echo "release-container=yes" >> $GITHUB_OUTPUT
-        echo "release-helm=yes" >> $GITHUB_OUTPUT
+      release_helm=$(helm pull $helm_image --version $helm_version > /dev/null && echo no || echo yes)
+      release_timoni=$(timoni mod pull $timoni_image --version $timoni_version -o /dev/null > /dev/null && echo no || echo yes)
+      release_container=$(docker pull $container_image > /dev/null && echo no || echo yes)
+
+      echo release-helm=$release_helm >> $GITHUB_OUTPUT
+      echo release-timoni=$release_timoni >> $GITHUB_OUTPUT
+      echo release-container=$release_container >> $GITHUB_OUTPUT
+
+      if [ "$release_helm" == "yes" ] || [ "$release_timoni" == "yes" ] || [ "$release_container" == "yes" ]; then
+        echo new-releases=yes >> $GITHUB_OUTPUT
       else
-        echo "Both versions already exist. No release needed."
-        echo "release-container=no" >> $GITHUB_OUTPUT
-        echo "release-helm=no" >> $GITHUB_OUTPUT
+        echo new-releases=no >> $GITHUB_OUTPUT
+      fi
+
+      if [ "$release_container" == "yes" ]; then
+        if [ "$release_helm" == "no" ] || [ "$release_timoni" == "no" ]; then
+          echo "When releasing a new container image, must also release new versions of the Helm Chart and Timoni Module."
+          exit 1
+        fi
       fi

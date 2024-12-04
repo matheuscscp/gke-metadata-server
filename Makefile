@@ -35,14 +35,24 @@ clean:
 tidy:
 	go mod tidy
 	go fmt ./...
+	make gen
 	terraform fmt -recursive ./
 	terraform fmt -recursive ./.*/**/*.tf
 	./scripts/license.sh
 	git status
 
+.PHONY: gen
+gen: timoni-gen
+
+.PHONY: timoni-gen
+timoni-gen:
+	cd timoni/gke-metadata-server; cue get go k8s.io/api/rbac/v1
+	cd timoni/gke-metadata-server; cue get go k8s.io/api/admissionregistration/v1
+	cd timoni/gke-metadata-server; cue get go github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1
+
 .PHONY: dev-cluster
 dev-cluster:
-	kind delete cluster || true
+	kind delete cluster -n gke-metadata-server || true
 	make cluster TEST_ID=test PROVIDER_COMMAND=update
 	kubens kube-system
 
@@ -53,42 +63,46 @@ ci-cluster:
 
 .PHONY: dev-test
 dev-test:
-	make test TEST_ID=test HELM_TEST_CASE=no-watch
-	make test TEST_ID=test HELM_TEST_CASE=watch
+	make test TEST_ID=test TEST_CASE=k8s/test-helm-values-no-watch.yaml
+	make test TEST_ID=test TEST_CASE=k8s/test-helm-values-watch.yaml
+	make test TEST_ID=test TEST_CASE=k8s/test-timoni-values-no-watch.cue
+	make test TEST_ID=test TEST_CASE=k8s/test-timoni-values-watch.cue
 
 .PHONY: ci-test
 ci-test:
-	make test TEST_ID=$$(cat ci-test-id.txt) HELM_TEST_CASE=no-watch
-	make test TEST_ID=$$(cat ci-test-id.txt) HELM_TEST_CASE=watch
+	make test TEST_ID=$$(cat ci-test-id.txt) TEST_CASE=k8s/test-helm-values-no-watch.yaml
+	make test TEST_ID=$$(cat ci-test-id.txt) TEST_CASE=k8s/test-helm-values-watch.yaml
+	make test TEST_ID=$$(cat ci-test-id.txt) TEST_CASE=k8s/test-timoni-values-no-watch.cue
+	make test TEST_ID=$$(cat ci-test-id.txt) TEST_CASE=k8s/test-timoni-values-watch.cue
 
 .PHONY: cluster
 cluster:
 	@if [ "${TEST_ID}" == "" ]; then echo "TEST_ID variable is required."; exit -1; fi
 	@if [ "${PROVIDER_COMMAND}" == "" ]; then echo "PROVIDER_COMMAND variable is required."; exit -1; fi
-	kind create cluster --config k8s/test-kind-config.yaml
+	kind create cluster -n gke-metadata-server --config k8s/test-kind-config.yaml
 	make create-or-update-provider TEST_ID=${TEST_ID} PROVIDER_COMMAND=${PROVIDER_COMMAND}
 	kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.15.1/cert-manager.yaml
 	while : ; do \
 		sleep_secs=10; \
 		echo "Sleeping for $$sleep_secs secs and checking cert-manager webhook status..."; \
 		sleep $$sleep_secs; \
-		if [ $$(kubectl --context kind-kind -n cert-manager get deploy cert-manager-webhook | grep cert | awk '{print $$4}') -eq 1 ]; then \
+		if [ $$(kubectl --context kind-gke-metadata-server -n cert-manager get deploy cert-manager-webhook | grep cert | awk '{print $$4}') -eq 1 ]; then \
 			echo "cert-manager-webhook is ready"; \
 			break; \
 		fi; \
 	done
-	kubectl --context kind-kind apply -f k8s/test-anon-oidc-rbac.yaml
+	kubectl --context kind-gke-metadata-server apply -f k8s/test-anon-oidc-rbac.yaml
 
 .PHONY: create-or-update-provider
 create-or-update-provider:
 	@if [ "${TEST_ID}" == "" ]; then echo "TEST_ID variable is required."; exit -1; fi
 	@if [ "${PROVIDER_COMMAND}" == "" ]; then echo "PROVIDER_COMMAND variable is required."; exit -1; fi
-	kubectl --context kind-kind get --raw /openid/v1/jwks > jwks.json
+	kubectl --context kind-gke-metadata-server get --raw /openid/v1/jwks > jwks.json
 	gcloud iam workload-identity-pools providers ${PROVIDER_COMMAND}-oidc ${TEST_ID} \
 		--project=gke-metadata-server \
 		--location=global \
 		--workload-identity-pool=test-kind-cluster \
-		--issuer-uri=$$(kubectl --context kind-kind get --raw /.well-known/openid-configuration | jq -r .issuer) \
+		--issuer-uri=$$(kubectl --context kind-gke-metadata-server get --raw /.well-known/openid-configuration | jq -r .issuer) \
 		--attribute-mapping=google.subject=assertion.sub \
 		--jwk-json-path=jwks.json
 
@@ -104,22 +118,42 @@ build:
 	docker push ${TEST_IMAGE}:go-test | tee docker-push.logs
 	cat docker-push.logs | grep digest: | awk '{print $$3}' > go-test-digest.txt
 
+	sed "s|<HELM_VERSION>|$$(yq .helm versions.yaml)|g" helm/gke-metadata-server/Chart.tpl.yaml | \
+		sed "s|<CONTAINER_VERSION>|$$(yq .container versions.yaml)|g" > helm/gke-metadata-server/Chart.yaml
 	helm lint helm/gke-metadata-server
 	helm package helm/gke-metadata-server | tee helm-package.logs
 	basename $$(cat helm-package.logs | grep .tgz | awk '{print $$NF}') > helm-package.txt
 
+	sed "s|<CONTAINER_VERSION>|$$(yq .container versions.yaml)|g" \
+		timoni/gke-metadata-server/templates/config.tpl.cue > timoni/gke-metadata-server/templates/config.cue
+	timoni mod vet timoni/gke-metadata-server/ \
+		--name gke-metadata-server \
+		--namespace kube-system \
+		--values timoni/gke-metadata-server/debug_values.cue
+	timoni mod push timoni/gke-metadata-server/ oci://${TEST_IMAGE}/timoni \
+		--version $$(yq .timoni versions.yaml) \
+		--output yaml | yq .digest > timoni-digest.txt
+
 .PHONY: test
 test:
 	@if [ "${TEST_ID}" == "" ]; then echo "TEST_ID variable is required."; exit -1; fi
-	@if [ "${HELM_TEST_CASE}" == "" ]; then echo "HELM_TEST_CASE variable is required."; exit -1; fi
-	sed "s|<TEST_ID>|${TEST_ID}|g" k8s/test-helm-values-${HELM_TEST_CASE}.yaml | \
-		sed "s|<CONTAINER_DIGEST>|$$(cat container-digest.txt)|g" | \
-		tee >(helm --kube-context kind-kind -n kube-system upgrade --install --wait gke-metadata-server $$(cat helm-package.txt) -f -)
+	@if [ "${TEST_CASE}" == "" ]; then echo "TEST_CASE variable is required."; exit -1; fi
+	helm --kube-context kind-gke-metadata-server -n kube-system uninstall gke-metadata-server --wait || true
+	timoni --kube-context kind-gke-metadata-server -n kube-system delete gke-metadata-server --wait || true
+	if [[ "${TEST_CASE}" == *"helm"* ]]; then \
+		sed "s|<TEST_ID>|${TEST_ID}|g" ${TEST_CASE} | \
+			sed "s|<CONTAINER_DIGEST>|$$(cat container-digest.txt)|g" | \
+			tee >(helm --kube-context kind-gke-metadata-server -n kube-system upgrade --install gke-metadata-server $$(cat helm-package.txt) --wait -f -); \
+	else \
+		sed "s|<TEST_ID>|${TEST_ID}|g" ${TEST_CASE} | \
+			sed "s|<CONTAINER_DIGEST>|$$(cat container-digest.txt)|g" | \
+			tee >(timoni --kube-context kind-gke-metadata-server -n kube-system apply gke-metadata-server oci://${TEST_IMAGE}/timoni --version $$(yq .timoni versions.yaml) --wait -f -); \
+	fi
 	while : ; do \
 		sleep_secs=10; \
 		echo "Sleeping for $$sleep_secs secs and checking DaemonSet status..."; \
 		sleep $$sleep_secs; \
-		if [ $$(kubectl --context kind-kind -n kube-system get ds gke-metadata-server | grep gke | awk '{print $$4}') -eq 1 ]; then \
+		if [ $$(kubectl --context kind-gke-metadata-server -n kube-system get ds gke-metadata-server | grep gke | awk '{print $$4}') -eq 1 ]; then \
 			echo "DaemonSet is ready"; \
 			break; \
 		fi; \
@@ -130,21 +164,21 @@ test:
 		sleep_secs=10; \
 		echo "Sleeping for $$sleep_secs secs and checking test Pod status..."; \
 		sleep $$sleep_secs; \
-		EXIT_CODE_1=$$(kubectl --context kind-kind -n default get po test-host-network-false -o jsonpath='{.status.containerStatuses[0].state.terminated.exitCode}'); \
-		EXIT_CODE_2=$$(kubectl --context kind-kind -n default get po test-host-network-true -o jsonpath='{.status.containerStatuses[0].state.terminated.exitCode}'); \
+		EXIT_CODE_1=$$(kubectl --context kind-gke-metadata-server -n default get po test-host-network-false -o jsonpath='{.status.containerStatuses[0].state.terminated.exitCode}'); \
+		EXIT_CODE_2=$$(kubectl --context kind-gke-metadata-server -n default get po test-host-network-true -o jsonpath='{.status.containerStatuses[0].state.terminated.exitCode}'); \
 		if [ -n "$$EXIT_CODE_1" ] && [ -n "$$EXIT_CODE_2" ]; then \
 			echo "All containers exited"; \
 			break; \
 		fi; \
 	done; \
-	kubectl --context kind-kind -n kube-system describe $$(kubectl --context kind-kind -n kube-system get po -o name | grep gke); \
-	kubectl --context kind-kind -n kube-system logs ds/gke-metadata-server; \
-	kubectl --context kind-kind -n default describe po test-host-network-false; \
-	kubectl --context kind-kind -n default logs test-host-network-false -c init-gke-metadata-server; \
-	kubectl --context kind-kind -n default logs test-host-network-false -c test -f; \
-	kubectl --context kind-kind -n default describe po test-host-network-true; \
-	kubectl --context kind-kind -n default logs test-host-network-true -c init-gke-metadata-server; \
-	kubectl --context kind-kind -n default logs test-host-network-true -c test -f; \
+	kubectl --context kind-gke-metadata-server -n kube-system describe $$(kubectl --context kind-gke-metadata-server -n kube-system get po -o name | grep gke); \
+	kubectl --context kind-gke-metadata-server -n kube-system logs ds/gke-metadata-server; \
+	kubectl --context kind-gke-metadata-server -n default describe po test-host-network-false; \
+	kubectl --context kind-gke-metadata-server -n default logs test-host-network-false -c init-gke-metadata-server; \
+	kubectl --context kind-gke-metadata-server -n default logs test-host-network-false -c test -f; \
+	kubectl --context kind-gke-metadata-server -n default describe po test-host-network-true; \
+	kubectl --context kind-gke-metadata-server -n default logs test-host-network-true -c init-gke-metadata-server; \
+	kubectl --context kind-gke-metadata-server -n default logs test-host-network-true -c test -f; \
 	echo "Pod 'test-host-network-false' exit code: $$EXIT_CODE_1"; \
 	echo "Pod 'test-host-network-true'  exit code: $$EXIT_CODE_2"; \
 	if [ "$$EXIT_CODE_1" != "0" ] || [ "$$EXIT_CODE_2" != "0" ]; then \
@@ -156,17 +190,11 @@ test:
 .PHONY: start-test-pod
 start-test-pod:
 	@if [ "${HOST_NETWORK}" == "" ]; then echo "HOST_NETWORK variable is required."; exit -1; fi
-	kubectl --context kind-kind -n default delete po test-host-network-${HOST_NETWORK} || true
+	kubectl --context kind-gke-metadata-server -n default delete po test-host-network-${HOST_NETWORK} || true
 	sed "s|<POD_NAME>|test-host-network-${HOST_NETWORK}|g" k8s/test-pod.yaml | \
 		sed "s|<HOST_NETWORK>|${HOST_NETWORK}|g" | \
 		sed "s|<GO_TEST_DIGEST>|$$(cat go-test-digest.txt)|g" | \
-		tee >(kubectl --context kind-kind apply -f -)
-
-.PHONY: helm-diff
-helm-diff:
-	sed "s|<TEST_ID>|test|g" k8s/test-helm-values-watch.yaml | \
-		sed "s|<CONTAINER_DIGEST>|$$(cat container-digest.txt)|g" | \
-		helm --kube-context kind-kind -n kube-system diff upgrade gke-metadata-server helm/gke-metadata-server -f -
+		tee >(kubectl --context kind-gke-metadata-server apply -f -)
 
 .PHONY: update-branch
 update-branch:

@@ -22,7 +22,7 @@
 
 config:
   workloadIdentityProvider: projects/637293746831/locations/global/workloadIdentityPools/test-kind-cluster/providers/<TEST_ID>
-  googleServiceAccount: test-sa@gke-metadata-server.iam.gserviceaccount.com
+  defaultNodeServiceAccount: test-sa@gke-metadata-server.iam.gserviceaccount.com
   watchPods:
     disableFallback: true
   watchNode:

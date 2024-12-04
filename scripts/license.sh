@@ -55,18 +55,23 @@ EOF
     mv $fn.new $fn
 }
 
+function license_pattern() {
+    local comment="$1"
+    local pattern="$2"
+
+    for f in `find . -wholename "$pattern"`; do
+        if ! grep -q "MIT License" $f; then
+            license "$comment" "$f"
+        fi
+    done
+}
+
 # files with double-slash comments
-for f in `find . -name "*.go"`; do
-    if ! grep -q "MIT License" $f; then
-        license "//" "$f"
-    fi
+for pattern in \*.go \*/templates/\*.cue \*k8s/\*.cue; do
+    license_pattern "//" "$pattern"
 done
 
 # files with hashtag comments
-for pattern in \*.yaml \*.yml \*.tf Dockerfile Makefile; do
-    for f in `find . -name "$pattern"`; do
-        if ! grep -q "MIT License" $f; then
-            license "#" "$f"
-        fi
-    done
+for pattern in \*.yaml \*.yml \*.tf ./Dockerfile ./Dockerfile.test ./Makefile; do
+    license_pattern "#" "$pattern"
 done
