@@ -54,7 +54,7 @@ runs:
       timoni_version=$(yq .timoni versions.yaml)
 
       release_helm=$(helm pull $helm_image --version $helm_version > /dev/null && echo no || echo yes)
-      release_timoni=$(timoni mod pull $timoni_image --version $timoni_version -o /dev/null > /dev/null && echo no || echo yes)
+      release_timoni=$(timoni mod pull $timoni_image --version $timoni_version -o ./timoni-check > /dev/null && echo no || echo yes); rm -rf ./timoni-check
       release_container=$(docker pull $container_image > /dev/null && echo no || echo yes)
 
       echo release-helm=$release_helm >> $GITHUB_OUTPUT
