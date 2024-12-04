@@ -47,11 +47,6 @@ import (
 )
 
 func newServerCommand() *cobra.Command {
-	const (
-		metricsSubsystem       = ""   // empty since metrics.Namespace already ends with "server"
-		tokenExpirationSeconds = 3600 // 1h
-	)
-
 	var (
 		serverAddr                          string
 		webhookAddr                         string
@@ -93,7 +88,6 @@ func newServerCommand() *cobra.Command {
 				Namespace: defaultNodeServiceAccountNamespace,
 			}
 			googleCredentialsConfig, err := googlecredentials.NewConfig(googlecredentials.ConfigOptions{
-				TokenExpirationSeconds:   tokenExpirationSeconds,
 				WorkloadIdentityProvider: workloadIdentityProvider,
 			})
 			if err != nil {
@@ -126,12 +120,11 @@ func newServerCommand() *cobra.Command {
 			var wp *watchpods.Provider
 			if watchPods {
 				opts := watchpods.ProviderOptions{
-					FallbackSource:   pods,
-					NodeName:         nodeName,
-					MetricsSubsystem: metricsSubsystem,
-					KubeClient:       kubeClient,
-					MetricsRegistry:  metricsRegistry,
-					ResyncPeriod:     watchPodsResyncPeriod,
+					FallbackSource:  pods,
+					NodeName:        nodeName,
+					KubeClient:      kubeClient,
+					MetricsRegistry: metricsRegistry,
+					ResyncPeriod:    watchPodsResyncPeriod,
 				}
 				if watchPodsDisableFallback {
 					opts.FallbackSource = nil
@@ -170,11 +163,10 @@ func newServerCommand() *cobra.Command {
 			var wsa *watchserviceaccounts.Provider
 			if watchServiceAccounts {
 				opts := watchserviceaccounts.ProviderOptions{
-					FallbackSource:   serviceAccounts,
-					MetricsSubsystem: metricsSubsystem,
-					KubeClient:       kubeClient,
-					MetricsRegistry:  metricsRegistry,
-					ResyncPeriod:     watchServiceAccountsResyncPeriod,
+					FallbackSource:  serviceAccounts,
+					KubeClient:      kubeClient,
+					MetricsRegistry: metricsRegistry,
+					ResyncPeriod:    watchServiceAccountsResyncPeriod,
 				}
 				if watchServiceAccountsDisableFallback {
 					opts.FallbackSource = nil
@@ -191,11 +183,10 @@ func newServerCommand() *cobra.Command {
 			})
 			if cacheTokens {
 				p := cacheserviceaccounttokens.NewProvider(ctx, cacheserviceaccounttokens.ProviderOptions{
-					Source:           serviceAccountTokens,
-					ServiceAccounts:  serviceAccounts,
-					MetricsSubsystem: metricsSubsystem,
-					MetricsRegistry:  metricsRegistry,
-					Concurrency:      cacheTokensConcurrency,
+					Source:          serviceAccountTokens,
+					ServiceAccounts: serviceAccounts,
+					MetricsRegistry: metricsRegistry,
+					Concurrency:     cacheTokensConcurrency,
 				})
 				defer p.Close()
 				if wp != nil {
@@ -223,7 +214,6 @@ func newServerCommand() *cobra.Command {
 			s := server.New(ctx, server.ServerOptions{
 				NodeName:                  nodeName,
 				ServerAddr:                serverAddr,
-				MetricsSubsystem:          metricsSubsystem,
 				Pods:                      pods,
 				Node:                      node,
 				ServiceAccounts:           serviceAccounts,

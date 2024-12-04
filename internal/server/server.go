@@ -53,7 +53,6 @@ type (
 	ServerOptions struct {
 		NodeName                  string
 		ServerAddr                string
-		MetricsSubsystem          string
 		Pods                      pods.Provider
 		Node                      node.Provider
 		ServiceAccounts           serviceaccounts.Provider
@@ -78,12 +77,11 @@ const (
 )
 
 func New(ctx context.Context, opts ServerOptions) *Server {
-	latencyMillis := metrics.NewLatencyMillis(opts.MetricsSubsystem, []string{"method", "path", "status"})
+	latencyMillis := metrics.NewLatencyMillis([]string{"method", "path", "status"})
 	opts.MetricsRegistry.MustRegister(latencyMillis)
 
 	lookupPodFailures := prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: metrics.Namespace,
-		Subsystem: opts.MetricsSubsystem,
 		Name:      "lookup_pod_failures_total",
 		Help:      "Total failures when looking up Pod objects by IP to serve requests.",
 	}, []string{"client_ip"})
@@ -91,7 +89,6 @@ func New(ctx context.Context, opts ServerOptions) *Server {
 
 	getNodeFailures := prometheus.NewCounter(prometheus.CounterOpts{
 		Namespace: metrics.Namespace,
-		Subsystem: opts.MetricsSubsystem,
 		Name:      "get_node_failures_total",
 		Help:      "Total failures when getting the current Node object to serve requests.",
 	})

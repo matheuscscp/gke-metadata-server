@@ -37,7 +37,6 @@ type (
 	}
 
 	ConfigOptions struct {
-		TokenExpirationSeconds   int
 		WorkloadIdentityProvider string
 	}
 )
@@ -72,9 +71,6 @@ func (c *Config) Get(ctx context.Context, googleServiceAccountEmail, credFile st
 		"service_account_impersonation_url": fmt.Sprintf(
 			"https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/%s:generateAccessToken",
 			googleServiceAccountEmail),
-		"service_account_impersonation": map[string]any{
-			"token_lifetime_seconds": c.TokenExpirationSeconds(),
-		},
 	}
 
 	b, err := json.Marshal(conf)
@@ -90,8 +86,4 @@ func (c *Config) Get(ctx context.Context, googleServiceAccountEmail, credFile st
 
 func (c *Config) WorkloadIdentityProviderAudience() string {
 	return fmt.Sprintf("//iam.googleapis.com/%s", c.opts.WorkloadIdentityProvider)
-}
-
-func (c *Config) TokenExpirationSeconds() int {
-	return c.opts.TokenExpirationSeconds
 }

@@ -57,15 +57,13 @@ func NewProvider(opts ProviderOptions) serviceaccounttokens.Provider {
 }
 
 func (p *Provider) GetServiceAccountToken(ctx context.Context, ref *serviceaccounts.Reference) (string, time.Time, error) {
-	expSecs := int64(p.opts.GoogleCredentialsConfig.TokenExpirationSeconds())
 	tokenRequest, err := p.opts.
 		KubeClient.
 		CoreV1().
 		ServiceAccounts(ref.Namespace).
 		CreateToken(ctx, ref.Name, &authnv1.TokenRequest{
 			Spec: authnv1.TokenRequestSpec{
-				Audiences:         []string{p.opts.GoogleCredentialsConfig.WorkloadIdentityProviderAudience()},
-				ExpirationSeconds: &expSecs,
+				Audiences: []string{p.opts.GoogleCredentialsConfig.WorkloadIdentityProviderAudience()},
 			},
 		}, metav1.CreateOptions{})
 	if err != nil {

@@ -53,11 +53,10 @@ type Provider struct {
 }
 
 type ProviderOptions struct {
-	Source           serviceaccounttokens.Provider
-	ServiceAccounts  serviceaccounts.Provider
-	MetricsSubsystem string
-	MetricsRegistry  *prometheus.Registry
-	Concurrency      int
+	Source          serviceaccounttokens.Provider
+	ServiceAccounts serviceaccounts.Provider
+	MetricsRegistry *prometheus.Registry
+	Concurrency     int
 }
 
 var errServiceAccountDeleted = errors.New("service account was deleted")
@@ -65,14 +64,12 @@ var errServiceAccountDeleted = errors.New("service account was deleted")
 func NewProvider(ctx context.Context, opts ProviderOptions) *Provider {
 	numTokens := prometheus.NewGauge(prometheus.GaugeOpts{
 		Namespace: metrics.Namespace,
-		Subsystem: opts.MetricsSubsystem,
 		Name:      "service_account_tokens",
 		Help:      "Amount of ServiceAccount tokens currently cached.",
 	})
 	opts.MetricsRegistry.MustRegister(numTokens)
 	cacheMisses := prometheus.NewCounter(prometheus.CounterOpts{
 		Namespace: metrics.Namespace,
-		Subsystem: opts.MetricsSubsystem,
 		Name:      "service_account_token_cache_misses_total",
 		Help:      "Total amount cache misses when fetching ServiceAccount tokens.",
 	})
