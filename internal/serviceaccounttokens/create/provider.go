@@ -73,7 +73,7 @@ func (p *Provider) GetServiceAccountToken(ctx context.Context, ref *serviceaccou
 	return status.Token, status.ExpirationTimestamp.Time, nil
 }
 
-func (p *Provider) GetGoogleAccessToken(ctx context.Context, saToken, googleEmail string) (string, time.Time, error) {
+func (p *Provider) GetGoogleAccessToken(ctx context.Context, saToken string, googleEmail *string) (string, time.Time, error) {
 	var token *oauth2.Token
 	err := p.runWithGoogleCredentialsFromKubernetesServiceAccountToken(ctx, saToken, googleEmail, func(ctx context.Context, c *google.Credentials) (err error) {
 		token, err = c.TokenSource.Token()
@@ -87,7 +87,7 @@ func (p *Provider) GetGoogleAccessToken(ctx context.Context, saToken, googleEmai
 
 func (p *Provider) GetGoogleIdentityToken(ctx context.Context, saToken, googleEmail, audience string) (string, time.Time, error) {
 	var token *oauth2.Token
-	err := p.runWithGoogleCredentialsFromKubernetesServiceAccountToken(ctx, saToken, googleEmail, func(ctx context.Context, c *google.Credentials) (err error) {
+	err := p.runWithGoogleCredentialsFromKubernetesServiceAccountToken(ctx, saToken, &googleEmail, func(ctx context.Context, c *google.Credentials) (err error) {
 		source, err := idtoken.NewTokenSource(ctx, audience, option.WithCredentials(c))
 		if err != nil {
 			return err
@@ -109,7 +109,7 @@ func (p *Provider) GetGoogleIdentityToken(ctx context.Context, saToken, googleEm
 // file. The temporary file is removed before the function
 // returns (hence why a callback is used).
 func (p *Provider) runWithGoogleCredentialsFromKubernetesServiceAccountToken(ctx context.Context,
-	token, email string, f func(context.Context, *google.Credentials) error) error {
+	token string, email *string, f func(context.Context, *google.Credentials) error) error {
 	// write k8s sa token to tmp file
 	file, err := os.CreateTemp("/tmp", "*.json")
 	if err != nil {
@@ -123,7 +123,7 @@ func (p *Provider) runWithGoogleCredentialsFromKubernetesServiceAccountToken(ctx
 	}
 
 	// get the credential config with k8s sa token file as the credential source
-	creds, err := p.opts.GoogleCredentialsConfig.Get(ctx, email, tokenFile)
+	creds, err := p.opts.GoogleCredentialsConfig.Get(ctx, tokenFile, email)
 	if err != nil {
 		return err
 	}

@@ -29,7 +29,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"time"
 
 	pkghttp "github.com/matheuscscp/gke-metadata-server/internal/http"
 	"github.com/matheuscscp/gke-metadata-server/internal/logging"
@@ -59,6 +58,7 @@ type (
 		ServiceAccountTokens      serviceaccounttokens.Provider
 		MetricsRegistry           *prometheus.Registry
 		DefaultNodeServiceAccount *serviceaccounts.Reference
+		WorkloadIdentityPool      string
 	}
 
 	serverMetrics struct {
@@ -77,8 +77,15 @@ const (
 )
 
 func New(ctx context.Context, opts ServerOptions) *Server {
-	latencyMillis := metrics.NewLatencyMillis([]string{"method", "path", "status"})
+	const subsystem = "" // "server" would stutter with the "gke_metadata_server" namespace
+	labelNames := []string{"method", "path", "status"}
+	latencyMillis := metrics.NewLatencyMillis(subsystem, labelNames...)
 	opts.MetricsRegistry.MustRegister(latencyMillis)
+	observeLatencyMillis := func(r *http.Request, statusCode int, latencyMs float64) {
+		latencyMillis.
+			WithLabelValues(r.Method, r.URL.Path, fmt.Sprint(statusCode)).
+			Observe(latencyMs)
+	}
 
 	lookupPodFailures := prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: metrics.Namespace,
@@ -110,17 +117,8 @@ func New(ctx context.Context, opts ServerOptions) *Server {
 				return logging.IntoContext(context.Background(), l)
 			},
 			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				t0 := time.Now()
-				r = pkghttp.StartTimeIntoRequest(r, t0)
+				r = pkghttp.InitRequest(r, observeLatencyMillis)
 
-				statusRecorder := &pkghttp.StatusRecorder{ResponseWriter: w}
-				defer func() {
-					statusCode := fmt.Sprint(statusRecorder.StatusCode())
-					delta := time.Since(t0).Milliseconds()
-					latencyMillis.WithLabelValues(r.Method, r.URL.Path, statusCode).Observe(float64(delta))
-				}()
-
-				w = statusRecorder
 				r = logging.IntoRequest(r, logging.FromRequest(r).WithField("http_request", logrus.Fields{
 					"method": r.Method,
 					"path":   r.URL.Path,
@@ -140,15 +138,6 @@ func New(ctx context.Context, opts ServerOptions) *Server {
 
 				// metadataDirectory path
 				metadataDirectory.ServeHTTP(w, r)
-				if statusCode := statusRecorder.StatusCode(); 200 <= statusCode && statusCode < 300 {
-					logging.
-						FromRequest(r).
-						WithFields(logrus.Fields{
-							"latency":       pkghttp.LatencyLogFields(t0),
-							"http_response": pkghttp.ResponseLogFields(statusCode),
-						}).
-						Info("request")
-				}
 			}),
 		},
 	}

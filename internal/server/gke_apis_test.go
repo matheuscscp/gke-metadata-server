@@ -29,6 +29,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"os"
 	"regexp"
 	"testing"
 	"time"
@@ -53,64 +54,6 @@ var gkeHeaders = http.Header{
 	"Metadata-Flavor": []string{gkeMetadataFlavor},
 }
 
-func TestGKEServiceAccountIdentityAPI(t *testing.T) {
-	const expectedAudience = "test.com"
-	const expectedIssuer = "https://accounts.google.com"
-	const expectedSubject = `^\d{20,30}$`
-	const url = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity?audience=" + expectedAudience
-
-	// request google id token
-	rawToken := requestURL(t, gkeHeaders, url, "application/text", gkeMetadataFlavor)
-	unverifiedToken, _, err := jwt.NewParser().ParseUnverified(rawToken, jwt.MapClaims{})
-	require.NoError(t, err)
-	aud, err := unverifiedToken.Claims.GetAudience()
-	if err != nil {
-		t.Errorf("error getting google id token jwt aud claim: %v", err)
-	} else if n := len(aud); n != 1 {
-		t.Errorf("google id token does not have exactly one aud claim: %v", n)
-	} else {
-		assert.Equal(t, expectedAudience, aud[0])
-	}
-	iss, err := unverifiedToken.Claims.GetIssuer()
-	if err != nil {
-		t.Errorf("error getting google id token jwt iss claim: %v", err)
-	} else {
-		assert.Equal(t, expectedIssuer, iss)
-	}
-	sub, err := unverifiedToken.Claims.GetSubject()
-	if err != nil {
-		t.Errorf("error getting google id token jwt sub claim: %v", err)
-	} else {
-		subjectRegex := regexp.MustCompile(expectedSubject)
-		assert.True(t, subjectRegex.MatchString(sub))
-	}
-	exp, err := unverifiedToken.Claims.GetExpirationTime()
-	if err != nil {
-		t.Errorf("error getting google id token jwt exp claim: %v", err)
-	} else {
-		assertExpirationSeconds(t, int(time.Until(exp.Time).Seconds()))
-	}
-	require.False(t, t.Failed())
-
-	// verify token
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	google, err := oidc.NewProvider(ctx, expectedIssuer)
-	require.NoError(t, err)
-	token, err := google.
-		VerifierContext(ctx, &oidc.Config{ClientID: expectedAudience}).
-		Verify(ctx, rawToken)
-	require.NoError(t, err)
-	var claims struct {
-		Email         string `json:"email"`
-		EmailVerified bool   `json:"email_verified"`
-	}
-	err = token.Claims(&claims)
-	require.NoError(t, err)
-	assert.Equal(t, "test-sa@gke-metadata-server.iam.gserviceaccount.com", claims.Email)
-	assert.True(t, claims.EmailVerified)
-}
-
 func TestGKEServiceAccountTokenAPI(t *testing.T) {
 	const url = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token"
 
@@ -121,7 +64,7 @@ func TestGKEServiceAccountTokenAPI(t *testing.T) {
 	}
 
 	// request google access token
-	respBodyStr := requestURL(t, gkeHeaders, url, "application/json", gkeMetadataFlavor)
+	respBodyStr := requestURL(t, gkeHeaders, url, "application/json", gkeMetadataFlavor, http.StatusOK)
 	err := json.Unmarshal([]byte(respBodyStr), &respBody)
 	require.NoError(t, err)
 	assertExpirationSeconds(t, respBody.ExpiresIn)
@@ -164,7 +107,7 @@ func TestGKEServiceAccountTokenAPI(t *testing.T) {
 		authzHeader: []string{bearerToken},
 	}
 	getObjectURL := "https://storage.googleapis.com/storage/v1/b/" + testBucket + "/o/" + key + "?alt=media"
-	text := requestURL(t, headers, getObjectURL, "text/plain", "")
+	text := requestURL(t, headers, getObjectURL, "text/plain", "", http.StatusOK)
 	assert.Equal(t, value, text)
 
 	// delete object
@@ -225,8 +168,76 @@ func TestGKEServiceAccountTokenAPIImplicitly(t *testing.T) {
 	assert.Equal(t, value, string(b))
 }
 
+func TestGKEServiceAccountIdentityAPI(t *testing.T) {
+	const expectedAudience = "test.com"
+	const expectedIssuer = "https://accounts.google.com"
+	const expectedSubject = `^\d{20,30}$`
+	const url = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity?audience=" + expectedAudience
+
+	if os.Getenv("HOSTNAME") == "test-direct-access" {
+		const expectedMsg = `Your Kubernetes service account (default/test) is not annotated with a target Google service account, which is a requirement for retrieving Identity Tokens using Workload Identity.
+Please add the iam.gke.io/gcp-service-account=[GSA_NAME]@[PROJECT_ID] annotation to your Kubernetes service account.
+Refer to https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity
+`
+		resp := requestURL(t, gkeHeaders, url, "application/text", gkeMetadataFlavor, http.StatusNotFound)
+		assert.Equal(t, expectedMsg, resp)
+		return
+	}
+
+	// request google id token
+	rawToken := requestURL(t, gkeHeaders, url, "application/text", gkeMetadataFlavor, http.StatusOK)
+	unverifiedToken, _, err := jwt.NewParser().ParseUnverified(rawToken, jwt.MapClaims{})
+	require.NoError(t, err)
+	aud, err := unverifiedToken.Claims.GetAudience()
+	if err != nil {
+		t.Errorf("error getting google id token jwt aud claim: %v", err)
+	} else if n := len(aud); n != 1 {
+		t.Errorf("google id token does not have exactly one aud claim: %v", n)
+	} else {
+		assert.Equal(t, expectedAudience, aud[0])
+	}
+	iss, err := unverifiedToken.Claims.GetIssuer()
+	if err != nil {
+		t.Errorf("error getting google id token jwt iss claim: %v", err)
+	} else {
+		assert.Equal(t, expectedIssuer, iss)
+	}
+	sub, err := unverifiedToken.Claims.GetSubject()
+	if err != nil {
+		t.Errorf("error getting google id token jwt sub claim: %v", err)
+	} else {
+		subjectRegex := regexp.MustCompile(expectedSubject)
+		assert.True(t, subjectRegex.MatchString(sub))
+	}
+	exp, err := unverifiedToken.Claims.GetExpirationTime()
+	if err != nil {
+		t.Errorf("error getting google id token jwt exp claim: %v", err)
+	} else {
+		assertExpirationSeconds(t, int(time.Until(exp.Time).Seconds()))
+	}
+	require.False(t, t.Failed())
+
+	// verify token
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	google, err := oidc.NewProvider(ctx, expectedIssuer)
+	require.NoError(t, err)
+	token, err := google.
+		VerifierContext(ctx, &oidc.Config{ClientID: expectedAudience}).
+		Verify(ctx, rawToken)
+	require.NoError(t, err)
+	var claims struct {
+		Email         string `json:"email"`
+		EmailVerified bool   `json:"email_verified"`
+	}
+	err = token.Claims(&claims)
+	require.NoError(t, err)
+	assert.Equal(t, "test-sa@gke-metadata-server.iam.gserviceaccount.com", claims.Email)
+	assert.True(t, claims.EmailVerified)
+}
+
 func requestURL(t *testing.T, headers http.Header, url, expectedContentType,
-	expectedMetadataFlavor string) string {
+	expectedMetadataFlavor string, expectedStatusCode int) string {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -240,7 +251,7 @@ func requestURL(t *testing.T, headers http.Header, url, expectedContentType,
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
-	assert.Equal(t, 200, resp.StatusCode)
+	assert.Equal(t, expectedStatusCode, resp.StatusCode)
 	assert.Equal(t, expectedContentType, resp.Header.Get("Content-Type"))
 	assert.Equal(t, expectedMetadataFlavor, resp.Header.Get("Metadata-Flavor"))
 	b, err := io.ReadAll(resp.Body)
@@ -254,7 +265,7 @@ func requestURL(t *testing.T, headers http.Header, url, expectedContentType,
 
 func assertExpirationSeconds(t *testing.T, secs int) {
 	t.Helper()
-	assert.LessOrEqual(t, 3400, secs)
+	assert.LessOrEqual(t, 3000, secs)
 	assert.LessOrEqual(t, secs, 3600)
 }
 

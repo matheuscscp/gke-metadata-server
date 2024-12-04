@@ -41,7 +41,7 @@ type (
 	}
 )
 
-var workloadIdentityProviderRegex = regexp.MustCompile(`^projects/\d+/locations/global/workloadIdentityPools/[^/]+/providers/[^/]+$`)
+var workloadIdentityProviderRegex = regexp.MustCompile(`^projects/\d+/locations/global/workloadIdentityPools/([^/]+)/providers/[^/]+$`)
 
 func AccessScopes() []string {
 	return []string{
@@ -50,27 +50,36 @@ func AccessScopes() []string {
 	}
 }
 
-func NewConfig(opts ConfigOptions) (*Config, error) {
+func NewConfig(opts ConfigOptions) (*Config, string, error) {
 	if !workloadIdentityProviderRegex.MatchString(opts.WorkloadIdentityProvider) {
-		return nil, fmt.Errorf("workload identity provider name does not match pattern %s",
+		return nil, "", fmt.Errorf("workload identity provider name does not match pattern %s",
 			workloadIdentityProviderRegex.String())
 	}
-	return &Config{opts}, nil
+	workloadIdentityPool := workloadIdentityProviderRegex.FindStringSubmatch(opts.WorkloadIdentityProvider)[1]
+	return &Config{opts}, workloadIdentityPool, nil
 }
 
-func (c *Config) Get(ctx context.Context, googleServiceAccountEmail, credFile string) (*google.Credentials, error) {
+func (c *Config) Get(ctx context.Context, credFile string, googleServiceAccountEmail *string) (*google.Credentials, error) {
 	conf := map[string]any{
+		"universe_domain":    "googleapis.com",
 		"type":               "external_account",
 		"audience":           c.WorkloadIdentityProviderAudience(),
 		"subject_token_type": "urn:ietf:params:oauth:token-type:jwt",
 		"token_url":          "https://sts.googleapis.com/v1/token",
 		"credential_source": map[string]any{
-			"format": map[string]string{"type": "text"},
-			"file":   credFile,
+			"file": credFile,
+			"format": map[string]string{
+				"type": "text",
+			},
 		},
-		"service_account_impersonation_url": fmt.Sprintf(
+	}
+
+	if googleServiceAccountEmail != nil {
+		conf["service_account_impersonation_url"] = fmt.Sprintf(
 			"https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/%s:generateAccessToken",
-			googleServiceAccountEmail),
+			*googleServiceAccountEmail)
+	} else {
+		conf["token_info_url"] = "https://sts.googleapis.com/v1/introspect"
 	}
 
 	b, err := json.Marshal(conf)

@@ -46,28 +46,31 @@ type (
 
 // getPodGoogleServiceAccountEmail gets the Google Service Account email associated with the given pod.
 // If there's an error this function sends the response to the client.
-func (s *Server) getPodGoogleServiceAccountEmail(w http.ResponseWriter, r *http.Request) (string, *http.Request, error) {
+func (s *Server) getPodGoogleServiceAccountEmail(w http.ResponseWriter, r *http.Request) (*string, *http.Request, error) {
 	ctx := r.Context()
 	if v := ctx.Value(podGoogleServiceAccountEmailContextKey{}); v != nil {
-		return v.(string), r, nil
+		return v.(*string), r, nil
 	}
 	saRef, r, err := s.getPodServiceAccountReference(w, r)
 	if err != nil {
-		return "", nil, err
+		return nil, nil, err
 	}
 	sa, err := s.opts.ServiceAccounts.Get(ctx, saRef)
 	if err != nil {
 		const format = "error getting pod service account: %w"
 		pkghttp.RespondErrorf(w, r, http.StatusInternalServerError, format, err)
-		return "", nil, fmt.Errorf(format, err)
+		return nil, nil, fmt.Errorf(format, err)
 	}
 	email, err := serviceaccounts.GoogleEmail(sa)
 	if err != nil {
 		pkghttp.RespondError(w, r, http.StatusBadRequest, err)
-		return "", nil, err
+		return nil, nil, err
 	}
 	ctx = context.WithValue(ctx, podGoogleServiceAccountEmailContextKey{}, email)
-	l := logging.FromRequest(r).WithField("pod_google_service_account_email", email)
+	l := logging.FromRequest(r)
+	if email != nil {
+		l = l.WithField("pod_google_service_account_email", *email)
+	}
 	r = logging.IntoRequest(r.WithContext(ctx), l)
 	return email, r, nil
 }
@@ -75,11 +78,15 @@ func (s *Server) getPodGoogleServiceAccountEmail(w http.ResponseWriter, r *http.
 // listPodGoogleServiceAccounts lists the available Google Service Accounts for the requesting Pod.
 // If there's an error this function sends the response to the client.
 func (s *Server) listPodGoogleServiceAccounts(w http.ResponseWriter, r *http.Request) ([]string, *http.Request, error) {
+	accs := []string{"default"}
 	podGoogleServiceAccountEmail, r, err := s.getPodGoogleServiceAccountEmail(w, r)
 	if err != nil {
 		return nil, nil, err
 	}
-	return []string{"default", podGoogleServiceAccountEmail}, r, nil
+	if podGoogleServiceAccountEmail != nil {
+		accs = append(accs, *podGoogleServiceAccountEmail)
+	}
+	return accs, r, nil
 }
 
 // getPodServiceAccountToken creates a ServiceAccount Token for the

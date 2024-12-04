@@ -20,20 +20,35 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+
 # This file is not only a core part of our test automation in this project,
 # but also an example of how to configure Pods in a cluster where the emulator
 # is deployed. Use this as reference for how to configure your production Pods.
 
-# ServiceAccount configuration is the exact same of Workload Identity in GKE.
+
+# ServiceAccount configuration is the exact same of Workload Identity Federation for GKE.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: test-impersonated
+  namespace: default
+  annotations:
+    # If you want to impersonate a GCP Service Account, you must set this annotation.
+    # Impersonation is required for using the Identity API (to get Google OIDC Tokens
+    # for the impersonated GCP Service Account):
+    #   GET /computeMetadata/v1/instance/service-accounts/default/identity
+    iam.gke.io/gcp-service-account: test-sa@gke-metadata-server.iam.gserviceaccount.com
+---
+# If you are granting direct resource access, the annotation is not needed. Some GCP
+# may have limitations and not support direct resource access. See docs:
+#   * https://cloud.google.com/iam/docs/workload-identity-federation-with-kubernetes#use-wlif
+#   * https://cloud.google.com/iam/docs/federated-identity-supported-services#list
+# The Identity API is not supported by this method.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: test
   namespace: default
-  annotations:
-    # This annotation is how Workload Identity is configured in GKE.
-    # This project uses the same annotation to know which Google Service Account to impersonate.
-    iam.gke.io/gcp-service-account: test-sa@gke-metadata-server.iam.gserviceaccount.com
 ---
 apiVersion: v1
 kind: Pod
@@ -47,9 +62,11 @@ metadata:
     # outbound traffic targeting 169.254.169.254:80 to the emulator port on the Node.
     gke-metadata-server.matheuscscp.io/webhook: Mutate
 spec:
-  serviceAccountName: test # Use the ServiceAccount created above.
+  serviceAccountName: <SERVICE_ACCOUNT> # Use the ServiceAccount created above.
 
-  # ATTENTION: All the configuration below is test-only and not needed in production!
+  ################################################################################
+  # Note: All the configuration below is test-only and not needed in production. #
+  ################################################################################
 
   restartPolicy: Never
   hostNetwork: <HOST_NETWORK>

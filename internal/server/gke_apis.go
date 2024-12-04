@@ -33,6 +33,7 @@ import (
 	"github.com/matheuscscp/gke-metadata-server/internal/googlecredentials"
 	pkghttp "github.com/matheuscscp/gke-metadata-server/internal/http"
 	"github.com/matheuscscp/gke-metadata-server/internal/logging"
+	"github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts"
 
 	"google.golang.org/api/googleapi"
 )
@@ -50,7 +51,11 @@ func (s *Server) gkeServiceAccountEmailAPI(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		return
 	}
-	pkghttp.RespondText(w, r, http.StatusOK, podGoogleServiceAccountEmail)
+	if podGoogleServiceAccountEmail != nil {
+		pkghttp.RespondText(w, r, http.StatusOK, *podGoogleServiceAccountEmail)
+	} else {
+		pkghttp.RespondText(w, r, http.StatusOK, s.opts.WorkloadIdentityPool)
+	}
 }
 
 func (s *Server) gkeServiceAccountIdentityAPI(w http.ResponseWriter, r *http.Request) {
@@ -70,8 +75,17 @@ func (s *Server) gkeServiceAccountIdentityAPI(w http.ResponseWriter, r *http.Req
 	if err != nil {
 		return
 	}
+	if podGoogleServiceAccountEmail == nil {
+		saRef := r.Context().Value(podServiceAccountReferenceContextKey{}).(*serviceaccounts.Reference)
+		msg := fmt.Sprintf(`Your Kubernetes service account (%s/%s) is not annotated with a target Google service account, which is a requirement for retrieving Identity Tokens using Workload Identity.
+Please add the iam.gke.io/gcp-service-account=[GSA_NAME]@[PROJECT_ID] annotation to your Kubernetes service account.
+Refer to https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity
+`, saRef.Namespace, saRef.Name)
+		pkghttp.RespondText(w, r, http.StatusNotFound, msg)
+		return
+	}
 	token, _, err := s.opts.ServiceAccountTokens.GetGoogleIdentityToken(
-		r.Context(), saToken, podGoogleServiceAccountEmail, audience)
+		r.Context(), saToken, *podGoogleServiceAccountEmail, audience)
 	if err != nil {
 		respondGoogleAPIErrorf(w, r, "error getting google id token: %w", err)
 		return

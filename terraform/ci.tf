@@ -71,15 +71,6 @@ resource "google_project_iam_custom_role" "continuous_integration" {
   permissions = ["iam.workloadIdentityPoolProviders.create"]
 }
 
-resource "google_storage_bucket_iam_binding" "ci_cluster_issuer_creators" {
-  bucket = local.cluster_issuer_bucket
-  role   = "roles/storage.objectCreator"
-  members = [
-    google_service_account.pull_request.member,
-    google_service_account.release.member,
-  ]
-}
-
 resource "google_project_iam_member" "resource_cleaner" {
   project = local.project
   role    = google_project_iam_custom_role.resource_cleaner.name

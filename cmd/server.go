@@ -69,8 +69,8 @@ func newServerCommand() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "server",
-		Short: "Start the GKE Workload Identity emulator",
-		Long:  "Start the GKE Workload Identity emulator for serving requests locally inside each node of the Kubernes cluster",
+		Short: "Start the GKE Metadata Server emulator",
+		Long:  "Start the GKE Metadata Server emulator for serving requests locally inside each node of the Kubernes cluster",
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			// validate input
 			nodeName := os.Getenv("NODE_NAME")
@@ -87,7 +87,7 @@ func newServerCommand() *cobra.Command {
 				Name:      defaultNodeServiceAccountName,
 				Namespace: defaultNodeServiceAccountNamespace,
 			}
-			googleCredentialsConfig, err := googlecredentials.NewConfig(googlecredentials.ConfigOptions{
+			googleCredentialsConfig, workloadIdentityPool, err := googlecredentials.NewConfig(googlecredentials.ConfigOptions{
 				WorkloadIdentityProvider: workloadIdentityProvider,
 			})
 			if err != nil {
@@ -220,12 +220,14 @@ func newServerCommand() *cobra.Command {
 				ServiceAccountTokens:      serviceAccountTokens,
 				MetricsRegistry:           metricsRegistry,
 				DefaultNodeServiceAccount: defaultNodeServiceAccount,
+				WorkloadIdentityPool:      workloadIdentityPool,
 			})
 
 			webhookServer := webhook.New(ctx, webhook.ServerOptions{
 				ServerAddr:       webhookAddr,
 				InitNetworkImage: webhookInitNetworkImage,
 				DaemonSetPort:    strings.Split(serverAddr, ":")[1],
+				MetricsRegistry:  metricsRegistry,
 			})
 
 			ctx, cancel := waitForShutdown(ctx)

@@ -24,20 +24,8 @@
 # https://cloud.google.com/iam/docs/workload-identity-federation-with-kubernetes
 
 locals {
-  cluster_issuer_bucket = "gke-metadata-server-issuer-test"
-  test_bucket           = "gke-metadata-server-test"
-  principal_prefix      = "principal://iam.googleapis.com/${google_iam_workload_identity_pool.test_kind_cluster.name}/subject/system:serviceaccount"
-}
-
-resource "google_storage_bucket" "cluster_issuer_test" {
-  name     = local.cluster_issuer_bucket
-  location = "us"
-}
-
-resource "google_storage_bucket_iam_member" "all_users_object_viewer" {
-  bucket = google_storage_bucket.cluster_issuer_test.name
-  role   = "roles/storage.objectViewer"
-  member = "allUsers"
+  test_bucket      = "gke-metadata-server-test"
+  principal_prefix = "principal://iam.googleapis.com/${google_iam_workload_identity_pool.test_kind_cluster.name}/subject/system:serviceaccount"
 }
 
 resource "google_iam_workload_identity_pool" "test_kind_cluster" {
@@ -67,9 +55,14 @@ resource "google_service_account_iam_member" "openid_token_creator" {
 }
 
 resource "google_storage_bucket" "test" {
-  name                     = local.test_bucket
-  location                 = "us"
-  public_access_prevention = "enforced"
+  name                        = local.test_bucket
+  location                    = "us"
+  public_access_prevention    = "enforced"
+  uniform_bucket_level_access = true # required for direct resource access
+
+  soft_delete_policy {
+    retention_duration_seconds = 0
+  }
 
   lifecycle_rule {
     action {
