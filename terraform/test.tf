@@ -26,6 +26,7 @@
 locals {
   cluster_issuer_bucket = "gke-metadata-server-issuer-test"
   test_bucket           = "gke-metadata-server-test"
+  principal_prefix      = "principal://iam.googleapis.com/${google_iam_workload_identity_pool.test_kind_cluster.name}/subject/system:serviceaccount"
 }
 
 resource "google_storage_bucket" "cluster_issuer_test" {
@@ -47,16 +48,13 @@ resource "google_service_account" "test" {
   account_id = "test-sa"
 }
 
-resource "google_service_account_iam_member" "workload_identity_user" {
+resource "google_service_account_iam_binding" "test_workload_identity_users" {
   service_account_id = google_service_account.test.name
   role               = local.wi_user_role
-  member             = "principal://iam.googleapis.com/${google_iam_workload_identity_pool.test_kind_cluster.name}/subject/system:serviceaccount:default:test"
-}
-
-resource "google_service_account_iam_member" "gke_metadata_server_workload_identity_user" {
-  service_account_id = google_service_account.test.name
-  role               = local.wi_user_role
-  member             = "principal://iam.googleapis.com/${google_iam_workload_identity_pool.test_kind_cluster.name}/subject/system:serviceaccount:kube-system:gke-metadata-server"
+  members = [
+    "${local.principal_prefix}:kube-system:gke-metadata-server",
+    "${local.principal_prefix}:default:test-impersonated",
+  ]
 }
 
 # this allows an OAuth 2.0 Access Token for the Google Service Account to be exchanged
@@ -83,8 +81,11 @@ resource "google_storage_bucket" "test" {
   }
 }
 
-resource "google_storage_bucket_iam_member" "test_service_account_bucket_object_admin" {
+resource "google_storage_bucket_iam_binding" "test_bucket_object_admins" {
   bucket = google_storage_bucket.test.name
   role   = "roles/storage.objectAdmin"
-  member = google_service_account.test.member
+  members = [
+    google_service_account.test.member,
+    "${local.principal_prefix}:default:test",
+  ]
 }
