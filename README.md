@@ -111,10 +111,10 @@ and then it retrieves the Google OpenID Connect Token using the Google Service A
 
 #### Alternatively, grant direct resource access to the Kubernetes ServiceAccount
 
-GCP Workload Identity Federation for Kubernetes allows you to directly grant Kubernetes
+Workload Identity Federation for Kubernetes allows you to directly grant Kubernetes
 ServiceAccounts access to Google resources, without the need to impersonate a Google
 Service Account. This is done by granting the given IAM Roles directly to principals
-of the form described above described for impersonation. See [docs](https://cloud.google.com/iam/docs/workload-identity-federation-with-kubernetes#use-wlif).
+of the form described above for impersonation. See [docs](https://cloud.google.com/iam/docs/workload-identity-federation-with-kubernetes#use-wlif).
 
 Some specific GCP services do not support this method. See [docs](https://cloud.google.com/iam/docs/federated-identity-supported-services#list).
 
@@ -311,8 +311,9 @@ not available. **Use this tool at your own risk.**
 *(But please do feel free to report bugs and CVEs, request help, new features and
 [contribute](https://github.com/matheuscscp/gke-metadata-server/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22).)*
 
-Furthermore, this tool is *not necessary* for using GCP Workload Identity Federation inside
-non-GKE Kubernetes clusters. This is just a facilitator. Kubernetes and GCP Workload Identity
-Federation work together by themselves. This tool just makes your Pods need much less configuration
-to use GCP Workload Identity Federation for Kubernetes, by making the configuration as close
-as possible to how Workload Identity Federation is configured in a native GKE cluster.
+Furthermore, this tool is *not necessary* for using GCP Workload Identity Federation
+inside non-GKE Kubernetes clusters. This is just a facilitator. Kubernetes and GCP
+Workload Identity Federation work together by themselves. This tool just makes your
+Pods need much less configuration to use GCP Workload Identity Federation for Kubernetes,
+by making the configuration as close as possible to how Workload Identity Federation
+for GKE is configured.
