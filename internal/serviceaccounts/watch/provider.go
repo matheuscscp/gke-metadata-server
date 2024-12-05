@@ -50,11 +50,10 @@ type (
 	}
 
 	ProviderOptions struct {
-		MetricsSubsystem string
-		FallbackSource   serviceaccounts.Provider
-		KubeClient       *kubernetes.Clientset
-		MetricsRegistry  *prometheus.Registry
-		ResyncPeriod     time.Duration
+		FallbackSource  serviceaccounts.Provider
+		KubeClient      *kubernetes.Clientset
+		MetricsRegistry *prometheus.Registry
+		ResyncPeriod    time.Duration
 	}
 
 	Listener interface {
@@ -66,14 +65,12 @@ type (
 func NewProvider(ctx context.Context, opts ProviderOptions) *Provider {
 	numServiceAccounts := prometheus.NewGauge(prometheus.GaugeOpts{
 		Namespace: metrics.Namespace,
-		Subsystem: opts.MetricsSubsystem,
 		Name:      "service_accounts",
 		Help:      "Amount of ServiceAccount objects currently cached.",
 	})
 	opts.MetricsRegistry.MustRegister(numServiceAccounts)
 	cacheMisses := prometheus.NewCounter(prometheus.CounterOpts{
 		Namespace: metrics.Namespace,
-		Subsystem: opts.MetricsSubsystem,
 		Name:      "service_account_cache_misses_total",
 		Help:      "Total amount cache misses when looking up ServiceAccount objects.",
 	})

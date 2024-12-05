@@ -47,11 +47,6 @@ import (
 )
 
 func newServerCommand() *cobra.Command {
-	const (
-		metricsSubsystem       = ""   // empty since metrics.Namespace already ends with "server"
-		tokenExpirationSeconds = 3600 // 1h
-	)
-
 	var (
 		serverAddr                          string
 		webhookAddr                         string
@@ -74,8 +69,8 @@ func newServerCommand() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "server",
-		Short: "Start the GKE Workload Identity emulator",
-		Long:  "Start the GKE Workload Identity emulator for serving requests locally inside each node of the Kubernes cluster",
+		Short: "Start the GKE Metadata Server emulator",
+		Long:  "Start the GKE Metadata Server emulator for serving requests locally inside each node of the Kubernes cluster",
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			// validate input
 			nodeName := os.Getenv("NODE_NAME")
@@ -92,8 +87,7 @@ func newServerCommand() *cobra.Command {
 				Name:      defaultNodeServiceAccountName,
 				Namespace: defaultNodeServiceAccountNamespace,
 			}
-			googleCredentialsConfig, err := googlecredentials.NewConfig(googlecredentials.ConfigOptions{
-				TokenExpirationSeconds:   tokenExpirationSeconds,
+			googleCredentialsConfig, workloadIdentityPool, err := googlecredentials.NewConfig(googlecredentials.ConfigOptions{
 				WorkloadIdentityProvider: workloadIdentityProvider,
 			})
 			if err != nil {
@@ -126,12 +120,11 @@ func newServerCommand() *cobra.Command {
 			var wp *watchpods.Provider
 			if watchPods {
 				opts := watchpods.ProviderOptions{
-					FallbackSource:   pods,
-					NodeName:         nodeName,
-					MetricsSubsystem: metricsSubsystem,
-					KubeClient:       kubeClient,
-					MetricsRegistry:  metricsRegistry,
-					ResyncPeriod:     watchPodsResyncPeriod,
+					FallbackSource:  pods,
+					NodeName:        nodeName,
+					KubeClient:      kubeClient,
+					MetricsRegistry: metricsRegistry,
+					ResyncPeriod:    watchPodsResyncPeriod,
 				}
 				if watchPodsDisableFallback {
 					opts.FallbackSource = nil
@@ -170,11 +163,10 @@ func newServerCommand() *cobra.Command {
 			var wsa *watchserviceaccounts.Provider
 			if watchServiceAccounts {
 				opts := watchserviceaccounts.ProviderOptions{
-					FallbackSource:   serviceAccounts,
-					MetricsSubsystem: metricsSubsystem,
-					KubeClient:       kubeClient,
-					MetricsRegistry:  metricsRegistry,
-					ResyncPeriod:     watchServiceAccountsResyncPeriod,
+					FallbackSource:  serviceAccounts,
+					KubeClient:      kubeClient,
+					MetricsRegistry: metricsRegistry,
+					ResyncPeriod:    watchServiceAccountsResyncPeriod,
 				}
 				if watchServiceAccountsDisableFallback {
 					opts.FallbackSource = nil
@@ -191,11 +183,10 @@ func newServerCommand() *cobra.Command {
 			})
 			if cacheTokens {
 				p := cacheserviceaccounttokens.NewProvider(ctx, cacheserviceaccounttokens.ProviderOptions{
-					Source:           serviceAccountTokens,
-					ServiceAccounts:  serviceAccounts,
-					MetricsSubsystem: metricsSubsystem,
-					MetricsRegistry:  metricsRegistry,
-					Concurrency:      cacheTokensConcurrency,
+					Source:          serviceAccountTokens,
+					ServiceAccounts: serviceAccounts,
+					MetricsRegistry: metricsRegistry,
+					Concurrency:     cacheTokensConcurrency,
 				})
 				defer p.Close()
 				if wp != nil {
@@ -223,19 +214,20 @@ func newServerCommand() *cobra.Command {
 			s := server.New(ctx, server.ServerOptions{
 				NodeName:                  nodeName,
 				ServerAddr:                serverAddr,
-				MetricsSubsystem:          metricsSubsystem,
 				Pods:                      pods,
 				Node:                      node,
 				ServiceAccounts:           serviceAccounts,
 				ServiceAccountTokens:      serviceAccountTokens,
 				MetricsRegistry:           metricsRegistry,
 				DefaultNodeServiceAccount: defaultNodeServiceAccount,
+				WorkloadIdentityPool:      workloadIdentityPool,
 			})
 
 			webhookServer := webhook.New(ctx, webhook.ServerOptions{
 				ServerAddr:       webhookAddr,
 				InitNetworkImage: webhookInitNetworkImage,
 				DaemonSetPort:    strings.Split(serverAddr, ":")[1],
+				MetricsRegistry:  metricsRegistry,
 			})
 
 			ctx, cancel := waitForShutdown(ctx)

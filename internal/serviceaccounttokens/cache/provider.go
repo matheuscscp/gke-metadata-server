@@ -53,11 +53,10 @@ type Provider struct {
 }
 
 type ProviderOptions struct {
-	Source           serviceaccounttokens.Provider
-	ServiceAccounts  serviceaccounts.Provider
-	MetricsSubsystem string
-	MetricsRegistry  *prometheus.Registry
-	Concurrency      int
+	Source          serviceaccounttokens.Provider
+	ServiceAccounts serviceaccounts.Provider
+	MetricsRegistry *prometheus.Registry
+	Concurrency     int
 }
 
 var errServiceAccountDeleted = errors.New("service account was deleted")
@@ -65,14 +64,12 @@ var errServiceAccountDeleted = errors.New("service account was deleted")
 func NewProvider(ctx context.Context, opts ProviderOptions) *Provider {
 	numTokens := prometheus.NewGauge(prometheus.GaugeOpts{
 		Namespace: metrics.Namespace,
-		Subsystem: opts.MetricsSubsystem,
 		Name:      "service_account_tokens",
 		Help:      "Amount of ServiceAccount tokens currently cached.",
 	})
 	opts.MetricsRegistry.MustRegister(numTokens)
 	cacheMisses := prometheus.NewCounter(prometheus.CounterOpts{
 		Namespace: metrics.Namespace,
-		Subsystem: opts.MetricsSubsystem,
 		Name:      "service_account_token_cache_misses_total",
 		Help:      "Total amount cache misses when fetching ServiceAccount tokens.",
 	})
@@ -133,7 +130,7 @@ func (p *Provider) GetServiceAccountToken(ctx context.Context, ref *serviceaccou
 	return token.token, token.expiration(), nil
 }
 
-func (p *Provider) GetGoogleAccessToken(ctx context.Context, saToken, googleEmail string) (string, time.Time, error) {
+func (p *Provider) GetGoogleAccessToken(ctx context.Context, saToken string, googleEmail *string) (string, time.Time, error) {
 	ref := serviceaccounts.ReferenceFromToken(saToken)
 	tokens, err := p.getTokens(ctx, ref)
 	if err != nil {
@@ -220,6 +217,12 @@ func (p *Provider) cacheTokens(sa *serviceAccount) (retErr error) {
 		// release semaphore
 		<-p.semaphore
 
+		// enhance logging with google service account email if any
+		l := l
+		if email != nil {
+			l = l.WithField("google_service_account", *email)
+		}
+
 		// check if service account was deleted again since it may take some time to create tokens
 		if deleted := p.checkIfMustDeleteAndDelete(sa); deleted {
 			return errServiceAccountDeleted
@@ -229,17 +232,11 @@ func (p *Provider) cacheTokens(sa *serviceAccount) (retErr error) {
 		var sleepDuration time.Duration
 		if err != nil {
 			// do not retry invalid GKE annotation errors
-			annotationMissing := errors.Is(err, serviceaccounts.ErrGKEAnnotationMissing)
-			annotationInvalid := errors.Is(err, serviceaccounts.ErrGKEAnnotationInvalid)
-			if annotationMissing || annotationInvalid {
+			if errors.Is(err, serviceaccounts.ErrGKEAnnotationInvalid) {
 				sleepDuration = 10 * 365 * 24 * time.Hour // infinite
 				retries = 0
 				sendResponse(&tokensAndError{err: err})
-				if annotationMissing {
-					l.Debug("service account does not have GKE annotation, sleeping for a long time...")
-				} else {
-					l.WithError(err).Error("service account has invalid GKE annotation, will not retry")
-				}
+				l.WithError(err).Error("service account has invalid GKE annotation, will not retry")
 			} else { // retry any other error
 				sleepDuration = (1 << retries) * time.Second
 				if retries < 5 {
@@ -256,7 +253,7 @@ func (p *Provider) cacheTokens(sa *serviceAccount) (retErr error) {
 			}
 			retries = 0
 			sendResponse(&tokensAndError{tokens: tokens})
-			l.WithField("google_service_account", email).Info("cached tokens for service account")
+			l.Info("cached tokens for service account")
 		}
 
 		// store tokens

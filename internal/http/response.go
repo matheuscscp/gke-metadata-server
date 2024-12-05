@@ -35,7 +35,29 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type reqStartTimeContextKey struct{}
+type requestObservabilityContextKey struct{}
+
+type requestObservability struct {
+	startTime            time.Time
+	observeLatencyMillis latencyMillisObserver
+}
+
+type latencyMillisObserver func(r *http.Request, statusCode int, latencyMs float64)
+
+type errData struct {
+	err     error
+	errResp []any
+}
+
+func InitRequest(r *http.Request, observeLatencyMillis latencyMillisObserver) *http.Request {
+	ctx := r.Context()
+	k := requestObservabilityContextKey{}
+	v := requestObservability{
+		startTime:            time.Now(),
+		observeLatencyMillis: observeLatencyMillis,
+	}
+	return r.WithContext(context.WithValue(ctx, k, v))
+}
 
 func RespondNotFound(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusNotFound)
@@ -46,37 +68,14 @@ func RespondErrorf(w http.ResponseWriter, r *http.Request, statusCode int, forma
 	RespondError(w, r, statusCode, err)
 }
 
-func RespondError(w http.ResponseWriter, r *http.Request, statusCode int, err error, optionalData ...any) {
-	respLogFields := ResponseLogFields(statusCode)
-	resp := map[string]any{
-		"http_response": respLogFields,
+func RespondError(w http.ResponseWriter, r *http.Request, statusCode int, err error, errResp ...any) {
+	RespondJSON(w, r, statusCode, map[string]any{
 		"error":         err.Error(),
-	}
-
-	l := logging.
-		FromRequest(r).
-		WithError(err).
-		WithField("http_response", respLogFields)
-
-	// any structured error data to send?
-	if len(optionalData) > 0 {
-		data := optionalData[0]
-		resp["data"] = data
-		l = l.WithField("data", data)
-	}
-
-	RespondJSON(w, r, statusCode, resp)
-
-	t0 := r.Context().Value(reqStartTimeContextKey{}).(time.Time) // let this panic if a time is not present
-	l = l.WithField("latency", LatencyLogFields(t0))
-	if statusCode < 500 {
-		l.Info("client error")
-	} else {
-		l.Error("server error")
-	}
+		"http_response": responseLogFields(statusCode, errResp...),
+	}, errData{err, errResp})
 }
 
-func RespondJSON(w http.ResponseWriter, r *http.Request, statusCode int, obj any) {
+func RespondJSON(w http.ResponseWriter, r *http.Request, statusCode int, obj any, optErrData ...errData) {
 	marshal := json.Marshal
 	if Pretty(r) {
 		marshal = func(v any) ([]byte, error) { return json.MarshalIndent(v, "", "  ") }
@@ -103,6 +102,12 @@ func RespondJSON(w http.ResponseWriter, r *http.Request, statusCode int, obj any
 			}).
 			Error("less response bytes written than expected")
 	}
+
+	var errData errData
+	if e := optErrData; len(e) > 0 {
+		errData = e[0]
+	}
+	observeRequest(r, statusCode, errData.err, errData.errResp...)
 }
 
 func RespondText(w http.ResponseWriter, r *http.Request, statusCode int, text string) {
@@ -122,17 +127,23 @@ func RespondText(w http.ResponseWriter, r *http.Request, statusCode int, text st
 			}).
 			Error("less response bytes written than expected")
 	}
+
+	observeRequest(r, statusCode, nil)
 }
 
-func ResponseLogFields(statusCode int) logrus.Fields {
+func responseLogFields(statusCode int, errResp ...any) logrus.Fields {
 	status := http.StatusText(statusCode)
 	if statusCode == StatusClientClosedRequest {
 		status = "Client Closed Request"
 	}
-	return logrus.Fields{
+	f := logrus.Fields{
 		"status":      status,
 		"status_code": statusCode,
 	}
+	if len(errResp) > 0 {
+		f["data"] = errResp[0]
+	}
+	return f
 }
 
 func LatencyLogFields(t0 time.Time) logrus.Fields {
@@ -143,11 +154,36 @@ func LatencyLogFields(t0 time.Time) logrus.Fields {
 	}
 }
 
-func StartTimeIntoRequest(r *http.Request, t0 time.Time) *http.Request {
-	return r.WithContext(context.WithValue(r.Context(), reqStartTimeContextKey{}, t0))
-}
-
 func Pretty(r *http.Request) bool {
 	p := strings.ToLower(r.URL.Query().Get("pretty"))
 	return p == "" || p == "true"
+}
+
+func observeRequest(r *http.Request, statusCode int, err error, errResp ...any) {
+	o := r.Context().Value(requestObservabilityContextKey{}).(requestObservability)
+
+	latency := time.Since(o.startTime)
+
+	o.observeLatencyMillis(r, statusCode, float64(latency.Milliseconds()))
+
+	l := logging.FromRequest(r).WithFields(logrus.Fields{
+		"http_response": responseLogFields(statusCode, errResp...),
+		"latency": logrus.Fields{
+			"string": latency.String(),
+			"nanos":  latency.Nanoseconds(),
+		},
+	})
+
+	if err != nil {
+		l = l.WithError(err)
+	}
+
+	switch {
+	case statusCode < 400:
+		l.Info("request")
+	case statusCode < 500:
+		l.Info("client error")
+	default:
+		l.Error("server error")
+	}
 }

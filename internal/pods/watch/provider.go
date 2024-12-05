@@ -53,12 +53,11 @@ type (
 	}
 
 	ProviderOptions struct {
-		NodeName         string
-		MetricsSubsystem string
-		FallbackSource   pods.Provider
-		KubeClient       *kubernetes.Clientset
-		MetricsRegistry  *prometheus.Registry
-		ResyncPeriod     time.Duration
+		NodeName        string
+		FallbackSource  pods.Provider
+		KubeClient      *kubernetes.Clientset
+		MetricsRegistry *prometheus.Registry
+		ResyncPeriod    time.Duration
 	}
 
 	Listener interface {
@@ -72,14 +71,12 @@ const ipIndex = "ip"
 func NewProvider(opts ProviderOptions) *Provider {
 	numPods := prometheus.NewGauge(prometheus.GaugeOpts{
 		Namespace: metrics.Namespace,
-		Subsystem: opts.MetricsSubsystem,
 		Name:      "pods",
 		Help:      "Amount of Pod objects currently cached.",
 	})
 	opts.MetricsRegistry.MustRegister(numPods)
 	cacheMisses := prometheus.NewCounter(prometheus.CounterOpts{
 		Namespace: metrics.Namespace,
-		Subsystem: opts.MetricsSubsystem,
 		Name:      "pod_cache_misses_total",
 		Help:      "Total amount cache misses when looking up Pod objects.",
 	})

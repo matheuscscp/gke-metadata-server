@@ -52,25 +52,25 @@ type googleIDTokenReference struct {
 	audience               string
 }
 
-func (p *Provider) createTokens(ctx context.Context, saRef *serviceaccounts.Reference) (*tokens, string, error) {
+func (p *Provider) createTokens(ctx context.Context, saRef *serviceaccounts.Reference) (*tokens, *string, error) {
 	sa, err := p.opts.ServiceAccounts.Get(ctx, saRef)
 	if err != nil {
-		return nil, "", fmt.Errorf("error getting kubernetes service account: %w", err)
+		return nil, nil, fmt.Errorf("error getting kubernetes service account: %w", err)
 	}
 
 	email, err := serviceaccounts.GoogleEmail(sa)
 	if err != nil {
-		return nil, "", fmt.Errorf("error getting google service account from kubernetes service account: %w", err)
+		return nil, nil, fmt.Errorf("error getting google service account from kubernetes service account: %w", err)
 	}
 
 	saToken, saTokenExpiration, err := p.opts.Source.GetServiceAccountToken(ctx, saRef)
 	if err != nil {
-		return nil, "", fmt.Errorf("error creating token for kubernetes service account: %w", err)
+		return nil, nil, fmt.Errorf("error creating token for kubernetes service account: %w", err)
 	}
 
 	accessToken, accessTokenExpiration, err := p.opts.Source.GetGoogleAccessToken(ctx, saToken, email)
 	if err != nil {
-		return nil, "", fmt.Errorf("error creating access token for google service account %s: %w", email, err)
+		return nil, nil, fmt.Errorf("error creating google access token: %w", err)
 	}
 
 	return &tokens{

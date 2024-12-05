@@ -26,12 +26,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 
 	pkghttp "github.com/matheuscscp/gke-metadata-server/internal/http"
 	"github.com/matheuscscp/gke-metadata-server/internal/logging"
+	"github.com/matheuscscp/gke-metadata-server/internal/metrics"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -41,6 +44,7 @@ type ServerOptions struct {
 	ServerAddr       string
 	InitNetworkImage string
 	DaemonSetPort    string
+	MetricsRegistry  *prometheus.Registry
 }
 
 type Server struct {
@@ -58,7 +62,7 @@ func New(ctx context.Context, opts ServerOptions) *Server {
 
 	httpServer := &http.Server{
 		Addr:    opts.ServerAddr,
-		Handler: mutate(&opts),
+		Handler: mutateHandler(opts),
 		BaseContext: func(net.Listener) context.Context {
 			return logging.IntoContext(context.Background(), l)
 		},
@@ -78,8 +82,18 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	return s.httpServer.Shutdown(ctx)
 }
 
-func mutate(opts *ServerOptions) http.HandlerFunc {
+func mutateHandler(opts ServerOptions) http.HandlerFunc {
+	const subsystem = "webhook"
+	labelNames := []string{"status"}
+	latencyMillis := metrics.NewLatencyMillis(subsystem, labelNames...)
+	opts.MetricsRegistry.MustRegister(latencyMillis)
+	observeLatencyMillis := func(r *http.Request, statusCode int, latencyMs float64) {
+		latencyMillis.WithLabelValues(fmt.Sprint(statusCode)).Observe(latencyMs)
+	}
+
 	return func(w http.ResponseWriter, r *http.Request) {
+		r = pkghttp.InitRequest(r, observeLatencyMillis)
+
 		admissionReview := &admissionv1.AdmissionReview{}
 		if err := json.NewDecoder(r.Body).Decode(admissionReview); err != nil {
 			pkghttp.RespondErrorf(w, r, http.StatusBadRequest, "error decoding admission review: %w", err)

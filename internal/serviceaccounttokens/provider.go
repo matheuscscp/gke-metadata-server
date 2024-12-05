@@ -31,6 +31,6 @@ import (
 
 type Provider interface {
 	GetServiceAccountToken(ctx context.Context, ref *serviceaccounts.Reference) (string, time.Time, error)
-	GetGoogleAccessToken(ctx context.Context, saToken, googleEmail string) (string, time.Time, error)
+	GetGoogleAccessToken(ctx context.Context, saToken string, googleEmail *string) (string, time.Time, error)
 	GetGoogleIdentityToken(ctx context.Context, saToken, googleEmail, audience string) (string, time.Time, error)
 }

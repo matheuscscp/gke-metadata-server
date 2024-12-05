@@ -59,8 +59,8 @@ func main() {
 
 	rootCmd := &cobra.Command{
 		Use:   os.Args[0],
-		Short: os.Args[0] + " is an open-source implementation of GKE Workload Identity",
-		Long:  os.Args[0] + " is an open-source implementation of GKE Workload Identity for non-GKE Kubernetes clusters",
+		Short: os.Args[0] + " is an open-source implementation of GCP Workload Identity Federation for GKE",
+		Long:  os.Args[0] + " is an open-source implementation of GCP Workload Identity Federation for GKE for non-GKE Kubernetes clusters",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			logLevel, err := logrus.ParseLevel(stringLogLevel)
 			if err != nil {

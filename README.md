@@ -7,7 +7,8 @@ A GKE Metadata Server *emulator* for making it easier to use GCP Workload Identi
 inside *non-GKE* Kubernetes clusters, e.g. KinD, on-prem, managed Kubernetes from other
 clouds, etc. This implementation tries to mimic the `gke-metadata-server` `DaemonSet` deployed
 automatically by Google in the `kube-system` namespace of GKE clusters that have the feature
-*Workload Identity* enabled. See how it [works](https://cloud.google.com/kubernetes-engine/docs/concepts/workload-identity#metadata_server).
+*Workload Identity Federation for GKE* enabled. See how the GKE Metadata Server
+[works](https://cloud.google.com/kubernetes-engine/docs/concepts/workload-identity#metadata_server).
 
 ## Usage
 
@@ -96,17 +97,30 @@ principal:
 This principal will be reflected as a Subject in the Google Cloud Console webpage of the Pool.
 
 If you plan to use the `GET /computeMetadata/v1/instance/service-accounts/default/identity`
-API for issuing Google OpenID Connect Tokens to use in external systems, you must also grant
-the IAM Role `roles/iam.serviceAccountOpenIdTokenCreator` on the Google Service Account to
-the Google Service Account itself, i.e. the following principal:
+API for issuing Google OpenID Connect Identity Tokens to use in external systems, you must
+also grant the IAM Role `roles/iam.serviceAccountOpenIdTokenCreator` on the Google Service
+Account to the Google Service Account itself, i.e. the following principal:
 
 `serviceAccount:{gcp_service_account}@{gcp_project_id}.iam.gserviceaccount.com`
 
 This "self-impersonation" permission is necessary because the `gke-metadata-server` emulator
-retrieves the Google OpenID Connect Token in a 2-step process: first it retrieves the Google
-Service Account OAuth 2.0 Access Token using the Kubernetes ServiceAccount Token, and then it
-retrieves the Google OpenID Connect Token using the Google Service Account OAuth 2.0 Access
-Token.
+retrieves the Google OpenID Connect Identity Token in a 2-step process: first it retrieves
+the Google Service Account OAuth 2.0 Access Token using the Kubernetes ServiceAccount Token,
+and then it retrieves the Google OpenID Connect Token using the Google Service Account OAuth
+2.0 Access Token.
+
+#### Alternatively, grant direct resource access to the Kubernetes ServiceAccount
+
+GCP Workload Identity Federation for Kubernetes allows you to directly grant Kubernetes
+ServiceAccounts access to Google resources, without the need to impersonate a Google
+Service Account. This is done by granting the given IAM Roles directly to principals
+of the form described above described for impersonation. See [docs](https://cloud.google.com/iam/docs/workload-identity-federation-with-kubernetes#use-wlif).
+
+Some specific GCP services do not support this method. See [docs](https://cloud.google.com/iam/docs/federated-identity-supported-services#list).
+
+The `GET /computeMetadata/v1/instance/service-accounts/default/identity` API is not
+supported by this method. If you plan to use this API, you must use the impersonation
+method described above.
 
 ### Deploy `gke-metadata-server` in your cluster
 
@@ -269,7 +283,7 @@ or the Timoni Module value `values.settings.defaultNodeServiceAccount`.
 
 ***Attention:*** The `iptables` rules installed in the network namespace of mutated
 Pods will redirect outbound traffic targeting `169.254.169.254:80` to the emulator port
-on the Node. If you are using similar tools or equivalent Workload Identity features
+on the Node. If you are using similar tools or equivalent workload identity features
 of managed Kubernetes from other clouds, *this configuration may have a direct conflict
 with other such tools or features.* It's a common practice among cloud providers using
 this endpoint to implement such features. Especially when mutating Pods that will run
@@ -300,5 +314,5 @@ not available. **Use this tool at your own risk.**
 Furthermore, this tool is *not necessary* for using GCP Workload Identity Federation inside
 non-GKE Kubernetes clusters. This is just a facilitator. Kubernetes and GCP Workload Identity
 Federation work together by themselves. This tool just makes your Pods need much less configuration
-to use GCP Workload Identity Federation, by making the configuration as close as possible to
-how Workload Identity is configured in a native GKE cluster.
+to use GCP Workload Identity Federation for Kubernetes, by making the configuration as close
+as possible to how Workload Identity Federation is configured in a native GKE cluster.

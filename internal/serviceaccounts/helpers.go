@@ -36,10 +36,7 @@ type Reference struct {
 	Namespace string `json:"namespace"`
 }
 
-var (
-	ErrGKEAnnotationMissing = fmt.Errorf("gke annotation %q missing", gkeAnnotation)
-	ErrGKEAnnotationInvalid = fmt.Errorf("gke annotation %q has invalid google service account email", gkeAnnotation)
-)
+var ErrGKEAnnotationInvalid = fmt.Errorf("gke annotation %q has invalid google service account email", gkeAnnotation)
 
 const (
 	gkeAnnotation = "iam.gke.io/gcp-service-account"
@@ -98,18 +95,18 @@ func ReferenceFromToken(token string) *Reference {
 }
 
 // GoogleEmail returns the Google service account email from the same annotation
-// used in native GKE Workload Identity. The annotation is:
+// used in native GCP Workload Identity Federation for GKE. The annotation is:
 //
 // iam.gke.io/gcp-service-account
-func GoogleEmail(sa *corev1.ServiceAccount) (string, error) {
+func GoogleEmail(sa *corev1.ServiceAccount) (*string, error) {
 	v, ok := sa.Annotations[gkeAnnotation]
 	if !ok {
-		return "", ErrGKEAnnotationMissing
+		return nil, nil
 	}
 	if !googleEmailRegex.MatchString(v) {
-		return "", ErrGKEAnnotationInvalid
+		return nil, ErrGKEAnnotationInvalid
 	}
-	return v, nil
+	return &v, nil
 }
 
 func getServiceAccountReference(m map[string]string) *Reference {

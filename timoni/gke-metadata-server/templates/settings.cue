@@ -35,7 +35,7 @@ import (
 	// defaultNodeServiceAccount is an optional Google Service Account email to add on the gke-metadata-server
 	// ServiceAccount annotation. The emulator will use this ServiceAccount for Pods running on the host network
 	// in case the Node where they are running does on not specify a ServiceAccount in the annotations (see README.md).
-	defaultNodeServiceAccount?: string & =~"^.+@.+$"
+	defaultNodeServiceAccount?: string & =~"^[a-zA-Z0-9-]+@[a-zA-Z0-9-]+\\.iam\\.gserviceaccount\\.com$"
 
 	// logLevel is the log level for gke-metadata-server.
 	logLevel?: string & ("panic" | "fatal" | "error" | "warning" | "info" | "debug" | "trace")

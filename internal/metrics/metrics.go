@@ -50,7 +50,7 @@ func HandlerFor(registry *prometheus.Registry, l promhttp.Logger) http.Handler {
 	})
 }
 
-func NewLatencyMillis(subsystem string, labelNames []string) *prometheus.HistogramVec {
+func NewLatencyMillis(subsystem string, labelNames ...string) *prometheus.HistogramVec {
 	return prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: Namespace,
 		Subsystem: subsystem,

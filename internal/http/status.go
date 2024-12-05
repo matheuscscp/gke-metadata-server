@@ -22,38 +22,4 @@
 
 package pkghttp
 
-import "net/http"
-
-const (
-	StatusClientClosedRequest = 499
-)
-
-type StatusRecorder struct {
-	http.ResponseWriter
-	statusCode        int
-	writeHeaderCalled bool
-}
-
-func (s *StatusRecorder) Write(b []byte) (int, error) {
-	if !s.writeHeaderCalled {
-		s.WriteHeader(s.StatusCode())
-	}
-	return s.ResponseWriter.Write(b)
-}
-
-func (s *StatusRecorder) WriteHeader(statusCode int) {
-	s.statusCode = statusCode
-	s.writeHeaderCalled = true
-	s.ResponseWriter.WriteHeader(statusCode)
-}
-
-func (s *StatusRecorder) StatusCode() int {
-	if !s.writeHeaderCalled {
-		return http.StatusOK
-	}
-	return s.statusCode
-}
-
-func (s *StatusRecorder) WriteHeaderCalled() bool {
-	return s.writeHeaderCalled
-}
+const StatusClientClosedRequest = 499

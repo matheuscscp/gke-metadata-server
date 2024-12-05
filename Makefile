@@ -158,30 +158,36 @@ test:
 			break; \
 		fi; \
 	done
-	make start-test-pod HOST_NETWORK=false
-	make start-test-pod HOST_NETWORK=true
+	make start-test-pod POD_NAME=test-direct-access HOST_NETWORK=false SERVICE_ACCOUNT=test
+	make start-test-pod POD_NAME=test-impersonation HOST_NETWORK=false SERVICE_ACCOUNT=test-impersonated
+	make start-test-pod POD_NAME=test-host-network  HOST_NETWORK=true  SERVICE_ACCOUNT=test-impersonated
 	while : ; do \
 		sleep_secs=10; \
 		echo "Sleeping for $$sleep_secs secs and checking test Pod status..."; \
 		sleep $$sleep_secs; \
-		EXIT_CODE_1=$$(kubectl --context kind-gke-metadata-server -n default get po test-host-network-false -o jsonpath='{.status.containerStatuses[0].state.terminated.exitCode}'); \
-		EXIT_CODE_2=$$(kubectl --context kind-gke-metadata-server -n default get po test-host-network-true -o jsonpath='{.status.containerStatuses[0].state.terminated.exitCode}'); \
-		if [ -n "$$EXIT_CODE_1" ] && [ -n "$$EXIT_CODE_2" ]; then \
+		EXIT_CODE_1=$$(kubectl --context kind-gke-metadata-server -n default get po test-direct-access -o jsonpath='{.status.containerStatuses[0].state.terminated.exitCode}'); \
+		EXIT_CODE_2=$$(kubectl --context kind-gke-metadata-server -n default get po test-impersonation -o jsonpath='{.status.containerStatuses[0].state.terminated.exitCode}'); \
+		EXIT_CODE_3=$$(kubectl --context kind-gke-metadata-server -n default get po test-host-network  -o jsonpath='{.status.containerStatuses[0].state.terminated.exitCode}'); \
+		if [ -n "$$EXIT_CODE_1" ] && [ -n "$$EXIT_CODE_2" ] && [ -n "$$EXIT_CODE_3" ]; then \
 			echo "All containers exited"; \
 			break; \
 		fi; \
 	done; \
 	kubectl --context kind-gke-metadata-server -n kube-system describe $$(kubectl --context kind-gke-metadata-server -n kube-system get po -o name | grep gke); \
 	kubectl --context kind-gke-metadata-server -n kube-system logs ds/gke-metadata-server; \
-	kubectl --context kind-gke-metadata-server -n default describe po test-host-network-false; \
-	kubectl --context kind-gke-metadata-server -n default logs test-host-network-false -c init-gke-metadata-server; \
-	kubectl --context kind-gke-metadata-server -n default logs test-host-network-false -c test -f; \
-	kubectl --context kind-gke-metadata-server -n default describe po test-host-network-true; \
-	kubectl --context kind-gke-metadata-server -n default logs test-host-network-true -c init-gke-metadata-server; \
-	kubectl --context kind-gke-metadata-server -n default logs test-host-network-true -c test -f; \
-	echo "Pod 'test-host-network-false' exit code: $$EXIT_CODE_1"; \
-	echo "Pod 'test-host-network-true'  exit code: $$EXIT_CODE_2"; \
-	if [ "$$EXIT_CODE_1" != "0" ] || [ "$$EXIT_CODE_2" != "0" ]; then \
+	kubectl --context kind-gke-metadata-server -n default describe po test-direct-access; \
+	kubectl --context kind-gke-metadata-server -n default logs test-direct-access -c init-gke-metadata-server; \
+	kubectl --context kind-gke-metadata-server -n default logs test-direct-access -c test -f; \
+	kubectl --context kind-gke-metadata-server -n default describe po test-impersonation; \
+	kubectl --context kind-gke-metadata-server -n default logs test-impersonation -c init-gke-metadata-server; \
+	kubectl --context kind-gke-metadata-server -n default logs test-impersonation -c test -f; \
+	kubectl --context kind-gke-metadata-server -n default describe po test-host-network; \
+	kubectl --context kind-gke-metadata-server -n default logs test-host-network -c init-gke-metadata-server; \
+	kubectl --context kind-gke-metadata-server -n default logs test-host-network -c test -f; \
+	echo "Pod 'test-direct-access' exit code: $$EXIT_CODE_1"; \
+	echo "Pod 'test-impersonation' exit code: $$EXIT_CODE_2"; \
+	echo "Pod 'test-host-network'  exit code: $$EXIT_CODE_3"; \
+	if [ "$$EXIT_CODE_1" != "0" ] || [ "$$EXIT_CODE_2" != "0" ] || [ "$$EXIT_CODE_3" != "0" ]; then \
 		echo "Failure."; \
 		exit 1; \
 	fi; \
@@ -189,10 +195,13 @@ test:
 
 .PHONY: start-test-pod
 start-test-pod:
+	@if [ "${POD_NAME}" == "" ]; then echo "POD_NAME variable is required."; exit -1; fi
 	@if [ "${HOST_NETWORK}" == "" ]; then echo "HOST_NETWORK variable is required."; exit -1; fi
-	kubectl --context kind-gke-metadata-server -n default delete po test-host-network-${HOST_NETWORK} || true
-	sed "s|<POD_NAME>|test-host-network-${HOST_NETWORK}|g" k8s/test-pod.yaml | \
+	@if [ "${SERVICE_ACCOUNT}" == "" ]; then echo "SERVICE_ACCOUNT variable is required."; exit -1; fi
+	kubectl --context kind-gke-metadata-server -n default delete po ${POD_NAME} || true
+	sed "s|<POD_NAME>|${POD_NAME}|g" k8s/test-pod.yaml | \
 		sed "s|<HOST_NETWORK>|${HOST_NETWORK}|g" | \
+		sed "s|<SERVICE_ACCOUNT>|${SERVICE_ACCOUNT}|g" | \
 		sed "s|<GO_TEST_DIGEST>|$$(cat go-test-digest.txt)|g" | \
 		tee >(kubectl --context kind-gke-metadata-server apply -f -)
 
