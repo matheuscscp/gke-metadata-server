@@ -39,7 +39,7 @@ metadata:
     #   GET /computeMetadata/v1/instance/service-accounts/default/identity
     iam.gke.io/gcp-service-account: test-sa@gke-metadata-server.iam.gserviceaccount.com
 ---
-# If you are granting direct resource access, the annotation is not needed. Some GCP
+# If you are granting direct resource access, the annotation is not needed. Some GCP services
 # may have limitations and not support direct resource access. See docs:
 #   * https://cloud.google.com/iam/docs/workload-identity-federation-with-kubernetes#use-wlif
 #   * https://cloud.google.com/iam/docs/federated-identity-supported-services#list
