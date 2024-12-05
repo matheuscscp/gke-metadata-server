@@ -115,6 +115,12 @@ func mutateHandler(opts ServerOptions) http.HandlerFunc {
 			return
 		}
 
+		podRef := logrus.Fields{
+			"name":      pod.Metadata.Name,
+			"namespace": pod.Metadata.Namespace,
+		}
+		r = logging.IntoRequest(r, logging.FromRequest(r).WithField("pod", podRef))
+
 		// The settings below emulate the HTTP endpoint 169.254.169.254:80, which is
 		// hardcoded across Google libraries as the endpoint for detecting whether
 		// or not the program is running inside the Google Cloud. The hostAliases
@@ -183,12 +189,6 @@ func mutateHandler(opts ServerOptions) http.HandlerFunc {
 		}
 
 		pkghttp.RespondJSON(w, r, http.StatusOK, admissionReview)
-
-		podRef := logrus.Fields{
-			"name":      pod.Metadata.Name,
-			"namespace": pod.Metadata.Namespace,
-		}
-		logging.FromRequest(r).WithField("pod", podRef).Info("pod mutated")
 	}
 }
 

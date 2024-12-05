@@ -146,14 +146,6 @@ func responseLogFields(statusCode int, errResp ...any) logrus.Fields {
 	return f
 }
 
-func LatencyLogFields(t0 time.Time) logrus.Fields {
-	latency := time.Since(t0)
-	return logrus.Fields{
-		"string": latency.String(),
-		"nanos":  latency.Nanoseconds(),
-	}
-}
-
 func Pretty(r *http.Request) bool {
 	p := strings.ToLower(r.URL.Query().Get("pretty"))
 	return p == "" || p == "true"
