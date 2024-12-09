@@ -20,6 +20,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-helm: 0.11.1
-timoni: 0.11.1
-container: 0.11.1
+helm: 0.11.2
+timoni: 0.11.2
+container: 0.11.2
