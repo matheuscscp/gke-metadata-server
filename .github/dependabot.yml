@@ -34,15 +34,6 @@ updates:
     go:
       patterns:
       - "*"
-- package-ecosystem: github-actions
-  directory: /
-  open-pull-requests-limit: 1
-  schedule:
-    interval: weekly
-  groups:
-    actions:
-      patterns:
-      - "*"
 - package-ecosystem: docker
   directory: /
   open-pull-requests-limit: 1
@@ -50,5 +41,16 @@ updates:
     interval: weekly
   groups:
     docker:
+      patterns:
+      - "*"
+- package-ecosystem: github-actions
+  directories:
+  - .github/workflows
+  - .github/actions
+  open-pull-requests-limit: 1
+  schedule:
+    interval: weekly
+  groups:
+    actions:
       patterns:
       - "*"
