@@ -147,7 +147,7 @@ test:
 	else \
 		sed "s|<TEST_ID>|${TEST_ID}|g" ${TEST_CASE} | \
 			sed "s|<CONTAINER_DIGEST>|$$(cat container-digest.txt)|g" | \
-			tee >(timoni --kube-context kind-gke-metadata-server -n kube-system apply gke-metadata-server oci://${TEST_IMAGE}/timoni --version $$(yq .timoni versions.yaml) --wait -f -); \
+			tee >(timoni --kube-context kind-gke-metadata-server -n kube-system apply gke-metadata-server oci://${TEST_IMAGE}/timoni --digest $$(cat timoni-digest.txt) --wait -f -); \
 	fi
 	while : ; do \
 		sleep_secs=10; \
