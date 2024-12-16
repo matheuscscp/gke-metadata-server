@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-FROM golang:1.22.2-alpine3.19 AS builder
+FROM golang:1.23.4-alpine3.21 AS builder
 
 WORKDIR /app
 
@@ -35,7 +35,7 @@ COPY ./internal/ ./internal/
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o gke-metadata-server \
     github.com/matheuscscp/gke-metadata-server/cmd
 
-FROM alpine:3.19.0
+FROM alpine:3.21
 
 RUN apk add --no-cache iptables
 
