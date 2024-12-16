@@ -51,18 +51,22 @@ import (
 
 	// gcePersistentDisk represents a GCE Disk resource that is attached to a
 	// kubelet's host machine and then exposed to the pod.
+	// Deprecated: GCEPersistentDisk is deprecated. All operations for the in-tree
+	// gcePersistentDisk type are redirected to the pd.csi.storage.gke.io CSI driver.
 	// More info: https://kubernetes.io/docs/concepts/storage/volumes#gcepersistentdisk
 	// +optional
 	gcePersistentDisk?: null | #GCEPersistentDiskVolumeSource @go(GCEPersistentDisk,*GCEPersistentDiskVolumeSource) @protobuf(3,bytes,opt)
 
 	// awsElasticBlockStore represents an AWS Disk resource that is attached to a
 	// kubelet's host machine and then exposed to the pod.
+	// Deprecated: AWSElasticBlockStore is deprecated. All operations for the in-tree
+	// awsElasticBlockStore type are redirected to the ebs.csi.aws.com CSI driver.
 	// More info: https://kubernetes.io/docs/concepts/storage/volumes#awselasticblockstore
 	// +optional
 	awsElasticBlockStore?: null | #AWSElasticBlockStoreVolumeSource @go(AWSElasticBlockStore,*AWSElasticBlockStoreVolumeSource) @protobuf(4,bytes,opt)
 
 	// gitRepo represents a git repository at a particular revision.
-	// DEPRECATED: GitRepo is deprecated. To provision a container with a git repo, mount an
+	// Deprecated: GitRepo is deprecated. To provision a container with a git repo, mount an
 	// EmptyDir into an InitContainer that clones the repo using git, then mount the EmptyDir
 	// into the Pod's container.
 	// +optional
@@ -85,6 +89,7 @@ import (
 	iscsi?: null | #ISCSIVolumeSource @go(ISCSI,*ISCSIVolumeSource) @protobuf(8,bytes,opt)
 
 	// glusterfs represents a Glusterfs mount on the host that shares a pod's lifetime.
+	// Deprecated: Glusterfs is deprecated and the in-tree glusterfs type is no longer supported.
 	// More info: https://examples.k8s.io/volumes/glusterfs/README.md
 	// +optional
 	glusterfs?: null | #GlusterfsVolumeSource @go(Glusterfs,*GlusterfsVolumeSource) @protobuf(9,bytes,opt)
@@ -96,25 +101,31 @@ import (
 	persistentVolumeClaim?: null | #PersistentVolumeClaimVolumeSource @go(PersistentVolumeClaim,*PersistentVolumeClaimVolumeSource) @protobuf(10,bytes,opt)
 
 	// rbd represents a Rados Block Device mount on the host that shares a pod's lifetime.
+	// Deprecated: RBD is deprecated and the in-tree rbd type is no longer supported.
 	// More info: https://examples.k8s.io/volumes/rbd/README.md
 	// +optional
 	rbd?: null | #RBDVolumeSource @go(RBD,*RBDVolumeSource) @protobuf(11,bytes,opt)
 
 	// flexVolume represents a generic volume resource that is
 	// provisioned/attached using an exec based plugin.
+	// Deprecated: FlexVolume is deprecated. Consider using a CSIDriver instead.
 	// +optional
 	flexVolume?: null | #FlexVolumeSource @go(FlexVolume,*FlexVolumeSource) @protobuf(12,bytes,opt)
 
 	// cinder represents a cinder volume attached and mounted on kubelets host machine.
+	// Deprecated: Cinder is deprecated. All operations for the in-tree cinder type
+	// are redirected to the cinder.csi.openstack.org CSI driver.
 	// More info: https://examples.k8s.io/mysql-cinder-pd/README.md
 	// +optional
 	cinder?: null | #CinderVolumeSource @go(Cinder,*CinderVolumeSource) @protobuf(13,bytes,opt)
 
-	// cephFS represents a Ceph FS mount on the host that shares a pod's lifetime
+	// cephFS represents a Ceph FS mount on the host that shares a pod's lifetime.
+	// Deprecated: CephFS is deprecated and the in-tree cephfs type is no longer supported.
 	// +optional
 	cephfs?: null | #CephFSVolumeSource @go(CephFS,*CephFSVolumeSource) @protobuf(14,bytes,opt)
 
-	// flocker represents a Flocker volume attached to a kubelet's host machine. This depends on the Flocker control service being running
+	// flocker represents a Flocker volume attached to a kubelet's host machine. This depends on the Flocker control service being running.
+	// Deprecated: Flocker is deprecated and the in-tree flocker type is no longer supported.
 	// +optional
 	flocker?: null | #FlockerVolumeSource @go(Flocker,*FlockerVolumeSource) @protobuf(15,bytes,opt)
 
@@ -127,6 +138,8 @@ import (
 	fc?: null | #FCVolumeSource @go(FC,*FCVolumeSource) @protobuf(17,bytes,opt)
 
 	// azureFile represents an Azure File Service mount on the host and bind mount to the pod.
+	// Deprecated: AzureFile is deprecated. All operations for the in-tree azureFile type
+	// are redirected to the file.csi.azure.com CSI driver.
 	// +optional
 	azureFile?: null | #AzureFileVolumeSource @go(AzureFile,*AzureFileVolumeSource) @protobuf(18,bytes,opt)
 
@@ -134,37 +147,48 @@ import (
 	// +optional
 	configMap?: null | #ConfigMapVolumeSource @go(ConfigMap,*ConfigMapVolumeSource) @protobuf(19,bytes,opt)
 
-	// vsphereVolume represents a vSphere volume attached and mounted on kubelets host machine
+	// vsphereVolume represents a vSphere volume attached and mounted on kubelets host machine.
+	// Deprecated: VsphereVolume is deprecated. All operations for the in-tree vsphereVolume type
+	// are redirected to the csi.vsphere.vmware.com CSI driver.
 	// +optional
 	vsphereVolume?: null | #VsphereVirtualDiskVolumeSource @go(VsphereVolume,*VsphereVirtualDiskVolumeSource) @protobuf(20,bytes,opt)
 
-	// quobyte represents a Quobyte mount on the host that shares a pod's lifetime
+	// quobyte represents a Quobyte mount on the host that shares a pod's lifetime.
+	// Deprecated: Quobyte is deprecated and the in-tree quobyte type is no longer supported.
 	// +optional
 	quobyte?: null | #QuobyteVolumeSource @go(Quobyte,*QuobyteVolumeSource) @protobuf(21,bytes,opt)
 
 	// azureDisk represents an Azure Data Disk mount on the host and bind mount to the pod.
+	// Deprecated: AzureDisk is deprecated. All operations for the in-tree azureDisk type
+	// are redirected to the disk.csi.azure.com CSI driver.
 	// +optional
 	azureDisk?: null | #AzureDiskVolumeSource @go(AzureDisk,*AzureDiskVolumeSource) @protobuf(22,bytes,opt)
 
-	// photonPersistentDisk represents a PhotonController persistent disk attached and mounted on kubelets host machine
+	// photonPersistentDisk represents a PhotonController persistent disk attached and mounted on kubelets host machine.
+	// Deprecated: PhotonPersistentDisk is deprecated and the in-tree photonPersistentDisk type is no longer supported.
 	photonPersistentDisk?: null | #PhotonPersistentDiskVolumeSource @go(PhotonPersistentDisk,*PhotonPersistentDiskVolumeSource) @protobuf(23,bytes,opt)
 
 	// projected items for all in one resources secrets, configmaps, and downward API
 	projected?: null | #ProjectedVolumeSource @go(Projected,*ProjectedVolumeSource) @protobuf(26,bytes,opt)
 
-	// portworxVolume represents a portworx volume attached and mounted on kubelets host machine
+	// portworxVolume represents a portworx volume attached and mounted on kubelets host machine.
+	// Deprecated: PortworxVolume is deprecated. All operations for the in-tree portworxVolume type
+	// are redirected to the pxd.portworx.com CSI driver when the CSIMigrationPortworx feature-gate
+	// is on.
 	// +optional
 	portworxVolume?: null | #PortworxVolumeSource @go(PortworxVolume,*PortworxVolumeSource) @protobuf(24,bytes,opt)
 
 	// scaleIO represents a ScaleIO persistent volume attached and mounted on Kubernetes nodes.
+	// Deprecated: ScaleIO is deprecated and the in-tree scaleIO type is no longer supported.
 	// +optional
 	scaleIO?: null | #ScaleIOVolumeSource @go(ScaleIO,*ScaleIOVolumeSource) @protobuf(25,bytes,opt)
 
 	// storageOS represents a StorageOS volume attached and mounted on Kubernetes nodes.
+	// Deprecated: StorageOS is deprecated and the in-tree storageos type is no longer supported.
 	// +optional
 	storageos?: null | #StorageOSVolumeSource @go(StorageOS,*StorageOSVolumeSource) @protobuf(27,bytes,opt)
 
-	// csi (Container Storage Interface) represents ephemeral storage that is handled by certain external CSI drivers (Beta feature).
+	// csi (Container Storage Interface) represents ephemeral storage that is handled by certain external CSI drivers.
 	// +optional
 	csi?: null | #CSIVolumeSource @go(CSI,*CSIVolumeSource) @protobuf(28,bytes,opt)
 
@@ -235,12 +259,16 @@ import (
 #PersistentVolumeSource: {
 	// gcePersistentDisk represents a GCE Disk resource that is attached to a
 	// kubelet's host machine and then exposed to the pod. Provisioned by an admin.
+	// Deprecated: GCEPersistentDisk is deprecated. All operations for the in-tree
+	// gcePersistentDisk type are redirected to the pd.csi.storage.gke.io CSI driver.
 	// More info: https://kubernetes.io/docs/concepts/storage/volumes#gcepersistentdisk
 	// +optional
 	gcePersistentDisk?: null | #GCEPersistentDiskVolumeSource @go(GCEPersistentDisk,*GCEPersistentDiskVolumeSource) @protobuf(1,bytes,opt)
 
 	// awsElasticBlockStore represents an AWS Disk resource that is attached to a
 	// kubelet's host machine and then exposed to the pod.
+	// Deprecated: AWSElasticBlockStore is deprecated. All operations for the in-tree
+	// awsElasticBlockStore type are redirected to the ebs.csi.aws.com CSI driver.
 	// More info: https://kubernetes.io/docs/concepts/storage/volumes#awselasticblockstore
 	// +optional
 	awsElasticBlockStore?: null | #AWSElasticBlockStoreVolumeSource @go(AWSElasticBlockStore,*AWSElasticBlockStoreVolumeSource) @protobuf(2,bytes,opt)
@@ -255,6 +283,7 @@ import (
 
 	// glusterfs represents a Glusterfs volume that is attached to a host and
 	// exposed to the pod. Provisioned by an admin.
+	// Deprecated: Glusterfs is deprecated and the in-tree glusterfs type is no longer supported.
 	// More info: https://examples.k8s.io/volumes/glusterfs/README.md
 	// +optional
 	glusterfs?: null | #GlusterfsPersistentVolumeSource @go(Glusterfs,*GlusterfsPersistentVolumeSource) @protobuf(4,bytes,opt)
@@ -265,6 +294,7 @@ import (
 	nfs?: null | #NFSVolumeSource @go(NFS,*NFSVolumeSource) @protobuf(5,bytes,opt)
 
 	// rbd represents a Rados Block Device mount on the host that shares a pod's lifetime.
+	// Deprecated: RBD is deprecated and the in-tree rbd type is no longer supported.
 	// More info: https://examples.k8s.io/volumes/rbd/README.md
 	// +optional
 	rbd?: null | #RBDPersistentVolumeSource @go(RBD,*RBDPersistentVolumeSource) @protobuf(6,bytes,opt)
@@ -275,11 +305,14 @@ import (
 	iscsi?: null | #ISCSIPersistentVolumeSource @go(ISCSI,*ISCSIPersistentVolumeSource) @protobuf(7,bytes,opt)
 
 	// cinder represents a cinder volume attached and mounted on kubelets host machine.
+	// Deprecated: Cinder is deprecated. All operations for the in-tree cinder type
+	// are redirected to the cinder.csi.openstack.org CSI driver.
 	// More info: https://examples.k8s.io/mysql-cinder-pd/README.md
 	// +optional
 	cinder?: null | #CinderPersistentVolumeSource @go(Cinder,*CinderPersistentVolumeSource) @protobuf(8,bytes,opt)
 
-	// cephFS represents a Ceph FS mount on the host that shares a pod's lifetime
+	// cephFS represents a Ceph FS mount on the host that shares a pod's lifetime.
+	// Deprecated: CephFS is deprecated and the in-tree cephfs type is no longer supported.
 	// +optional
 	cephfs?: null | #CephFSPersistentVolumeSource @go(CephFS,*CephFSPersistentVolumeSource) @protobuf(9,bytes,opt)
 
@@ -287,39 +320,53 @@ import (
 	// +optional
 	fc?: null | #FCVolumeSource @go(FC,*FCVolumeSource) @protobuf(10,bytes,opt)
 
-	// flocker represents a Flocker volume attached to a kubelet's host machine and exposed to the pod for its usage. This depends on the Flocker control service being running
+	// flocker represents a Flocker volume attached to a kubelet's host machine and exposed to the pod for its usage. This depends on the Flocker control service being running.
+	// Deprecated: Flocker is deprecated and the in-tree flocker type is no longer supported.
 	// +optional
 	flocker?: null | #FlockerVolumeSource @go(Flocker,*FlockerVolumeSource) @protobuf(11,bytes,opt)
 
 	// flexVolume represents a generic volume resource that is
 	// provisioned/attached using an exec based plugin.
+	// Deprecated: FlexVolume is deprecated. Consider using a CSIDriver instead.
 	// +optional
 	flexVolume?: null | #FlexPersistentVolumeSource @go(FlexVolume,*FlexPersistentVolumeSource) @protobuf(12,bytes,opt)
 
 	// azureFile represents an Azure File Service mount on the host and bind mount to the pod.
+	// Deprecated: AzureFile is deprecated. All operations for the in-tree azureFile type
+	// are redirected to the file.csi.azure.com CSI driver.
 	// +optional
 	azureFile?: null | #AzureFilePersistentVolumeSource @go(AzureFile,*AzureFilePersistentVolumeSource) @protobuf(13,bytes,opt)
 
-	// vsphereVolume represents a vSphere volume attached and mounted on kubelets host machine
+	// vsphereVolume represents a vSphere volume attached and mounted on kubelets host machine.
+	// Deprecated: VsphereVolume is deprecated. All operations for the in-tree vsphereVolume type
+	// are redirected to the csi.vsphere.vmware.com CSI driver.
 	// +optional
 	vsphereVolume?: null | #VsphereVirtualDiskVolumeSource @go(VsphereVolume,*VsphereVirtualDiskVolumeSource) @protobuf(14,bytes,opt)
 
-	// quobyte represents a Quobyte mount on the host that shares a pod's lifetime
+	// quobyte represents a Quobyte mount on the host that shares a pod's lifetime.
+	// Deprecated: Quobyte is deprecated and the in-tree quobyte type is no longer supported.
 	// +optional
 	quobyte?: null | #QuobyteVolumeSource @go(Quobyte,*QuobyteVolumeSource) @protobuf(15,bytes,opt)
 
 	// azureDisk represents an Azure Data Disk mount on the host and bind mount to the pod.
+	// Deprecated: AzureDisk is deprecated. All operations for the in-tree azureDisk type
+	// are redirected to the disk.csi.azure.com CSI driver.
 	// +optional
 	azureDisk?: null | #AzureDiskVolumeSource @go(AzureDisk,*AzureDiskVolumeSource) @protobuf(16,bytes,opt)
 
-	// photonPersistentDisk represents a PhotonController persistent disk attached and mounted on kubelets host machine
+	// photonPersistentDisk represents a PhotonController persistent disk attached and mounted on kubelets host machine.
+	// Deprecated: PhotonPersistentDisk is deprecated and the in-tree photonPersistentDisk type is no longer supported.
 	photonPersistentDisk?: null | #PhotonPersistentDiskVolumeSource @go(PhotonPersistentDisk,*PhotonPersistentDiskVolumeSource) @protobuf(17,bytes,opt)
 
-	// portworxVolume represents a portworx volume attached and mounted on kubelets host machine
+	// portworxVolume represents a portworx volume attached and mounted on kubelets host machine.
+	// Deprecated: PortworxVolume is deprecated. All operations for the in-tree portworxVolume type
+	// are redirected to the pxd.portworx.com CSI driver when the CSIMigrationPortworx feature-gate
+	// is on.
 	// +optional
 	portworxVolume?: null | #PortworxVolumeSource @go(PortworxVolume,*PortworxVolumeSource) @protobuf(18,bytes,opt)
 
 	// scaleIO represents a ScaleIO persistent volume attached and mounted on Kubernetes nodes.
+	// Deprecated: ScaleIO is deprecated and the in-tree scaleIO type is no longer supported.
 	// +optional
 	scaleIO?: null | #ScaleIOPersistentVolumeSource @go(ScaleIO,*ScaleIOPersistentVolumeSource) @protobuf(19,bytes,opt)
 
@@ -327,12 +374,13 @@ import (
 	// +optional
 	local?: null | #LocalVolumeSource @go(Local,*LocalVolumeSource) @protobuf(20,bytes,opt)
 
-	// storageOS represents a StorageOS volume that is attached to the kubelet's host machine and mounted into the pod
+	// storageOS represents a StorageOS volume that is attached to the kubelet's host machine and mounted into the pod.
+	// Deprecated: StorageOS is deprecated and the in-tree storageos type is no longer supported.
 	// More info: https://examples.k8s.io/volumes/storageos/README.md
 	// +optional
 	storageos?: null | #StorageOSPersistentVolumeSource @go(StorageOS,*StorageOSPersistentVolumeSource) @protobuf(21,bytes,opt)
 
-	// csi represents storage that is handled by an external CSI driver (Beta feature).
+	// csi represents storage that is handled by an external CSI driver.
 	// +optional
 	csi?: null | #CSIPersistentVolumeSource @go(CSI,*CSIPersistentVolumeSource) @protobuf(22,bytes,opt)
 }
@@ -635,6 +683,7 @@ import (
 	volumeAttributesClassName?: null | string @go(VolumeAttributesClassName,*string) @protobuf(9,bytes,opt)
 }
 
+// TypedObjectReference contains enough information to let you locate the typed referenced object
 #TypedObjectReference: {
 	// APIGroup is the group for the resource being referenced.
 	// If APIGroup is not specified, the specified Kind must be in the core API group.
@@ -765,8 +814,14 @@ import (
 
 // PersistentVolumeClaimCondition contains details about state of pvc
 #PersistentVolumeClaimCondition: {
-	type:   #PersistentVolumeClaimConditionType @go(Type) @protobuf(1,bytes,opt,casttype=PersistentVolumeClaimConditionType)
-	status: #ConditionStatus                    @go(Status) @protobuf(2,bytes,opt,casttype=ConditionStatus)
+	// Type is the type of the condition.
+	// More info: https://kubernetes.io/docs/reference/kubernetes-api/config-and-storage-resources/persistent-volume-claim-v1/#:~:text=set%20to%20%27ResizeStarted%27.-,PersistentVolumeClaimCondition,-contains%20details%20about
+	type: #PersistentVolumeClaimConditionType @go(Type) @protobuf(1,bytes,opt,casttype=PersistentVolumeClaimConditionType)
+
+	// Status is the status of the condition.
+	// Can be True, False, Unknown.
+	// More info: https://kubernetes.io/docs/reference/kubernetes-api/config-and-storage-resources/persistent-volume-claim-v1/#:~:text=state%20of%20pvc-,conditions.status,-(string)%2C%20required
+	status: #ConditionStatus @go(Status) @protobuf(2,bytes,opt,casttype=ConditionStatus)
 
 	// lastProbeTime is the time we probed the condition.
 	// +optional
@@ -2278,7 +2333,7 @@ import (
 	mode?: null | int32 @go(Mode,*int32) @protobuf(3,varint,opt)
 }
 
-// Local represents directly-attached storage with node affinity (Beta feature)
+// Local represents directly-attached storage with node affinity
 #LocalVolumeSource: {
 	// path of the full path to the volume on the node.
 	// It can be either a directory or block device (disk, partition, ...).
@@ -2292,7 +2347,7 @@ import (
 	fsType?: null | string @go(FSType,*string) @protobuf(2,bytes,opt)
 }
 
-// Represents storage that is managed by an external CSI volume driver (Beta feature)
+// Represents storage that is managed by an external CSI volume driver
 #CSIPersistentVolumeSource: {
 	// driver is the name of the driver to use for this volume.
 	// Required.
@@ -2775,6 +2830,7 @@ import (
 	host?: string @go(Host) @protobuf(2,bytes,opt)
 }
 
+// GRPCAction specifies an action involving a GRPC service.
 #GRPCAction: {
 	// Port number of the gRPC service. Number must be in the range 1 to 65535.
 	port: int32 @go(Port) @protobuf(1,bytes,opt)
@@ -3223,19 +3279,19 @@ import (
 // ProbeHandler defines a specific action that should be taken in a probe.
 // One and only one of the fields must be specified.
 #ProbeHandler: {
-	// Exec specifies the action to take.
+	// Exec specifies a command to execute in the container.
 	// +optional
 	exec?: null | #ExecAction @go(Exec,*ExecAction) @protobuf(1,bytes,opt)
 
-	// HTTPGet specifies the http request to perform.
+	// HTTPGet specifies an HTTP GET request to perform.
 	// +optional
 	httpGet?: null | #HTTPGetAction @go(HTTPGet,*HTTPGetAction) @protobuf(2,bytes,opt)
 
-	// TCPSocket specifies an action involving a TCP port.
+	// TCPSocket specifies a connection to a TCP port.
 	// +optional
 	tcpSocket?: null | #TCPSocketAction @go(TCPSocket,*TCPSocketAction) @protobuf(3,bytes,opt)
 
-	// GRPC specifies an action involving a GRPC port.
+	// GRPC specifies a GRPC HealthCheckRequest.
 	// +optional
 	grpc?: null | #GRPCAction @go(GRPC,*GRPCAction) @protobuf(4,bytes,opt)
 }
@@ -3243,21 +3299,21 @@ import (
 // LifecycleHandler defines a specific action that should be taken in a lifecycle
 // hook. One and only one of the fields, except TCPSocket must be specified.
 #LifecycleHandler: {
-	// Exec specifies the action to take.
+	// Exec specifies a command to execute in the container.
 	// +optional
 	exec?: null | #ExecAction @go(Exec,*ExecAction) @protobuf(1,bytes,opt)
 
-	// HTTPGet specifies the http request to perform.
+	// HTTPGet specifies an HTTP GET request to perform.
 	// +optional
 	httpGet?: null | #HTTPGetAction @go(HTTPGet,*HTTPGetAction) @protobuf(2,bytes,opt)
 
 	// Deprecated. TCPSocket is NOT supported as a LifecycleHandler and kept
-	// for the backward compatibility. There are no validation of this field and
-	// lifecycle hooks will fail in runtime when tcp handler is specified.
+	// for backward compatibility. There is no validation of this field and
+	// lifecycle hooks will fail at runtime when it is specified.
 	// +optional
 	tcpSocket?: null | #TCPSocketAction @go(TCPSocket,*TCPSocketAction) @protobuf(3,bytes,opt)
 
-	// Sleep represents the duration that the container should sleep before being terminated.
+	// Sleep represents a duration that the container should sleep.
 	// +featureGate=PodLifecycleSleepAction
 	// +optional
 	sleep?: null | #SleepAction @go(Sleep,*SleepAction) @protobuf(4,bytes,opt)
@@ -3426,7 +3482,7 @@ import (
 	// AllocatedResources represents the compute resources allocated for this container by the
 	// node. Kubelet sets this value to Container.Resources.Requests upon successful pod admission
 	// and after successfully admitting desired pod resize.
-	// +featureGate=InPlacePodVerticalScaling
+	// +featureGate=InPlacePodVerticalScalingAllocatedStatus
 	// +optional
 	allocatedResources?: #ResourceList @go(AllocatedResources) @protobuf(10,bytes,rep,casttype=ResourceList,castkey=ResourceName)
 
@@ -3461,15 +3517,18 @@ import (
 	allocatedResourcesStatus?: [...#ResourceStatus] @go(AllocatedResourcesStatus,[]ResourceStatus) @protobuf(14,bytes,rep)
 }
 
+// ResourceStatus represents the status of a single resource allocated to a Pod.
 #ResourceStatus: {
-	// Name of the resource. Must be unique within the pod and match one of the resources from the pod spec.
+	// Name of the resource. Must be unique within the pod and in case of non-DRA resource, match one of the resources from the pod spec.
+	// For DRA resources, the value must be "claim:<claim_name>/<request>".
+	// When this status is reported about a container, the "claim_name" and "request" must match one of the claims of this container.
 	// +required
 	name: #ResourceName @go(Name) @protobuf(1,bytes,opt)
 
-	// List of unique Resources health. Each element in the list contains an unique resource ID and resource health.
-	// At a minimum, ResourceID must uniquely identify the Resource
-	// allocated to the Pod on the Node for the lifetime of a Pod.
-	// See ResourceID type for it's definition.
+	// List of unique resources health. Each element in the list contains an unique resource ID and its health.
+	// At a minimum, for the lifetime of a Pod, resource ID must uniquely identify the resource allocated to the Pod on the Node.
+	// If other Pod on the same Node reports the status with the same resource ID, it must be the same resource they share.
+	// See ResourceID type definition for a specific format it has in various use cases.
 	// +listType=map
 	// +listMapKey=resourceID
 	resources?: [...#ResourceHealth] @go(Resources,[]ResourceHealth) @protobuf(2,bytes,rep)
@@ -3489,16 +3548,16 @@ import (
 // ResourceID is calculated based on the source of this resource health information.
 // For DevicePlugin:
 //
-//	deviceplugin:DeviceID, where DeviceID is from the Device structure of DevicePlugin's ListAndWatchResponse type: https://github.com/kubernetes/kubernetes/blob/eda1c780543a27c078450e2f17d674471e00f494/staging/src/k8s.io/kubelet/pkg/apis/deviceplugin/v1alpha/api.proto#L61-L73
+//	DeviceID, where DeviceID is from the Device structure of DevicePlugin's ListAndWatchResponse type: https://github.com/kubernetes/kubernetes/blob/eda1c780543a27c078450e2f17d674471e00f494/staging/src/k8s.io/kubelet/pkg/apis/deviceplugin/v1alpha/api.proto#L61-L73
 //
 // DevicePlugin ID is usually a constant for the lifetime of a Node and typically can be used to uniquely identify the device on the node.
 // For DRA:
 //
-//	dra:<driver name>/<pool name>/<device name>: such a device can be looked up in the information published by that DRA driver to learn more about it. It is designed to be globally unique in a cluster.
+//	<driver name>/<pool name>/<device name>: such a device can be looked up in the information published by that DRA driver to learn more about it. It is designed to be globally unique in a cluster.
 #ResourceID: string
 
 // ResourceHealth represents the health of a resource. It has the latest device health information.
-// This is a part of KEP https://kep.k8s.io/4680 and historical health changes are planned to be added in future iterations of a KEP.
+// This is a part of KEP https://kep.k8s.io/4680.
 #ResourceHealth: {
 	// ResourceID is the unique identifier of the resource. See the ResourceID type for more information.
 	resourceID: #ResourceID @go(ResourceID) @protobuf(1,bytes,opt)
@@ -3615,7 +3674,7 @@ import (
 // during scheduling, for example due to nodeAffinity parsing errors.
 #PodReasonSchedulerError: "SchedulerError"
 
-// TerminationByKubelet reason in DisruptionTarget pod condition indicates that the termination
+// PodReasonTerminationByKubelet reason in DisruptionTarget pod condition indicates that the termination
 // is initiated by kubelet
 #PodReasonTerminationByKubelet: "TerminationByKubelet"
 
@@ -4459,6 +4518,21 @@ import (
 	// +featureGate=DynamicResourceAllocation
 	// +optional
 	resourceClaims?: [...#PodResourceClaim] @go(ResourceClaims,[]PodResourceClaim) @protobuf(39,bytes,rep)
+
+	// Resources is the total amount of CPU and Memory resources required by all
+	// containers in the pod. It supports specifying Requests and Limits for
+	// "cpu" and "memory" resource names only. ResourceClaims are not supported.
+	//
+	// This field enables fine-grained control over resource allocation for the
+	// entire pod, allowing resource sharing among containers in a pod.
+	// TODO: For beta graduation, expand this comment with a detailed explanation.
+	//
+	// This is an alpha field and requires enabling the PodLevelResources feature
+	// gate.
+	//
+	// +featureGate=PodLevelResources
+	// +optional
+	resources?: null | #ResourceRequirements @go(Resources,*ResourceRequirements) @protobuf(40,bytes,opt)
 }
 
 // PodResourceClaim references exactly one ResourceClaim, either directly
@@ -4751,6 +4825,25 @@ import (
 // used instead of any groups defined in the container image.
 #SupplementalGroupsPolicyStrict: #SupplementalGroupsPolicy & "Strict"
 
+// PodSELinuxChangePolicy defines how the container's SELinux label is applied to all volumes used by the Pod.
+#PodSELinuxChangePolicy: string // #enumPodSELinuxChangePolicy
+
+#enumPodSELinuxChangePolicy:
+	#SELinuxChangePolicyRecursive |
+	#SELinuxChangePolicyMountOption
+
+// Recursive relabeling of all Pod volumes by the container runtime.
+// This may be slow for large volumes, but allows mixing privileged and unprivileged Pods sharing the same volume on the same node.
+#SELinuxChangePolicyRecursive: #PodSELinuxChangePolicy & "Recursive"
+
+// MountOption mounts all eligible Pod volumes with `-o context` mount option.
+// This requires all Pods that share the same volume to use the same SELinux label.
+// It is not possible to share the same volume among privileged and unprivileged Pods.
+// Eligible volumes are in-tree FibreChannel and iSCSI volumes, and all CSI volumes
+// whose CSI driver announces SELinux support by setting spec.seLinuxMount: true in their
+// CSIDriver instance. Other volumes are always re-labelled recursively.
+#SELinuxChangePolicyMountOption: #PodSELinuxChangePolicy & "MountOption"
+
 // PodSecurityContext holds pod-level security attributes and common container settings.
 // Some fields are also present in container.securityContext.  Field values of
 // container.securityContext take precedence over field values of PodSecurityContext.
@@ -4860,6 +4953,33 @@ import (
 	// Note that this field cannot be set when spec.os.name is windows.
 	// +optional
 	appArmorProfile?: null | #AppArmorProfile @go(AppArmorProfile,*AppArmorProfile) @protobuf(11,bytes,opt)
+
+	// seLinuxChangePolicy defines how the container's SELinux label is applied to all volumes used by the Pod.
+	// It has no effect on nodes that do not support SELinux or to volumes does not support SELinux.
+	// Valid values are "MountOption" and "Recursive".
+	//
+	// "Recursive" means relabeling of all files on all Pod volumes by the container runtime.
+	// This may be slow for large volumes, but allows mixing privileged and unprivileged Pods sharing the same volume on the same node.
+	//
+	// "MountOption" mounts all eligible Pod volumes with `-o context` mount option.
+	// This requires all Pods that share the same volume to use the same SELinux label.
+	// It is not possible to share the same volume among privileged and unprivileged Pods.
+	// Eligible volumes are in-tree FibreChannel and iSCSI volumes, and all CSI volumes
+	// whose CSI driver announces SELinux support by setting spec.seLinuxMount: true in their
+	// CSIDriver instance. Other volumes are always re-labelled recursively.
+	// "MountOption" value is allowed only when SELinuxMount feature gate is enabled.
+	//
+	// If not specified and SELinuxMount feature gate is enabled, "MountOption" is used.
+	// If not specified and SELinuxMount feature gate is disabled, "MountOption" is used for ReadWriteOncePod volumes
+	// and "Recursive" for all other volumes.
+	//
+	// This field affects only Pods that have SELinux label set, either in PodSecurityContext or in SecurityContext of all containers.
+	//
+	// All Pods that use the same volume should use the same seLinuxChangePolicy, otherwise some pods can get stuck in ContainerCreating state.
+	// Note that this field cannot be set when spec.os.name is windows.
+	// +featureGate=SELinuxChangePolicy
+	// +optional
+	seLinuxChangePolicy?: null | #PodSELinuxChangePolicy @go(SELinuxChangePolicy,*PodSELinuxChangePolicy) @protobuf(13,bytes,opt)
 }
 
 // SeccompProfile defines a pod/container's seccomp profile settings.
@@ -4985,9 +5105,11 @@ import (
 
 // PodDNSConfigOption defines DNS resolver options of a pod.
 #PodDNSConfigOption: {
+	// Name is this DNS resolver option's name.
 	// Required.
 	name?: string @go(Name) @protobuf(1,bytes,opt)
 
+	// Value is this DNS resolver option's value.
 	// +optional
 	value?: null | string @go(Value,*string) @protobuf(2,bytes,opt)
 }
@@ -5295,14 +5417,26 @@ import (
 	// +optional
 	startTime?: null | metav1.#Time @go(StartTime,*metav1.Time) @protobuf(7,bytes,opt)
 
-	// The list has one entry per init container in the manifest. The most recent successful
+	// Statuses of init containers in this pod. The most recent successful non-restartable
 	// init container will have ready = true, the most recently started container will have
 	// startTime set.
-	// More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#pod-and-container-status
+	// Each init container in the pod should have at most one status in this list,
+	// and all statuses should be for containers in the pod.
+	// However this is not enforced.
+	// If a status for a non-existent container is present in the list, or the list has duplicate names,
+	// the behavior of various Kubernetes components is not defined and those statuses might be
+	// ignored.
+	// More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-and-container-status
 	// +listType=atomic
 	initContainerStatuses?: [...#ContainerStatus] @go(InitContainerStatuses,[]ContainerStatus) @protobuf(10,bytes,rep)
 
-	// The list has one entry per container in the manifest.
+	// Statuses of containers in this pod.
+	// Each container in the pod should have at most one status in this list,
+	// and all statuses should be for containers in the pod.
+	// However this is not enforced.
+	// If a status for a non-existent container is present in the list, or the list has duplicate names,
+	// the behavior of various Kubernetes components is not defined and those statuses might be
+	// ignored.
 	// More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#pod-and-container-status
 	// +optional
 	// +listType=atomic
@@ -5314,7 +5448,14 @@ import (
 	// +optional
 	qosClass?: #PodQOSClass @go(QOSClass) @protobuf(9,bytes,rep)
 
-	// Status for any ephemeral containers that have run in this pod.
+	// Statuses for any ephemeral containers that have run in this pod.
+	// Each ephemeral container in the pod should have at most one status in this list,
+	// and all statuses should be for containers in the pod.
+	// However this is not enforced.
+	// If a status for a non-existent container is present in the list, or the list has duplicate names,
+	// the behavior of various Kubernetes components is not defined and those statuses might be
+	// ignored.
+	// More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#pod-and-container-status
 	// +optional
 	// +listType=atomic
 	ephemeralContainerStatuses?: [...#ContainerStatus] @go(EphemeralContainerStatuses,[]ContainerStatus) @protobuf(13,bytes,rep)
@@ -6036,7 +6177,7 @@ import (
 	// not set, the implementation will apply its default routing strategy. If set
 	// to "PreferClose", implementations should prioritize endpoints that are
 	// topologically close (e.g., same zone).
-	// This is an alpha field and requires enabling ServiceTrafficDistribution feature.
+	// This is a beta field and requires enabling ServiceTrafficDistribution feature.
 	// +featureGate=ServiceTrafficDistribution
 	// +optional
 	trafficDistribution?: null | string @go(TrafficDistribution,*string) @protobuf(23,bytes,opt)
@@ -6158,6 +6299,8 @@ import (
 
 	// Secrets is a list of the secrets in the same namespace that pods running using this ServiceAccount are allowed to use.
 	// Pods are only limited to this list if this service account has a "kubernetes.io/enforce-mountable-secrets" annotation set to "true".
+	// The "kubernetes.io/enforce-mountable-secrets" annotation is deprecated since v1.32.
+	// Prefer separate namespaces to isolate access to mounted secrets.
 	// This field should not be used to find auto-generated service account token secrets for use outside of pods.
 	// Instead, tokens can be requested directly using the TokenRequest API, or service account token secrets can be manually created.
 	// More info: https://kubernetes.io/docs/concepts/configuration/secret
@@ -6558,7 +6701,7 @@ import (
 	phase?: #NodePhase @go(Phase) @protobuf(3,bytes,opt,casttype=NodePhase)
 
 	// Conditions is an array of current observed node conditions.
-	// More info: https://kubernetes.io/docs/concepts/nodes/node/#condition
+	// More info: https://kubernetes.io/docs/reference/node/node-status/#condition
 	// +optional
 	// +patchMergeKey=type
 	// +patchStrategy=merge
@@ -6568,7 +6711,7 @@ import (
 
 	// List of addresses reachable to the node.
 	// Queried from cloud provider, if available.
-	// More info: https://kubernetes.io/docs/concepts/nodes/node/#addresses
+	// More info: https://kubernetes.io/docs/reference/node/node-status/#addresses
 	// Note: This field is declared as mergeable, but the merge key is not sufficiently
 	// unique, which can cause data corruption when it is merged. Callers should instead
 	// use a full-replacement patch. See https://pr.k8s.io/79391 for an example.
@@ -6588,7 +6731,7 @@ import (
 	daemonEndpoints?: #NodeDaemonEndpoints @go(DaemonEndpoints) @protobuf(6,bytes,opt)
 
 	// Set of ids/uuids to uniquely identify the node.
-	// More info: https://kubernetes.io/docs/concepts/nodes/node/#info
+	// More info: https://kubernetes.io/docs/reference/node/node-status/#info
 	// +optional
 	nodeInfo?: #NodeSystemInfo @go(NodeInfo) @protobuf(7,bytes,opt)
 
@@ -6975,12 +7118,15 @@ import (
 	// Status of the condition, one of True, False, Unknown.
 	status: #ConditionStatus @go(Status) @protobuf(2,bytes,opt,casttype=ConditionStatus)
 
+	// Last time the condition transitioned from one status to another.
 	// +optional
 	lastTransitionTime?: metav1.#Time @go(LastTransitionTime) @protobuf(4,bytes,opt)
 
+	// Unique, one-word, CamelCase reason for the condition's last transition.
 	// +optional
 	reason?: string @go(Reason) @protobuf(5,bytes,opt)
 
+	// Human-readable message indicating details about last transition.
 	// +optional
 	message?: string @go(Message) @protobuf(6,bytes,opt)
 }
@@ -7021,7 +7167,6 @@ import (
 }
 
 // Binding ties one object to another; for example, a pod is bound to a node by a scheduler.
-// Deprecated in 1.7, please use the bindings subresource of pods instead.
 #Binding: {
 	metav1.#TypeMeta
 
@@ -7041,6 +7186,15 @@ import (
 	// +optional
 	uid?: null | types.#UID @go(UID,*types.UID) @protobuf(1,bytes,opt,casttype=k8s.io/apimachinery/pkg/types.UID)
 }
+
+// LogStreamStdout is the stream type for stdout.
+#LogStreamStdout: "Stdout"
+
+// LogStreamStderr is the stream type for stderr.
+#LogStreamStderr: "Stderr"
+
+// LogStreamAll represents the combined stdout and stderr.
+#LogStreamAll: "All"
 
 // PodLogOptions is the query options for a Pod's logs REST call.
 #PodLogOptions: {
@@ -7078,7 +7232,8 @@ import (
 	timestamps?: bool @go(Timestamps) @protobuf(6,varint,opt)
 
 	// If set, the number of lines from the end of the logs to show. If not specified,
-	// logs are shown from the creation of the container or sinceSeconds or sinceTime
+	// logs are shown from the creation of the container or sinceSeconds or sinceTime.
+	// Note that when "TailLines" is specified, "Stream" can only be set to nil or "All".
 	// +optional
 	tailLines?: null | int64 @go(TailLines,*int64) @protobuf(7,varint,opt)
 
@@ -7096,6 +7251,14 @@ import (
 	// the actual log data coming from the real kubelet).
 	// +optional
 	insecureSkipTLSVerifyBackend?: bool @go(InsecureSkipTLSVerifyBackend) @protobuf(9,varint,opt)
+
+	// Specify which container log stream to return to the client.
+	// Acceptable values are "All", "Stdout" and "Stderr". If not specified, "All" is used, and both stdout and stderr
+	// are returned interleaved.
+	// Note that when "TailLines" is specified, "Stream" can only be set to nil or "All".
+	// +featureGate=PodLogsQuerySplitStreams
+	// +optional
+	stream?: null | string @go(Stream,*string) @protobuf(10,varint,opt)
 }
 
 // PodAttachOptions is the query options to a Pod's remote attach call.
@@ -7277,13 +7440,23 @@ import (
 
 // LocalObjectReference contains enough information to let you locate the
 // referenced object inside the same namespace.
+// ---
+// New uses of this type are discouraged because of difficulty describing its usage when embedded in APIs.
+//  1. Invalid usage help.  It is impossible to add specific help for individual usage.  In most embedded usages, there are particular
+//     restrictions like, "must refer only to types A and B" or "UID not honored" or "name must be restricted".
+//     Those cannot be well described when embedded.
+//  2. Inconsistent validation.  Because the usages are different, the validation rules are different by usage, which makes it hard for users to predict what will happen.
+//  3. We cannot easily change it.  Because this type is embedded in many locations, updates to this type
+//     will affect numerous schemas.  Don't make new APIs embed an underspecified API type they do not control.
+//
+// Instead of using this type, create a locally provided and used type that is well-focused on your reference.
+// For example, ServiceReferences for admission registration: https://github.com/kubernetes/api/blob/release-1.17/admissionregistration/v1/types.go#L533 .
 // +structType=atomic
 #LocalObjectReference: {
 	// Name of the referent.
 	// This field is effectively required, but due to backwards compatibility is
 	// allowed to be empty. Instances of this type with an empty value here are
 	// almost certainly wrong.
-	// TODO: Add other useful fields. apiVersion, kind, uid?
 	// More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
 	// +optional
 	// +default=""
@@ -7294,6 +7467,20 @@ import (
 
 // TypedLocalObjectReference contains enough information to let you locate the
 // typed referenced object inside the same namespace.
+// ---
+// New uses of this type are discouraged because of difficulty describing its usage when embedded in APIs.
+//  1. Invalid usage help.  It is impossible to add specific help for individual usage.  In most embedded usages, there are particular
+//     restrictions like, "must refer only to types A and B" or "UID not honored" or "name must be restricted".
+//     Those cannot be well described when embedded.
+//  2. Inconsistent validation.  Because the usages are different, the validation rules are different by usage, which makes it hard for users to predict what will happen.
+//  3. The fields are both imprecise and overly precise.  Kind is not a precise mapping to a URL. This can produce ambiguity
+//     during interpretation and require a REST mapping.  In most cases, the dependency is on the group,resource tuple
+//     and the version of the actual struct is irrelevant.
+//  4. We cannot easily change it.  Because this type is embedded in many locations, updates to this type
+//     will affect numerous schemas.  Don't make new APIs embed an underspecified API type they do not control.
+//
+// Instead of using this type, create a locally provided and used type that is well-focused on your reference.
+// For example, ServiceReferences for admission registration: https://github.com/kubernetes/api/blob/release-1.17/admissionregistration/v1/types.go#L533 .
 // +structType=atomic
 #TypedLocalObjectReference: {
 	// APIGroup is the group for the resource being referenced.
@@ -8273,6 +8460,7 @@ import (
 // on the same LoadBalancer type of Service are not supported by the cloud provider.
 #MixedProtocolNotSupported: "MixedProtocolNotSupported"
 
+// PortStatus represents the error condition of a service port
 #PortStatus: {
 	// Port is the port number of the service port of which status is recorded here
 	port: int32 @go(Port) @protobuf(1,varint,opt)
