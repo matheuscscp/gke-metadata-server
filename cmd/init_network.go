@@ -33,6 +33,11 @@ import (
 	"k8s.io/utils/exec"
 )
 
+const (
+	gkeMetadataServerIP   = "169.254.169.254"
+	gkeMetadataServerPort = "80"
+)
+
 func newInitNetworkCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "init-network",
@@ -61,15 +66,21 @@ DAEMONSET_PORT are provided as environment variables.`,
 			// iptables -t nat -A OUTPUT -d 169.254.169.254 -p tcp --dport 80 -j DNAT --to-destination <emulatorAddr>
 			// iptables -A FORWARD -d <emulatorIP> -p tcp --dport <emulatorPort> -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
 
-			const gkeMetadataServer = "169.254.169.254"
+			// This rule essentially rewrites the destination of packets targeting the
+			// GKE metadata server with the ip:port address of the emulator, i.e. it
+			// effectively modifies the destination fields of matching packets.
 			ipTables := iptables.New(exec.New(), iptables.ProtocolIPv4)
 			_, err = ipTables.EnsureRule(
 				iptables.Append,
-				iptables.TableNAT,
-				iptables.ChainOutput,
-				"-d", gkeMetadataServer,
+				iptables.TableNAT,    // NAT rules are applied before routing
+				iptables.ChainOutput, // output chain is for locally generated traffic
+
+				// match conditions
+				"-d", gkeMetadataServerIP,
 				"-p", "tcp",
-				"--dport", "80",
+				"--dport", gkeMetadataServerPort,
+
+				// action taken
 				"-j", "DNAT",
 				"--to-destination", emulatorAddr,
 			)
@@ -77,15 +88,21 @@ DAEMONSET_PORT are provided as environment variables.`,
 				return fmt.Errorf("error adding DNAT rule: %w", err)
 			}
 
+			// This rule ensures that packets destined to the emulator IP and port
+			// are accepted to be forwarded by the host, i.e. prevents the host from
+			// dropping matching packets.
 			_, err = ipTables.EnsureRule(
 				iptables.Append,
-				iptables.TableFilter,
-				iptables.ChainForward,
+				iptables.TableFilter,  // filter table is for access control (should packets be forwarded or dropped?)
+				iptables.ChainForward, // forward chain is for packets that are being routed, i.e. not destined to the local host
+
+				// match conditions
 				"-d", emulatorIP,
 				"-p", "tcp",
 				"--dport", emulatorPort,
-				"-m", "state",
-				"--state", "NEW,ESTABLISHED,RELATED",
+				"-m", "state", "--state", "NEW,ESTABLISHED,RELATED", // new or established connections
+
+				// action taken
 				"-j", "ACCEPT",
 			)
 			if err != nil {
