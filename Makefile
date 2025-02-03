@@ -25,7 +25,7 @@ SHELL := /bin/bash
 TEST_IMAGE := ghcr.io/matheuscscp/gke-metadata-server/test
 
 .PHONY: dev
-dev: tidy dev-cluster build dev-test
+dev: tidy gen-ebpf dev-cluster build dev-test
 
 .PHONY: clean
 clean:
@@ -42,13 +42,18 @@ tidy:
 	git status
 
 .PHONY: gen
-gen: timoni-gen
+gen: gen-timoni
 
-.PHONY: timoni-gen
-timoni-gen:
+.PHONY: gen-timoni
+gen-timoni:
 	cd timoni/gke-metadata-server; cue get go k8s.io/api/rbac/v1
 	cd timoni/gke-metadata-server; cue get go k8s.io/api/admissionregistration/v1
 	cd timoni/gke-metadata-server; cue get go github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1
+
+.PHONY: gen-ebpf
+gen-ebpf:
+	bpftool btf dump file /sys/kernel/btf/vmlinux format c > ebpf/vmlinux.h
+	go generate ./internal/redirect
 
 .PHONY: dev-cluster
 dev-cluster:

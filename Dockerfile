@@ -22,6 +22,8 @@
 
 FROM golang:1.23.5-alpine3.21 AS builder
 
+RUN apk add --no-cache clang llvm bpftool libbpf-dev
+
 WORKDIR /app
 
 COPY go.mod go.sum ./
@@ -29,6 +31,10 @@ RUN go mod download
 
 COPY ./cmd/ ./cmd/
 COPY ./internal/ ./internal/
+COPY ./ebpf/ ./ebpf/
+
+RUN bpftool btf dump file /sys/kernel/btf/vmlinux format c > ebpf/vmlinux.h
+RUN go generate ./internal/redirect
 
 # CGO_ENABLED=0 to build a statically-linked binary
 # -ldflags '-w -s' to strip debugging information for smaller size

@@ -38,6 +38,18 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
       serviceAccountName: gke-metadata-server
       priorityClassName: {{ .Values.priorityClass }}
       hostNetwork: true
@@ -50,13 +62,15 @@ spec:
         image: {{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
         {{- end }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          privileged: true
         args:
         - server
         - --workload-identity-provider={{ .Values.config.workloadIdentityProvider }}
         - --default-node-service-account-name=gke-metadata-server
         - --default-node-service-account-namespace={{ .Values.namespace }}
-        {{- if .Values.config.serverAddr }}
-        - --server-addr={{ .Values.config.serverAddr }}
+        {{- if .Values.config.serverPort }}
+        - --server-port={{ .Values.config.serverPort }}
         {{- end }}
         {{- if .Values.config.webhookAddr }}
         - --webhook-addr={{ .Values.config.webhookAddr }}
@@ -107,9 +121,13 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: spec.nodeName
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
         ports:
         - name: http
-          containerPort: {{ index (split ":" .Values.config.serverAddr) "_1" }}
+          containerPort: {{ .Values.config.serverPort }}
           protocol: TCP
         - name: webhook
           containerPort: {{ index (split ":" .Values.config.webhookAddr) "_1" }}

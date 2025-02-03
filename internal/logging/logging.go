@@ -74,6 +74,10 @@ func IntoContext(ctx context.Context, l logrus.FieldLogger) context.Context {
 	return context.WithValue(ctx, loggerContextKey{}, l)
 }
 
+func Debug() bool {
+	return logLevel >= logrus.DebugLevel
+}
+
 func InitKLog(l logrus.FieldLogger, level logrus.Level) {
 	klog.SetLogger(logr.New(&logrAdapter{
 		logger: l,

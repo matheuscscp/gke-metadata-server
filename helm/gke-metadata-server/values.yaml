@@ -33,7 +33,7 @@ config:
   # This is useful for using the gke-metadata-server with Pods running on the host network (see README.md).
   defaultNodeServiceAccount: ""
   logLevel: info # Log level. Accepted values: panic, fatal, error, warning, info, debug, trace
-  serverAddr: :8080 # Network address where the HTTP server will listen on.
+  serverPort: 8080 # TCP port where the HTTP server will listen on.
   webhookAddr: :8081 # Network address where the MutatingWebhook server will listen on.
   watchPods:
     enable: true # Whether or not to watch and cache the Pods running on the same Node.
@@ -86,3 +86,13 @@ namespace: kube-system
 
 # Pod .spec.priorityClassName. This controls how much preemptible the DaemonSet Pods will be.
 priorityClass: system-node-critical
+
+# Pod .spec.nodeSelector. This controls in which Nodes the DaemonSet Pods will be scheduled.
+nodeSelector: {}
+
+# Pod .spec.affinity. This controls where the DaemonSet Pods will be scheduled, as an
+# advanced alternative to nodeSelector.
+affinity: {}
+
+# Pod .spec.tolerations. This controls how the DaemonSet Pods will tolerate taints on the Nodes.
+tolerations: []
