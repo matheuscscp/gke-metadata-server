@@ -46,16 +46,6 @@ func LoadAndAttachBPF(emulatorIP netip.Addr, emulatorPort int, debug bool) (*BPF
 		return nil, fmt.Errorf("error loading redirect eBPF redirect objects: %w", err)
 	}
 
-	var err error
-	b.link, err = link.AttachCgroup(link.CgroupOptions{
-		Path:    "/sys/fs/cgroup",
-		Attach:  ebpf.AttachCGroupInet4Connect,
-		Program: b.objs.RedirectConnect4,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("error attaching redirect eBPF program to cgroup: %w", err)
-	}
-
 	emulatorIPv4 := emulatorIP.As4()
 	config := redirectConfig{
 		EmulatorIp:   binary.BigEndian.Uint32(emulatorIPv4[:]),
@@ -67,6 +57,16 @@ func LoadAndAttachBPF(emulatorIP netip.Addr, emulatorPort int, debug bool) (*BPF
 	var key uint32 = 0
 	if err := b.objs.redirectMaps.MapConfig.Update(&key, &config, ebpf.UpdateAny); err != nil {
 		return nil, fmt.Errorf("error updating redirect eBPF config map: %w", err)
+	}
+
+	var err error
+	b.link, err = link.AttachCgroup(link.CgroupOptions{
+		Path:    "/sys/fs/cgroup",
+		Attach:  ebpf.AttachCGroupInet4Connect,
+		Program: b.objs.RedirectConnect4,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("error attaching redirect eBPF program to cgroup: %w", err)
 	}
 
 	return &b, nil
