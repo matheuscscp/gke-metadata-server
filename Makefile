@@ -46,9 +46,9 @@ gen: gen-timoni
 
 .PHONY: gen-timoni
 gen-timoni:
+	cd timoni/gke-metadata-server; cue get go k8s.io/api/core/v1
+	cd timoni/gke-metadata-server; cue get go k8s.io/api/apps/v1
 	cd timoni/gke-metadata-server; cue get go k8s.io/api/rbac/v1
-	cd timoni/gke-metadata-server; cue get go k8s.io/api/admissionregistration/v1
-	cd timoni/gke-metadata-server; cue get go github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1
 
 .PHONY: gen-ebpf
 gen-ebpf:
@@ -86,16 +86,6 @@ cluster:
 	@if [ "${PROVIDER_COMMAND}" == "" ]; then echo "PROVIDER_COMMAND variable is required."; exit -1; fi
 	kind create cluster -n gke-metadata-server --config k8s/test-kind-config.yaml
 	make create-or-update-provider TEST_ID=${TEST_ID} PROVIDER_COMMAND=${PROVIDER_COMMAND}
-	kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.15.1/cert-manager.yaml
-	while : ; do \
-		sleep_secs=10; \
-		echo "Sleeping for $$sleep_secs secs and checking cert-manager webhook status..."; \
-		sleep $$sleep_secs; \
-		if [ $$(kubectl --context kind-gke-metadata-server -n cert-manager get deploy cert-manager-webhook | grep cert | awk '{print $$4}') -eq 1 ]; then \
-			echo "cert-manager-webhook is ready"; \
-			break; \
-		fi; \
-	done
 	kubectl --context kind-gke-metadata-server apply -f k8s/test-anon-oidc-rbac.yaml
 
 .PHONY: create-or-update-provider

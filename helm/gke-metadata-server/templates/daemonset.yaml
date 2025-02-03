@@ -72,14 +72,6 @@ spec:
         {{- if .Values.config.serverPort }}
         - --server-port={{ .Values.config.serverPort }}
         {{- end }}
-        {{- if .Values.config.webhookAddr }}
-        - --webhook-addr={{ .Values.config.webhookAddr }}
-        {{- end }}
-        {{- if .Values.image.digest }}
-        - --webhook-init-network-image={{ .Values.image.repository }}@{{ .Values.image.digest }}
-        {{- else }}
-        - --webhook-init-network-image={{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
-        {{- end }}
         {{- if .Values.config.logLevel }}
         - --log-level={{ .Values.config.logLevel }}
         {{- end }}
@@ -129,9 +121,6 @@ spec:
         - name: http
           containerPort: {{ .Values.config.serverPort }}
           protocol: TCP
-        - name: webhook
-          containerPort: {{ index (split ":" .Values.config.webhookAddr) "_1" }}
-          protocol: TCP
         livenessProbe:
           initialDelaySeconds: 3
           httpGet:
@@ -147,13 +136,7 @@ spec:
         volumeMounts:
         - name: tmpfs
           mountPath: /tmp
-        - name: tls
-          mountPath: /etc/gke-metadata-server/certs
-          readOnly: true
       volumes:
       - name: tmpfs
         emptyDir:
           medium: Memory
-      - name: tls
-        secret:
-          secretName: gke-metadata-server-tls

@@ -134,7 +134,7 @@ import (
 // will not be deleted.
 #RetainPersistentVolumeClaimRetentionPolicyType: #PersistentVolumeClaimRetentionPolicyType & "Retain"
 
-// RetentionPersistentVolumeClaimRetentionPolicyType specifies that
+// DeletePersistentVolumeClaimRetentionPolicyType specifies that
 // PersistentVolumeClaims associated with StatefulSet VolumeClaimTemplates
 // will be deleted in the scenario specified in
 // StatefulSetPersistentVolumeClaimRetentionPolicy.
@@ -169,7 +169,7 @@ import (
 	// If unset, defaults to 0. Replica indices will be in the range:
 	//   [0, .spec.replicas).
 	// +optional
-	start: int32 @go(Start) @protobuf(1,varint,opt)
+	start?: int32 @go(Start) @protobuf(1,varint,opt)
 }
 
 // A StatefulSetSpec is the specification of a StatefulSet.
@@ -204,6 +204,7 @@ import (
 	// any volumes in the template, with the same name.
 	// TODO: Define the behavior if a claim already exists with the same name.
 	// +optional
+	// +listType=atomic
 	volumeClaimTemplates?: [...v1.#PersistentVolumeClaim] @go(VolumeClaimTemplates,[]v1.PersistentVolumeClaim) @protobuf(4,bytes,rep)
 
 	// serviceName is the name of the service that governs this StatefulSet.
@@ -246,15 +247,13 @@ import (
 	// volume claims are created as needed and retained until manually deleted. This
 	// policy allows the lifecycle to be altered, for example by deleting persistent
 	// volume claims when their stateful set is deleted, or when their pod is scaled
-	// down. This requires the StatefulSetAutoDeletePVC feature gate to be enabled,
-	// which is alpha.  +optional
+	// down.
+	// +optional
 	persistentVolumeClaimRetentionPolicy?: null | #StatefulSetPersistentVolumeClaimRetentionPolicy @go(PersistentVolumeClaimRetentionPolicy,*StatefulSetPersistentVolumeClaimRetentionPolicy) @protobuf(10,bytes,opt)
 
 	// ordinals controls the numbering of replica indices in a StatefulSet. The
 	// default ordinals behavior assigns a "0" index to the first replica and
-	// increments the index by one for each additional replica requested. Using
-	// the ordinals field requires the StatefulSetStartOrdinal feature gate to be
-	// enabled, which is beta.
+	// increments the index by one for each additional replica requested.
 	// +optional
 	ordinals?: null | #StatefulSetOrdinals @go(Ordinals,*StatefulSetOrdinals) @protobuf(11,bytes,opt)
 }
@@ -298,11 +297,13 @@ import (
 	// +optional
 	// +patchMergeKey=type
 	// +patchStrategy=merge
+	// +listType=map
+	// +listMapKey=type
 	conditions?: [...#StatefulSetCondition] @go(Conditions,[]StatefulSetCondition) @protobuf(10,bytes,rep)
 
 	// Total number of available pods (ready for at least minReadySeconds) targeted by this statefulset.
 	// +optional
-	availableReplicas: int32 @go(AvailableReplicas) @protobuf(11,varint,opt)
+	availableReplicas?: int32 @go(AvailableReplicas) @protobuf(11,varint,opt)
 }
 
 #StatefulSetConditionType: string
@@ -498,6 +499,8 @@ import (
 	// Represents the latest available observations of a deployment's current state.
 	// +patchMergeKey=type
 	// +patchStrategy=merge
+	// +listType=map
+	// +listMapKey=type
 	conditions?: [...#DeploymentCondition] @go(Conditions,[]DeploymentCondition) @protobuf(6,bytes,rep)
 
 	// Count of hash collisions for the Deployment. The Deployment controller uses this
@@ -715,6 +718,8 @@ import (
 	// +optional
 	// +patchMergeKey=type
 	// +patchStrategy=merge
+	// +listType=map
+	// +listMapKey=type
 	conditions?: [...#DaemonSetCondition] @go(Conditions,[]DaemonSetCondition) @protobuf(10,bytes,rep)
 }
 
@@ -875,6 +880,8 @@ import (
 	// +optional
 	// +patchMergeKey=type
 	// +patchStrategy=merge
+	// +listType=map
+	// +listMapKey=type
 	conditions?: [...#ReplicaSetCondition] @go(Conditions,[]ReplicaSetCondition) @protobuf(6,bytes,rep)
 }
 

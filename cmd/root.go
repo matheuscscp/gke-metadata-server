@@ -77,7 +77,6 @@ func main() {
 	}
 
 	rootCmd.AddCommand(newServerCommand())
-	rootCmd.AddCommand(newInitNetworkCommand())
 
 	rootCmd.PersistentFlags().StringVar(&kubeconfig, "kubeconfig", filepath.Join(homedir.HomeDir(), ".kube", "config"),
 		"Path to the kubeconfig file for creating the Kubernetes client")

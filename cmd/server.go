@@ -42,7 +42,6 @@ import (
 	watchserviceaccounts "github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts/watch"
 	cacheserviceaccounttokens "github.com/matheuscscp/gke-metadata-server/internal/serviceaccounttokens/cache"
 	createserviceaccounttoken "github.com/matheuscscp/gke-metadata-server/internal/serviceaccounttokens/create"
-	"github.com/matheuscscp/gke-metadata-server/internal/webhook"
 
 	"github.com/spf13/cobra"
 )
@@ -50,11 +49,9 @@ import (
 func newServerCommand() *cobra.Command {
 	var (
 		serverPort                          int
-		webhookAddr                         string
 		workloadIdentityProvider            string
 		defaultNodeServiceAccountName       string
 		defaultNodeServiceAccountNamespace  string
-		webhookInitNetworkImage             string
 		watchPods                           bool
 		watchPodsResyncPeriod               time.Duration
 		watchPodsDisableFallback            bool
@@ -242,20 +239,10 @@ func newServerCommand() *cobra.Command {
 				WorkloadIdentityPool:      workloadIdentityPool,
 			})
 
-			webhookServer := webhook.New(ctx, webhook.ServerOptions{
-				ServerAddr:       webhookAddr,
-				InitNetworkImage: webhookInitNetworkImage,
-				DaemonSetPort:    serverPort,
-				MetricsRegistry:  metricsRegistry,
-			})
-
 			ctx, cancel := waitForShutdown(ctx)
 			defer cancel()
 			if err := s.Shutdown(ctx); err != nil {
 				return fmt.Errorf("error in server graceful shutdown: %w", err)
-			}
-			if err := webhookServer.Shutdown(ctx); err != nil {
-				return fmt.Errorf("error in webhook graceful shutdown: %w", err)
 			}
 
 			return nil
@@ -264,16 +251,12 @@ func newServerCommand() *cobra.Command {
 
 	cmd.Flags().IntVar(&serverPort, "server-port", 8080,
 		"Network address where the metadata server must listen on")
-	cmd.Flags().StringVar(&webhookAddr, "webhook-addr", ":8081",
-		"Network address where the webhook server must listen on")
 	cmd.Flags().StringVar(&workloadIdentityProvider, "workload-identity-provider", "",
 		"Mandatory fully-qualified resource name of the GCP Workload Identity Provider (projects/<project_number>/locations/global/workloadIdentityPools/<pool_name>/providers/<provider_name>)")
 	cmd.Flags().StringVar(&defaultNodeServiceAccountName, "default-node-service-account-name", "gke-metadata-server",
 		"Name of the default service account to be used by pods running on the host network")
 	cmd.Flags().StringVar(&defaultNodeServiceAccountNamespace, "default-node-service-account-namespace", "kube-system",
 		"Namespace of the default service account to be used by pods running on the host network")
-	cmd.Flags().StringVar(&webhookInitNetworkImage, "webhook-init-network-image", "ghcr.io/matheuscscp/gke-metadata-server:0.10.0",
-		"Image to be used for the init container that sets up the network namespace for reaching the metadata server")
 	cmd.Flags().BoolVar(&watchPods, "watch-pods", false,
 		"Whether or not to watch the pods running on the same node (default false)")
 	cmd.Flags().DurationVar(&watchPodsResyncPeriod, "watch-pods-resync-period", 10*time.Minute,

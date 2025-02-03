@@ -43,8 +43,6 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o gke-metadata-server \
 
 FROM alpine:3.21
 
-RUN apk add --no-cache iptables
-
 COPY --from=builder /app/gke-metadata-server .
 
 ENTRYPOINT ["./gke-metadata-server"]
