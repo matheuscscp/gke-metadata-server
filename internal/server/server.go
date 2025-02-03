@@ -51,7 +51,7 @@ type (
 
 	ServerOptions struct {
 		NodeName                  string
-		ServerAddr                string
+		ServerPort                int
 		Pods                      pods.Provider
 		Node                      node.Provider
 		ServiceAccounts           serviceaccounts.Provider
@@ -102,7 +102,7 @@ func New(ctx context.Context, opts ServerOptions) *Server {
 	opts.MetricsRegistry.MustRegister(getNodeFailures)
 
 	// create server
-	l := logging.FromContext(ctx).WithField("server_addr", opts.ServerAddr)
+	l := logging.FromContext(ctx).WithField("server_port", opts.ServerPort)
 	metadataDirectory := &pkghttp.DirectoryHandler{}
 	internalServeMux := http.NewServeMux()
 	s := &Server{
@@ -112,7 +112,7 @@ func New(ctx context.Context, opts ServerOptions) *Server {
 			getNodeFailures:   getNodeFailures,
 		},
 		httpServer: &http.Server{
-			Addr: opts.ServerAddr,
+			Addr: fmt.Sprintf(":%d", opts.ServerPort),
 			BaseContext: func(net.Listener) context.Context {
 				return logging.IntoContext(context.Background(), l)
 			},

@@ -23,6 +23,7 @@
 package templates
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	timoniv1 "timoni.sh/core/v1alpha1"
 )
 
@@ -74,6 +75,9 @@ import (
 		annotations?:  timoniv1.#Annotations
 		resources?:    timoniv1.#ResourceRequirements
 		priorityClass: string | *"system-node-critical"
+		nodeSelector?: {[string]: string}
+		affinity?:     corev1.#Affinity
+		tolerations?:  [...corev1.#Toleration]
 	}
 
 	// The application settings.

@@ -43,7 +43,7 @@ import (
 type ServerOptions struct {
 	ServerAddr       string
 	InitNetworkImage string
-	DaemonSetPort    string
+	DaemonSetPort    int
 	MetricsRegistry  *prometheus.Registry
 }
 
@@ -167,7 +167,7 @@ func mutateHandler(opts ServerOptions) http.HandlerFunc {
 						},
 						{
 							Name:  "DAEMONSET_PORT",
-							Value: opts.DaemonSetPort,
+							Value: fmt.Sprint(opts.DaemonSetPort),
 						},
 					},
 				}),

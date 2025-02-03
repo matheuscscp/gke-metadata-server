@@ -6,3 +6,4 @@ terraform.*
 *.tgz
 Chart.yaml
 config.cue
+internal/redirect/redirect_bpf*

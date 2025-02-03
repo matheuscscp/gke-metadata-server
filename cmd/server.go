@@ -24,8 +24,8 @@ package main
 
 import (
 	"fmt"
+	"net/netip"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/matheuscscp/gke-metadata-server/internal/googlecredentials"
@@ -35,6 +35,7 @@ import (
 	watchnode "github.com/matheuscscp/gke-metadata-server/internal/node/watch"
 	listpods "github.com/matheuscscp/gke-metadata-server/internal/pods/list"
 	watchpods "github.com/matheuscscp/gke-metadata-server/internal/pods/watch"
+	"github.com/matheuscscp/gke-metadata-server/internal/redirect"
 	"github.com/matheuscscp/gke-metadata-server/internal/server"
 	"github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts"
 	getserviceaccount "github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts/get"
@@ -48,7 +49,7 @@ import (
 
 func newServerCommand() *cobra.Command {
 	var (
-		serverAddr                          string
+		serverPort                          int
 		webhookAddr                         string
 		workloadIdentityProvider            string
 		defaultNodeServiceAccountName       string
@@ -77,6 +78,17 @@ func newServerCommand() *cobra.Command {
 			if nodeName == "" {
 				return fmt.Errorf("NODE_NAME environment variable must be specified")
 			}
+			podIP := os.Getenv("POD_IP")
+			if podIP == "" {
+				return fmt.Errorf("POD_IP environment variable must be specified")
+			}
+			emulatorIP, err := netip.ParseAddr(podIP)
+			if err != nil {
+				return fmt.Errorf("error parsing POD_IP environment variable: %w", err)
+			}
+			if !emulatorIP.Is4() {
+				return fmt.Errorf("POD_IP environment variable must be an IPv4 address")
+			}
 			if defaultNodeServiceAccountName == "" {
 				return fmt.Errorf("--default-node-service-account-name argument must be specified")
 			}
@@ -103,6 +115,13 @@ func newServerCommand() *cobra.Command {
 					l.WithError(runtimeErr).Fatal("runtime error")
 				}
 			}()
+
+			// install ebpf redirect program
+			redirBPF, err := redirect.LoadAndAttachBPF(emulatorIP, serverPort, logging.Debug())
+			if err != nil {
+				return fmt.Errorf("error loading eBPF redirect program: %w", err)
+			}
+			defer redirBPF.Close()
 
 			// create clients
 			kubeClient, err := createKubernetesClient(ctx)
@@ -213,7 +232,7 @@ func newServerCommand() *cobra.Command {
 			}
 			s := server.New(ctx, server.ServerOptions{
 				NodeName:                  nodeName,
-				ServerAddr:                serverAddr,
+				ServerPort:                serverPort,
 				Pods:                      pods,
 				Node:                      node,
 				ServiceAccounts:           serviceAccounts,
@@ -226,7 +245,7 @@ func newServerCommand() *cobra.Command {
 			webhookServer := webhook.New(ctx, webhook.ServerOptions{
 				ServerAddr:       webhookAddr,
 				InitNetworkImage: webhookInitNetworkImage,
-				DaemonSetPort:    strings.Split(serverAddr, ":")[1],
+				DaemonSetPort:    serverPort,
 				MetricsRegistry:  metricsRegistry,
 			})
 
@@ -243,7 +262,7 @@ func newServerCommand() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&serverAddr, "server-addr", ":8080",
+	cmd.Flags().IntVar(&serverPort, "server-port", 8080,
 		"Network address where the metadata server must listen on")
 	cmd.Flags().StringVar(&webhookAddr, "webhook-addr", ":8081",
 		"Network address where the webhook server must listen on")

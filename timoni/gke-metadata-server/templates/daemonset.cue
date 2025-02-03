@@ -41,6 +41,15 @@ import (
 				}
 			}
 			spec: {
+				if #config.pod.nodeSelector != _|_ {
+					nodeSelector: #config.pod.nodeSelector
+				}
+				if #config.pod.affinity != _|_ {
+					affinity: #config.pod.affinity
+				}
+				if #config.pod.tolerations != _|_ {
+					tolerations: #config.pod.tolerations
+				}
 				serviceAccountName: #config.metadata.name
 				priorityClassName:  #config.pod.priorityClass
 				hostNetwork:        true
@@ -50,6 +59,9 @@ import (
 						name:            #config.metadata.name
 						image:           #config.image.reference
 						imagePullPolicy: #config.image.pullPolicy
+						securityContext: {
+							privileged: true
+						}
 						args: [
 							"server",
 							"--webhook-init-network-image=\(#config.image.reference)",
@@ -59,8 +71,8 @@ import (
 							if #config.settings.logLevel != _|_ {
 								"--log-level=\(#config.settings.logLevel)"
 							}
-							if #config.settings.serverAddr != _|_ {
-								"--server-addr=\(#config.settings.serverAddr.#string)"
+							if #config.settings.serverPort != _|_ {
+								"--server-port=\(#config.settings.serverPort)"
 							}
 							if #config.settings.webhookAddr != _|_ {
 								"--webhook-addr=\(#config.settings.webhookAddr.#string)"
@@ -99,14 +111,20 @@ import (
 								"--cache-tokens-concurrency=\(#config.settings.cacheTokens.concurrency)"
 							}
 						]
-						env: [{
-							name:                           "NODE_NAME"
-							valueFrom: fieldRef: fieldPath: "spec.nodeName"
-						}]
+						env: [
+							{
+								name:                           "NODE_NAME"
+								valueFrom: fieldRef: fieldPath: "spec.nodeName"
+							},
+							{
+								name:                           "POD_IP"
+								valueFrom: fieldRef: fieldPath: "status.podIP"
+							},
+						]
 						ports: [
 							{
 								name:          "http"
-								containerPort: #config.settings.serverAddr.port
+								containerPort: #config.settings.serverPort
 								protocol:      "TCP"
 							},
 							{

@@ -40,8 +40,8 @@ import (
 	// logLevel is the log level for gke-metadata-server.
 	logLevel?: string & ("panic" | "fatal" | "error" | "warning" | "info" | "debug" | "trace")
 
- 	// serverAddr is the address for gke-metadata-server to listen on.
-	serverAddr: #address | *(#address & {port: 8080})
+ 	// serverPort is the TCP port for gke-metadata-server to listen HTTP on.
+	serverPort: int & >0 & <65536 | *8080
 
 	// webhookAddr is the address for the gke-metadata-server mutating webhook to listen on.
 	webhookAddr: #address | *(#address & {port: 8081})
