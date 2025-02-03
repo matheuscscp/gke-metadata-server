@@ -272,16 +272,18 @@ or the Timoni Module value `values.settings.defaultNodeServiceAccount`.
 
 *Be careful and try to avoid using shared identities! This is obviously dangerous!*
 
-### The eBPF magic 🐝
+### eBPF magic 🐝
 
-***Attention:*** The eBPF magic 🐝 installed in the network namespace of mutated
-Pods will redirect outbound traffic targeting `169.254.169.254:80` to the emulator port
-on the Node. If you are using similar tools or equivalent workload identity features
-of managed Kubernetes from other clouds, *this configuration may have a direct conflict
-with other such tools or features.* It's a common practice among cloud providers using
-this endpoint to implement such features. Especially when mutating Pods that will run
-on the host network, *the rules will be installed on the network namespace of the Node!*
-Please be sure to know what you are doing when using this tool inside complex environments.
+***Attention:*** The emulator installs eBPF magic 🐝 in the Node kernel. The `connect()`
+syscalls are modified to target the emulator address when the original destination is
+`169.254.169.254:80`. If you are using similar tools or equivalent workload identity
+features of managed services from other clouds, *this configuration may have a direct
+conflict with other such tools or features.* It's a common practice among cloud providers
+using this endpoint to implement workload identity. If your use case requires, the Helm
+Chart and Timoni Module distributed here allow customizing the Node scheduling rules
+for the DaemonSet Pods, i.e. `nodeSelector`, `tolerations`, `affinity`, etc. These
+allow you to configure a specific Node pool for Pods where you want to use workload
+identity for Google, while other Nodes can be used for other cloud providers or tools.
 
 ### Token Cache
 
