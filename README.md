@@ -13,20 +13,13 @@ automatically by Google in the `kube-system` namespace of GKE clusters that have
 ## Usage
 
 Steps:
-1. Install [cert-manager](https://cert-manager.io/docs/installation/) in the cluster.
-This dependency is used for bootstrapping self-signed CA and TLS certificates for a `MutatingWebhook`
-that adds the required networking configuration to the user Pods.
-2. Configure GCP Workload Identity Federation for Kubernetes.
-3. Deploy `gke-metadata-server` in the cluster using the Workload Identity Provider full name,
+1. Configure GCP Workload Identity Federation for Kubernetes.
+2. Deploy `gke-metadata-server` in the cluster using the Workload Identity Provider full name,
 obtained after step 2.
-4. See [`./k8s/test-pod.yaml`](./k8s/test-pod.yaml) for an example of how to configure your Pods
+3. See [`./k8s/test-pod.yaml`](./k8s/test-pod.yaml) for an example of how to configure your Pods
 and their ServiceAccounts.
-5. (Optional but highly recommended) Verify gke-metadata-server's artifact signatures to make sure
+4. (Optional but highly recommended) Verify gke-metadata-server's artifact signatures to make sure
 you are deploying authentic artifacts distributed by this project.
-
-If you don't want to depend on cert-manager and want to deploy the `MutatingWebhook` in a
-different way, the Helm Chart or Timoni Module offered here is not for you (but please feel
-free to copy and modify).
 
 ### Configure GCP Workload Identity Federation for Kubernetes
 
@@ -279,9 +272,9 @@ or the Timoni Module value `values.settings.defaultNodeServiceAccount`.
 
 *Be careful and try to avoid using shared identities! This is obviously dangerous!*
 
-### The `iptables` rules
+### The eBPF magic 🐝
 
-***Attention:*** The `iptables` rules installed in the network namespace of mutated
+***Attention:*** The eBPF magic 🐝 installed in the network namespace of mutated
 Pods will redirect outbound traffic targeting `169.254.169.254:80` to the emulator port
 on the Node. If you are using similar tools or equivalent workload identity features
 of managed Kubernetes from other clouds, *this configuration may have a direct conflict

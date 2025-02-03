@@ -34,7 +34,6 @@ config:
   defaultNodeServiceAccount: ""
   logLevel: info # Log level. Accepted values: panic, fatal, error, warning, info, debug, trace
   serverPort: 8080 # TCP port where the HTTP server will listen on.
-  webhookAddr: :8081 # Network address where the MutatingWebhook server will listen on.
   watchPods:
     enable: true # Whether or not to watch and cache the Pods running on the same Node.
     disableFallback: false # Whether or not to disable the simple fallback method for looking up Pods upon cache misses.

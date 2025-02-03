@@ -43,9 +43,6 @@ import (
  	// serverPort is the TCP port for gke-metadata-server to listen HTTP on.
 	serverPort: int & >0 & <65536 | *8080
 
-	// webhookAddr is the address for the gke-metadata-server mutating webhook to listen on.
-	webhookAddr: #address | *(#address & {port: 8081})
-
 	// watchPods is the watch settings for gke-metadata-server to watch Pods running on the same Node.
 	watchPods: #watchSettings
 
@@ -74,16 +71,5 @@ import (
 
 		// resyncPeriod is the resync period for the watch feature.
 		resyncPeriod?: time.Duration
-	}
-	#address: {
-		host?: string
-		port:  int & >0 & <65536
-
-		if host != _|_ {
-			#string: string & "\(host):\(port)"
-		}
-		if host == _|_ {
-			#string: string & ":\(port)"
-		}
 	}
 }

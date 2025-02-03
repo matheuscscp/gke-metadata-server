@@ -64,7 +64,6 @@ import (
 						}
 						args: [
 							"server",
-							"--webhook-init-network-image=\(#config.image.reference)",
 							"--workload-identity-provider=\(#config.settings.workloadIdentityProvider)",
 							"--default-node-service-account-name=\(#config.metadata.name)",
 							"--default-node-service-account-namespace=\(#config.metadata.namespace)",
@@ -73,9 +72,6 @@ import (
 							}
 							if #config.settings.serverPort != _|_ {
 								"--server-port=\(#config.settings.serverPort)"
-							}
-							if #config.settings.webhookAddr != _|_ {
-								"--webhook-addr=\(#config.settings.webhookAddr.#string)"
 							}
 							if #config.settings.watchPods.enable {
 								"--watch-pods"
@@ -121,18 +117,11 @@ import (
 								valueFrom: fieldRef: fieldPath: "status.podIP"
 							},
 						]
-						ports: [
-							{
-								name:          "http"
-								containerPort: #config.settings.serverPort
-								protocol:      "TCP"
-							},
-							{
-								name:          "webhook"
-								containerPort: #config.settings.webhookAddr.port
-								protocol:      "TCP"
-							}
-						]
+						ports: [{
+							name:          "http"
+							containerPort: #config.settings.serverPort
+							protocol:      "TCP"
+						}]
 						#probes: {
 							initialDelaySeconds: 3
 							httpGet: {
@@ -142,32 +131,19 @@ import (
 						}
 						readinessProbe: #probes
 						livenessProbe:  #probes
-						volumeMounts: [
-							{
-								name:      "tmpfs"
-								mountPath: "/tmp"
-							},
-							{
-								name:      "tls"
-								mountPath: "/etc/gke-metadata-server/certs"
-								readOnly:  true
-							},
-						]
+						volumeMounts: [{
+							name:      "tmpfs"
+							mountPath: "/tmp"
+						}]
 						if #config.pod.resources != _|_ {
 							resources: #config.pod.resources
 						}
 					},
 				]
-				volumes: [
-					{
-						name:     "tmpfs"
-						emptyDir: medium: "Memory"
-					},
-					{
-						name:     "tls"
-						secret:   secretName: "gke-metadata-server-tls"
-					}
-				]
+				volumes: [ {
+					name:     "tmpfs"
+					emptyDir: medium: "Memory"
+				}]
 			}
 		}
 	}

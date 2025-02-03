@@ -55,12 +55,6 @@ kind: Pod
 metadata:
   name: <POD_NAME>
   namespace: default
-  # labels:
-    # This label is used by the MutatingWebhookConfiguration to select which Pods to mutate.
-    # The mutation injects the host alias metadata.google.internal ---> 169.254.169.254 and
-    # an initContainer that installs iptables rules in the Pod network namespace to redirect
-    # outbound traffic targeting 169.254.169.254:80 to the emulator port on the Node.
-    # gke-metadata-server.matheuscscp.io/webhook: Mutate
 spec:
   serviceAccountName: <SERVICE_ACCOUNT> # Use the ServiceAccount created above.
   # This DNS record is required because the Google libraries hardcode the metadata server

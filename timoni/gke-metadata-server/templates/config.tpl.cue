@@ -84,8 +84,6 @@ import (
 	settings: #Settings
 
 	// Helper definitions.
-	#webhookCAName:  "\(metadata.name)-ca"
-	#webhookTLSName: "\(metadata.name)-tls"
 	#metadataWithoutName: {
 		namespace: metadata.namespace
 		labels:    metadata.labels
@@ -115,14 +113,6 @@ import (
 
 	objects: {
 		daemonSet: #DaemonSet & {#config: config}
-		service:   #Service & {#config: config}
-
-		// mutatingwebhook.cue
-		mutatingWebhook: #MutatingWebhook & {#config: config}
-		caIssuer:        #CAIssuer & {#config: config}
-		caCertificate:   #CACertificate & {#config: config}
-		tlsIssuer:       #TLSIssuer & {#config: config}
-		tlsCertificate:  #TLSCertificate & {#config: config}
 
 		// rbac.cue
 		serviceAccount:     #ServiceAccount & {#config: config}
