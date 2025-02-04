@@ -1,6 +1,6 @@
 # MIT License
 #
-# Copyright (c) 2024 Matheus Pimenta
+# Copyright (c) 2023 Matheus Pimenta
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -23,14 +23,6 @@
 config:
   workloadIdentityProvider: projects/637293746831/locations/global/workloadIdentityPools/test-kind-cluster/providers/<TEST_ID>
   defaultNodeServiceAccount: test-sa@gke-metadata-server.iam.gserviceaccount.com
-  watchPods:
-    enable: false
-  watchNode:
-    enable: false
-  watchServiceAccounts:
-    enable: false
-  cacheTokens:
-    enable: false
 
 image:
   repository: ghcr.io/matheuscscp/gke-metadata-server/test
