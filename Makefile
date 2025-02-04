@@ -52,7 +52,6 @@ gen-timoni:
 
 .PHONY: gen-ebpf
 gen-ebpf:
-	bpftool btf dump file /sys/kernel/btf/vmlinux format c > ebpf/vmlinux.h
 	go generate ./internal/redirect
 
 .PHONY: dev-cluster
@@ -68,15 +67,13 @@ ci-cluster:
 
 .PHONY: dev-test
 dev-test:
-	make test TEST_ID=test TEST_CASE=k8s/test-helm-values-no-watch.yaml
-	make test TEST_ID=test TEST_CASE=k8s/test-helm-values-watch.yaml
+	make test TEST_ID=test TEST_CASE=k8s/test-helm-values.yaml
 	make test TEST_ID=test TEST_CASE=k8s/test-timoni-values-no-watch.cue
 	make test TEST_ID=test TEST_CASE=k8s/test-timoni-values-watch.cue
 
 .PHONY: ci-test
 ci-test:
-	make test TEST_ID=$$(cat ci-test-id.txt) TEST_CASE=k8s/test-helm-values-no-watch.yaml
-	make test TEST_ID=$$(cat ci-test-id.txt) TEST_CASE=k8s/test-helm-values-watch.yaml
+	make test TEST_ID=$$(cat ci-test-id.txt) TEST_CASE=k8s/test-helm-values.yaml
 	make test TEST_ID=$$(cat ci-test-id.txt) TEST_CASE=k8s/test-timoni-values-no-watch.cue
 	make test TEST_ID=$$(cat ci-test-id.txt) TEST_CASE=k8s/test-timoni-values-watch.cue
 

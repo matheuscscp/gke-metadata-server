@@ -33,7 +33,6 @@ COPY ./cmd/ ./cmd/
 COPY ./internal/ ./internal/
 COPY ./ebpf/ ./ebpf/
 
-RUN bpftool btf dump file /sys/kernel/btf/vmlinux format c > ebpf/vmlinux.h
 RUN go generate ./internal/redirect
 
 # CGO_ENABLED=0 to build a statically-linked binary

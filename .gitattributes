@@ -1,5 +1,4 @@
 timoni/gke-metadata-server/cue.mod/** linguist-vendored
-ebpf/vmlinux.h linguist-vendored
 **/*.yml linguist-detectable=true
 **/*.yml linguist-language=YAML
 **/*.yaml linguist-detectable=true

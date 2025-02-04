@@ -32,6 +32,7 @@ import (
 	"github.com/cilium/ebpf/link"
 )
 
+//go:generate sh -c "bpftool btf dump file /sys/kernel/btf/vmlinux format c > ../../ebpf/vmlinux.h"
 //go:generate go run github.com/cilium/ebpf/cmd/bpf2go -type Config redirect ../../ebpf/redirect.c
 
 type BPF struct {
