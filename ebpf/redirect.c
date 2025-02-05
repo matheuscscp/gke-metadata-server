@@ -28,8 +28,8 @@
 #include <bpf/bpf_tracing.h>
 #include <bpf/bpf_helpers.h>
 
-
-#define AF_INET 2 // IPv4 family
+// IPv4 family
+#define AF_INET 2
 
 struct Config {
 	__u32 emulator_ip;
@@ -44,16 +44,12 @@ struct {
 	__type(value, struct Config);
 } map_config SEC(".maps");
 
-
 // Hooks to connect() syscalls. Redirects connections targeting
 // the GKE metadata server to the emulator.
 SEC("cgroup/connect4")
 int redirect_connect4(struct bpf_sock_addr *ctx) {
-	// Only forward IPv4 TCP connections
-	if (ctx->user_family != AF_INET) {
-		return 1;
-	}
-	if (ctx->protocol != IPPROTO_TCP) {
+	// We only care about IPv4 TCP connections
+	if (ctx->user_family != AF_INET || ctx->protocol != IPPROTO_TCP) {
 		return 1;
 	}
 
