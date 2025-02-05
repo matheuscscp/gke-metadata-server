@@ -172,7 +172,11 @@ func observeRequest(r *http.Request, statusCode int, err error, errResp ...any) 
 
 	switch {
 	case statusCode < 400:
-		l.Info("request")
+		if strings.HasSuffix(r.URL.Path, "/token") || strings.HasSuffix(r.URL.Path, "/identity") {
+			l.Info("request")
+		} else {
+			l.Debug("request")
+		}
 	case statusCode < 500:
 		l.Info("client error")
 	default:
