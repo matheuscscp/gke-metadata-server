@@ -52,8 +52,6 @@ import (
 				}
 				serviceAccountName: #config.metadata.name
 				priorityClassName:  #config.pod.priorityClass
-				hostNetwork:        true
-				dnsPolicy:          "ClusterFirstWithHostNet"
 				containers: [
 					{
 						name:            #config.metadata.name
