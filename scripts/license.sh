@@ -67,7 +67,7 @@ function license_pattern() {
 }
 
 # files with double-slash comments
-for pattern in \*.go \*.c \*/templates/\*.cue \*k8s/\*.cue; do
+for pattern in \*.go \*.c \*/templates/\*.cue \*testdata/\*.cue; do
     license_pattern "//" "$pattern"
 done
 

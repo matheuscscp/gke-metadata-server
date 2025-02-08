@@ -16,7 +16,7 @@ Steps:
 1. Configure GCP Workload Identity Federation for Kubernetes.
 2. Deploy `gke-metadata-server` in the cluster using the Workload Identity Provider full name,
 obtained after step 2.
-3. See [`./k8s/test-pod.yaml`](./k8s/test-pod.yaml) for an example of how to configure your Pods
+3. See [`./testdata/pod.yaml`](./testdata/pod.yaml) for an example of how to configure your Pods
 and their ServiceAccounts.
 4. (Optional but highly recommended) Verify gke-metadata-server's artifact signatures to make sure
 you are deploying authentic artifacts distributed by this project.
@@ -270,7 +270,34 @@ of the emulator and use it for all the Pods of the cluster that are running on t
 host network. This can be done through the Helm Chart value `config.defaultNodeServiceAccount`,
 or the Timoni Module value `values.settings.defaultNodeServiceAccount`.
 
-*Be careful and try to avoid using shared identities! This is obviously dangerous!*
+<!--
+TODO: support multiple gke-metadata-server instances in the same namespace using
+the helm release/timoni instance name as part of the DaemonSet and ServiceAccount names.
+when doing this, we must also update the hardcoded CLI flag below accordingly:
+--default-node-service-account-name=gke-metadata-server
+this is for supporting different node pools to use different identities, as explained
+in the commented doc paragraph below (uncomment it when this feature is implemented).
+let's also seize the opportunity to hardcode the kube-system namespace instead of
+making it configurable, the emulator is very sensitive and should always be deployed
+in the kube-system namespace.
+furthermore, we should also remove the retrieval of the Node service account
+from the Node annotations/labels, which is not a good UX, as it may be hard to configure.
+rename config.defaultNodeServiceAccount and values.settings.defaultNodeServiceAccount to
+config.nodePoolGoogleServiceAccount and values.settings.nodePoolGoogleServiceAccount.
+when this is done, update the doc paragraph above according to this new feature, especially:
+"all the Pods of the cluster that are running on the host network", which will be
+replaced by "all the Pods of each Node pool that are running on the host network".
+
+Furthermore, if your use case requires, the Helm Chart and Timoni Module distributed
+here allow customizing the Node scheduling rules for the DaemonSet Pods in order to
+segment your Nodes in different pools that use different identities, i.e. the fields
+`nodeSelector`, `tolerations`, `affinity`, etc. For this to work you will need multiple
+Helm Releases or Timoni Module Instances, each with a different configuration for each
+Node pool.
+-->
+
+*Be careful and try to avoid using identities shared by many different workloads!
+This is obviously dangerous!*
 
 ### eBPF magic 🐝
 

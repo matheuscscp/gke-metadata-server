@@ -67,7 +67,8 @@ func ReferenceFromPod(pod *corev1.Pod) *Reference {
 // ReferenceFromNode returns a ServiceAccount reference from the Node object annotations or labels.
 // Annotations take precedence over labels because we encourage users to use annotations instead of
 // labels in this case since. Labels are more impactful to etcd since they are indexed, and we don't
-// need indexing here so we prefer annotations.
+// need indexing here so we prefer annotations. However, we support labels because not all cloud
+// providers support customizing annotations on Nodes.
 //
 // The ServiceAccount reference is retrieved from the following pair of annotations or labels:
 //

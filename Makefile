@@ -67,23 +67,19 @@ ci-cluster:
 
 .PHONY: dev-test
 dev-test:
-	make test TEST_ID=test TEST_CASE=k8s/test-helm-values.yaml
-	make test TEST_ID=test TEST_CASE=k8s/test-timoni-values-no-watch.cue
-	make test TEST_ID=test TEST_CASE=k8s/test-timoni-values-watch.cue
+	make test TEST_ID=test
 
 .PHONY: ci-test
 ci-test:
-	make test TEST_ID=$$(cat ci-test-id.txt) TEST_CASE=k8s/test-helm-values.yaml
-	make test TEST_ID=$$(cat ci-test-id.txt) TEST_CASE=k8s/test-timoni-values-no-watch.cue
-	make test TEST_ID=$$(cat ci-test-id.txt) TEST_CASE=k8s/test-timoni-values-watch.cue
+	make test TEST_ID=$$(cat ci-test-id.txt)
 
 .PHONY: cluster
 cluster:
 	@if [ "${TEST_ID}" == "" ]; then echo "TEST_ID variable is required."; exit -1; fi
 	@if [ "${PROVIDER_COMMAND}" == "" ]; then echo "PROVIDER_COMMAND variable is required."; exit -1; fi
-	kind create cluster -n gke-metadata-server --config k8s/test-kind-config.yaml
+	kind create cluster -n gke-metadata-server --config testdata/kind-config.yaml
 	make create-or-update-provider TEST_ID=${TEST_ID} PROVIDER_COMMAND=${PROVIDER_COMMAND}
-	kubectl --context kind-gke-metadata-server apply -f k8s/test-anon-oidc-rbac.yaml
+	kubectl --context kind-gke-metadata-server apply -f testdata/anon-oidc-rbac.yaml
 
 .PHONY: create-or-update-provider
 create-or-update-provider:
@@ -129,73 +125,13 @@ build:
 .PHONY: test
 test:
 	@if [ "${TEST_ID}" == "" ]; then echo "TEST_ID variable is required."; exit -1; fi
-	@if [ "${TEST_CASE}" == "" ]; then echo "TEST_CASE variable is required."; exit -1; fi
-	helm --kube-context kind-gke-metadata-server -n kube-system uninstall gke-metadata-server --wait || true
-	timoni --kube-context kind-gke-metadata-server -n kube-system delete gke-metadata-server --wait || true
-	if [[ "${TEST_CASE}" == *"helm"* ]]; then \
-		sed "s|<TEST_ID>|${TEST_ID}|g" ${TEST_CASE} | \
-			sed "s|<CONTAINER_DIGEST>|$$(cat container-digest.txt)|g" | \
-			tee >(helm --kube-context kind-gke-metadata-server -n kube-system upgrade --install gke-metadata-server $$(cat helm-package.txt) --wait -f -); \
-	else \
-		sed "s|<TEST_ID>|${TEST_ID}|g" ${TEST_CASE} | \
-			sed "s|<CONTAINER_DIGEST>|$$(cat container-digest.txt)|g" | \
-			tee >(timoni --kube-context kind-gke-metadata-server -n kube-system apply gke-metadata-server oci://${TEST_IMAGE}/timoni --digest $$(cat timoni-digest.txt) --wait -f -); \
-	fi
-	while : ; do \
-		sleep_secs=10; \
-		echo "Sleeping for $$sleep_secs secs and checking DaemonSet status..."; \
-		sleep $$sleep_secs; \
-		if [ $$(kubectl --context kind-gke-metadata-server -n kube-system get ds gke-metadata-server | grep gke | awk '{print $$4}') -eq 1 ]; then \
-			echo "DaemonSet is ready"; \
-			break; \
-		fi; \
-	done
-	make start-test-pod POD_NAME=test-direct-access HOST_NETWORK=false SERVICE_ACCOUNT=test
-	make start-test-pod POD_NAME=test-impersonation HOST_NETWORK=false SERVICE_ACCOUNT=test-impersonated
-	make start-test-pod POD_NAME=test-host-network  HOST_NETWORK=true  SERVICE_ACCOUNT=test-impersonated
-	while : ; do \
-		sleep_secs=10; \
-		echo "Sleeping for $$sleep_secs secs and checking test Pod status..."; \
-		sleep $$sleep_secs; \
-		EXIT_CODE_1=$$(kubectl --context kind-gke-metadata-server -n default get po test-direct-access -o jsonpath='{.status.containerStatuses[0].state.terminated.exitCode}'); \
-		EXIT_CODE_2=$$(kubectl --context kind-gke-metadata-server -n default get po test-impersonation -o jsonpath='{.status.containerStatuses[0].state.terminated.exitCode}'); \
-		EXIT_CODE_3=$$(kubectl --context kind-gke-metadata-server -n default get po test-host-network  -o jsonpath='{.status.containerStatuses[0].state.terminated.exitCode}'); \
-		if [ -n "$$EXIT_CODE_1" ] && [ -n "$$EXIT_CODE_2" ] && [ -n "$$EXIT_CODE_3" ]; then \
-			echo "All containers exited"; \
-			break; \
-		fi; \
-	done; \
-	kubectl --context kind-gke-metadata-server -n kube-system describe $$(kubectl --context kind-gke-metadata-server -n kube-system get po -o name | grep gke); \
-	kubectl --context kind-gke-metadata-server -n kube-system logs ds/gke-metadata-server; \
-	kubectl --context kind-gke-metadata-server -n default describe po test-direct-access; \
-	kubectl --context kind-gke-metadata-server -n default logs test-direct-access -c init-gke-metadata-server; \
-	kubectl --context kind-gke-metadata-server -n default logs test-direct-access -c test -f; \
-	kubectl --context kind-gke-metadata-server -n default describe po test-impersonation; \
-	kubectl --context kind-gke-metadata-server -n default logs test-impersonation -c init-gke-metadata-server; \
-	kubectl --context kind-gke-metadata-server -n default logs test-impersonation -c test -f; \
-	kubectl --context kind-gke-metadata-server -n default describe po test-host-network; \
-	kubectl --context kind-gke-metadata-server -n default logs test-host-network -c init-gke-metadata-server; \
-	kubectl --context kind-gke-metadata-server -n default logs test-host-network -c test -f; \
-	echo "Pod 'test-direct-access' exit code: $$EXIT_CODE_1"; \
-	echo "Pod 'test-impersonation' exit code: $$EXIT_CODE_2"; \
-	echo "Pod 'test-host-network'  exit code: $$EXIT_CODE_3"; \
-	if [ "$$EXIT_CODE_1" != "0" ] || [ "$$EXIT_CODE_2" != "0" ] || [ "$$EXIT_CODE_3" != "0" ]; then \
-		echo "Failure."; \
-		exit 1; \
-	fi; \
-	echo "Success."
-
-.PHONY: start-test-pod
-start-test-pod:
-	@if [ "${POD_NAME}" == "" ]; then echo "POD_NAME variable is required."; exit -1; fi
-	@if [ "${HOST_NETWORK}" == "" ]; then echo "HOST_NETWORK variable is required."; exit -1; fi
-	@if [ "${SERVICE_ACCOUNT}" == "" ]; then echo "SERVICE_ACCOUNT variable is required."; exit -1; fi
-	kubectl --context kind-gke-metadata-server -n default delete po ${POD_NAME} || true
-	sed "s|<POD_NAME>|${POD_NAME}|g" k8s/test-pod.yaml | \
-		sed "s|<HOST_NETWORK>|${HOST_NETWORK}|g" | \
-		sed "s|<SERVICE_ACCOUNT>|${SERVICE_ACCOUNT}|g" | \
-		sed "s|<GO_TEST_DIGEST>|$$(cat go-test-digest.txt)|g" | \
-		tee >(kubectl --context kind-gke-metadata-server apply -f -)
+	TEST_ID=${TEST_ID} \
+		TEST_IMAGE=${TEST_IMAGE} \
+		CONTAINER_DIGEST=$$(cat container-digest.txt) \
+		TIMONI_DIGEST=$$(cat timoni-digest.txt) \
+		HELM_PACKAGE=$$(cat helm-package.txt) \
+		GO_TEST_DIGEST=$$(cat go-test-digest.txt) \
+		go test -v
 
 .PHONY: update-branch
 update-branch:
