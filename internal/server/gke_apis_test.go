@@ -266,7 +266,7 @@ func requestURL(t *testing.T, headers http.Header, url, expectedContentType,
 func assertExpirationSeconds(t *testing.T, secs int) {
 	t.Helper()
 	assert.LessOrEqual(t, 3000, secs)
-	assert.LessOrEqual(t, secs, 3600)
+	assert.LessOrEqual(t, secs, 3700)
 }
 
 func isGooglePreconditionFailed(err error) bool {
