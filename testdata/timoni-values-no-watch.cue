@@ -23,12 +23,11 @@
 package main
 
 values: settings: {
-	workloadIdentityProvider:  "projects/637293746831/locations/global/workloadIdentityPools/test-kind-cluster/providers/<TEST_ID>"
-	defaultNodeServiceAccount: "test-sa@gke-metadata-server.iam.gserviceaccount.com"
-	watchPods:                 enable: false
-	watchNode:                 enable: false
-	watchServiceAccounts:      enable: false
-	cacheTokens:               enable: false
+	workloadIdentityProvider: "projects/637293746831/locations/global/workloadIdentityPools/test-kind-cluster/providers/<TEST_ID>"
+	watchPods:                enable: false
+	watchNode:                enable: false
+	watchServiceAccounts:     enable: false
+	cacheTokens:              enable: false
 }
 
 values: image: {

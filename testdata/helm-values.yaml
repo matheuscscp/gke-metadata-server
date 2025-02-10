@@ -22,7 +22,6 @@
 
 config:
   workloadIdentityProvider: projects/637293746831/locations/global/workloadIdentityPools/test-kind-cluster/providers/<TEST_ID>
-  defaultNodeServiceAccount: test-sa@gke-metadata-server.iam.gserviceaccount.com
 
 image:
   repository: ghcr.io/matheuscscp/gke-metadata-server/test

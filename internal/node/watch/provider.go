@@ -29,7 +29,6 @@ import (
 
 	"github.com/matheuscscp/gke-metadata-server/internal/logging"
 	"github.com/matheuscscp/gke-metadata-server/internal/node"
-	"github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -44,19 +43,13 @@ type (
 		closeChannel  chan struct{}
 		closedChannel chan struct{}
 		informer      cache.SharedIndexInformer
-		listeners     []Listener
 	}
 
 	ProviderOptions struct {
-		NodeName              string
-		FallbackSource        node.Provider
-		KubeClient            *kubernetes.Clientset
-		ResyncPeriod          time.Duration
-		DefaultServiceAccount *serviceaccounts.Reference
-	}
-
-	Listener interface {
-		UpdateNodeServiceAccount(*serviceaccounts.Reference)
+		NodeName       string
+		FallbackSource node.Provider
+		KubeClient     *kubernetes.Clientset
+		ResyncPeriod   time.Duration
 	}
 )
 
@@ -76,21 +69,6 @@ func NewProvider(opts ProviderOptions) *Provider {
 		closedChannel: make(chan struct{}),
 		informer:      informer,
 	}
-
-	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
-			saRef := serviceaccounts.ReferenceFromNode(obj.(*corev1.Node), opts.DefaultServiceAccount)
-			for _, l := range p.listeners {
-				l.UpdateNodeServiceAccount(saRef)
-			}
-		},
-		UpdateFunc: func(oldObj, newObj interface{}) {
-			saRef := serviceaccounts.ReferenceFromNode(newObj.(*corev1.Node), opts.DefaultServiceAccount)
-			for _, l := range p.listeners {
-				l.UpdateNodeServiceAccount(saRef)
-			}
-		},
-	})
 
 	return p
 }
@@ -139,8 +117,4 @@ func (p *Provider) Close() error {
 	close(p.closeChannel)
 	<-p.closedChannel
 	return nil
-}
-
-func (p *Provider) AddListener(l Listener) {
-	p.listeners = append(p.listeners, l)
 }

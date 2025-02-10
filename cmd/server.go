@@ -50,8 +50,8 @@ func newServerCommand() *cobra.Command {
 	var (
 		serverPort                          int
 		workloadIdentityProvider            string
-		defaultNodeServiceAccountName       string
-		defaultNodeServiceAccountNamespace  string
+		nodePoolServiceAccountName          string
+		nodePoolServiceAccountNamespace     string
 		watchPods                           bool
 		watchPodsResyncPeriod               time.Duration
 		watchPodsDisableFallback            bool
@@ -86,15 +86,17 @@ func newServerCommand() *cobra.Command {
 			if !emulatorIP.Is4() {
 				return fmt.Errorf("POD_IP environment variable must be an IPv4 address")
 			}
-			if defaultNodeServiceAccountName == "" {
-				return fmt.Errorf("--default-node-service-account-name argument must be specified")
+			nodePoolSANameSet := nodePoolServiceAccountName != ""
+			nodePoolSANamespaceSet := nodePoolServiceAccountNamespace != ""
+			if nodePoolSANameSet != nodePoolSANamespaceSet {
+				return fmt.Errorf("--node-pool-service-account-name and --node-pool-service-account-namespace arguments must be either both specified or both empty")
 			}
-			if defaultNodeServiceAccountNamespace == "" {
-				return fmt.Errorf("--default-node-service-account-namespace argument must be specified")
-			}
-			defaultNodeServiceAccount := &serviceaccounts.Reference{
-				Name:      defaultNodeServiceAccountName,
-				Namespace: defaultNodeServiceAccountNamespace,
+			var nodePoolServiceAccount *serviceaccounts.Reference
+			if nodePoolSANameSet {
+				nodePoolServiceAccount = &serviceaccounts.Reference{
+					Name:      nodePoolServiceAccountName,
+					Namespace: nodePoolServiceAccountNamespace,
+				}
 			}
 			googleCredentialsConfig, workloadIdentityPool, err := googlecredentials.NewConfig(googlecredentials.ConfigOptions{
 				WorkloadIdentityProvider: workloadIdentityProvider,
@@ -158,11 +160,10 @@ func newServerCommand() *cobra.Command {
 			var wn *watchnode.Provider
 			if watchNode {
 				opts := watchnode.ProviderOptions{
-					FallbackSource:        node,
-					NodeName:              nodeName,
-					KubeClient:            kubeClient,
-					ResyncPeriod:          watchNodeResyncPeriod,
-					DefaultServiceAccount: defaultNodeServiceAccount,
+					FallbackSource: node,
+					NodeName:       nodeName,
+					KubeClient:     kubeClient,
+					ResyncPeriod:   watchNodeResyncPeriod,
 				}
 				if watchNodeDisableFallback {
 					opts.FallbackSource = nil
@@ -199,17 +200,15 @@ func newServerCommand() *cobra.Command {
 			})
 			if cacheTokens {
 				p := cacheserviceaccounttokens.NewProvider(ctx, cacheserviceaccounttokens.ProviderOptions{
-					Source:          serviceAccountTokens,
-					ServiceAccounts: serviceAccounts,
-					MetricsRegistry: metricsRegistry,
-					Concurrency:     cacheTokensConcurrency,
+					Source:                 serviceAccountTokens,
+					ServiceAccounts:        serviceAccounts,
+					MetricsRegistry:        metricsRegistry,
+					Concurrency:            cacheTokensConcurrency,
+					NodePoolServiceAccount: nodePoolServiceAccount,
 				})
 				defer p.Close()
 				if wp != nil {
 					wp.AddListener(p)
-				}
-				if wn != nil {
-					wn.AddListener(p)
 				}
 				if wsa != nil {
 					wsa.AddListener(p)
@@ -228,15 +227,15 @@ func newServerCommand() *cobra.Command {
 				wsa.Start(ctx)
 			}
 			s := server.New(ctx, server.ServerOptions{
-				NodeName:                  nodeName,
-				ServerPort:                serverPort,
-				Pods:                      pods,
-				Node:                      node,
-				ServiceAccounts:           serviceAccounts,
-				ServiceAccountTokens:      serviceAccountTokens,
-				MetricsRegistry:           metricsRegistry,
-				DefaultNodeServiceAccount: defaultNodeServiceAccount,
-				WorkloadIdentityPool:      workloadIdentityPool,
+				NodeName:               nodeName,
+				ServerPort:             serverPort,
+				Pods:                   pods,
+				Node:                   node,
+				ServiceAccounts:        serviceAccounts,
+				ServiceAccountTokens:   serviceAccountTokens,
+				MetricsRegistry:        metricsRegistry,
+				NodePoolServiceAccount: nodePoolServiceAccount,
+				WorkloadIdentityPool:   workloadIdentityPool,
 			})
 
 			ctx, cancel := waitForShutdown(ctx)
@@ -253,9 +252,9 @@ func newServerCommand() *cobra.Command {
 		"Network address where the metadata server must listen on")
 	cmd.Flags().StringVar(&workloadIdentityProvider, "workload-identity-provider", "",
 		"Mandatory fully-qualified resource name of the GCP Workload Identity Provider (projects/<project_number>/locations/global/workloadIdentityPools/<pool_name>/providers/<provider_name>)")
-	cmd.Flags().StringVar(&defaultNodeServiceAccountName, "default-node-service-account-name", "gke-metadata-server",
+	cmd.Flags().StringVar(&nodePoolServiceAccountName, "node-pool-service-account-name", "",
 		"Name of the default service account to be used by pods running on the host network")
-	cmd.Flags().StringVar(&defaultNodeServiceAccountNamespace, "default-node-service-account-namespace", "kube-system",
+	cmd.Flags().StringVar(&nodePoolServiceAccountNamespace, "node-pool-service-account-namespace", "",
 		"Namespace of the default service account to be used by pods running on the host network")
 	cmd.Flags().BoolVar(&watchPods, "watch-pods", false,
 		"Whether or not to watch the pods running on the same node (default false)")

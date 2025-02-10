@@ -23,17 +23,19 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: gke-metadata-server
-  namespace: {{ .Values.namespace }}
-  {{- if .Values.config.defaultNodeServiceAccount }}
+  name: {{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+  {{- if (.Values.config.nodePool | default dict).enable }}
+  {{- if .Values.config.nodePool.googleServiceAccount }}
   annotations:
-    iam.gke.io/gcp-service-account: {{ .Values.config.defaultNodeServiceAccount }}
+    iam.gke.io/gcp-service-account: {{ .Values.config.nodePool.googleServiceAccount }}
+  {{- end }}
   {{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: gke-metadata-server
+  name: {{ printf "%s.%s" .Release.Name .Release.Namespace }}
 rules:
 - apiGroups: [""]
   resources: [pods, nodes, serviceaccounts]
@@ -45,12 +47,12 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: gke-metadata-server
+  name: {{ printf "%s.%s" .Release.Name .Release.Namespace }}
 subjects:
 - kind: ServiceAccount
-  name: gke-metadata-server
-  namespace: {{ .Values.namespace }}
+  name: {{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
 roleRef:
   kind: ClusterRole
-  name: gke-metadata-server
+  name: {{ printf "%s.%s" .Release.Name .Release.Namespace }}
   apiGroup: rbac.authorization.k8s.io
