@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-FROM golang:1.23.5-alpine3.21 AS builder
+FROM golang:1.23.6-alpine3.21 AS builder
 
 RUN apk add --no-cache clang llvm bpftool libbpf-dev
 
