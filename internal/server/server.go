@@ -50,15 +50,15 @@ type (
 	}
 
 	ServerOptions struct {
-		NodeName                  string
-		ServerPort                int
-		Pods                      pods.Provider
-		Node                      node.Provider
-		ServiceAccounts           serviceaccounts.Provider
-		ServiceAccountTokens      serviceaccounttokens.Provider
-		MetricsRegistry           *prometheus.Registry
-		DefaultNodeServiceAccount *serviceaccounts.Reference
-		WorkloadIdentityPool      string
+		NodeName               string
+		ServerPort             int
+		Pods                   pods.Provider
+		Node                   node.Provider
+		ServiceAccounts        serviceaccounts.Provider
+		ServiceAccountTokens   serviceaccounttokens.Provider
+		MetricsRegistry        *prometheus.Registry
+		NodePoolServiceAccount *serviceaccounts.Reference
+		WorkloadIdentityPool   string
 	}
 
 	serverMetrics struct {

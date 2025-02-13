@@ -35,12 +35,53 @@ import (
 		selector: matchLabels: #config.selector.labels
 		template: {
 			metadata: {
-				labels: #config.selector.labels
+				labels: #config.selector.labels & {podAntiAffinity: "gke-metadata-server"}
 				if #config.pod.annotations != _|_ {
 					annotations: #config.pod.annotations
 				}
 			}
 			spec: {
+				if #config.settings.nodePool.enable {
+					nodeSelector: {
+						"gke-metadata-server.matheuscscp.io/nodePoolName":      #config.metadata.name
+						"gke-metadata-server.matheuscscp.io/nodePoolNamespace": #config.metadata.namespace
+					}
+					tolerations: [
+						{
+							key:      "gke-metadata-server.matheuscscp.io/nodePoolName"
+							operator: "Equal"
+							value:    #config.metadata.name
+							effect:   "NoExecute"
+						},
+						{
+							key:      "gke-metadata-server.matheuscscp.io/nodePoolNamespace"
+							operator: "Equal"
+							value:    #config.metadata.namespace
+							effect:   "NoExecute"
+						},
+					]
+				}
+				affinity: {
+					podAntiAffinity: requiredDuringSchedulingIgnoredDuringExecution: [{
+						labelSelector:     matchLabels: {podAntiAffinity: "gke-metadata-server"}
+						namespaceSelector: {}
+						topologyKey:       "kubernetes.io/hostname"
+					}]
+					if !#config.settings.nodePool.enable {
+						nodeAffinity: requiredDuringSchedulingIgnoredDuringExecution: nodeSelectorTerms: [{
+							matchExpressions: [
+								{
+									key:      "gke-metadata-server.matheuscscp.io/nodePoolName"
+									operator: "DoesNotExist"
+								},
+								{
+									key:      "gke-metadata-server.matheuscscp.io/nodePoolNamespace"
+									operator: "DoesNotExist"
+								},
+							]
+						}]
+					}
+				}
 				if #config.pod.nodeSelector != _|_ {
 					nodeSelector: #config.pod.nodeSelector
 				}
@@ -54,92 +95,94 @@ import (
 				priorityClassName:  #config.pod.priorityClass
 				hostNetwork:        true
 				dnsPolicy:          "ClusterFirstWithHostNet"
-				containers: [
-					{
-						name:            #config.metadata.name
-						image:           #config.image.reference
-						imagePullPolicy: #config.image.pullPolicy
-						securityContext: {
-							privileged: true
+				containers: [{
+					name:            #config.metadata.name
+					image:           #config.image.reference
+					imagePullPolicy: #config.image.pullPolicy
+					securityContext: {
+						privileged: true
+					}
+					args: [
+						"server",
+						"--workload-identity-provider=\(#config.settings.workloadIdentityProvider)",
+						if #config.settings.nodePool.enable {
+							"--node-pool-service-account-name=\(#config.metadata.name)"
 						}
-						args: [
-							"server",
-							"--workload-identity-provider=\(#config.settings.workloadIdentityProvider)",
-							"--default-node-service-account-name=\(#config.metadata.name)",
-							"--default-node-service-account-namespace=\(#config.metadata.namespace)",
-							if #config.settings.logLevel != _|_ {
-								"--log-level=\(#config.settings.logLevel)"
-							}
-							if #config.settings.serverPort != _|_ {
-								"--server-port=\(#config.settings.serverPort)"
-							}
-							if #config.settings.watchPods.enable {
-								"--watch-pods"
-							}
-							if #config.settings.watchPods.enable && #config.settings.watchPods.disableFallback {
-								"--watch-pods-disable-fallback"
-							}
-							if #config.settings.watchPods.enable && #config.settings.watchPods.resyncPeriod != _|_ {
-								"--watch-pods-resync-period=\(#config.settings.watchPods.resyncPeriod)"
-							}
-							if #config.settings.watchNode.enable {
-								"--watch-node"
-							}
-							if #config.settings.watchNode.enable && #config.settings.watchNode.disableFallback {
-								"--watch-node-disable-fallback"
-							}
-							if #config.settings.watchNode.enable && #config.settings.watchNode.resyncPeriod != _|_ {
-								"--watch-node-resync-period=\(#config.settings.watchNode.resyncPeriod)"
-							}
-							if #config.settings.watchServiceAccounts.enable {
-								"--watch-service-accounts"
-							}
-							if #config.settings.watchServiceAccounts.enable && #config.settings.watchServiceAccounts.disableFallback {
-								"--watch-service-accounts-disable-fallback"
-							}
-							if #config.settings.watchServiceAccounts.enable && #config.settings.watchServiceAccounts.resyncPeriod != _|_ {
-								"--watch-service-accounts-resync-period=\(#config.settings.watchServiceAccounts.resyncPeriod)"
-							}
-							if #config.settings.cacheTokens.enable {
-								"--cache-tokens"
-							}
-							if #config.settings.cacheTokens.enable && #config.settings.cacheTokens.concurrency != _|_ {
-								"--cache-tokens-concurrency=\(#config.settings.cacheTokens.concurrency)"
-							}
-						]
-						env: [
-							{
-								name:                           "NODE_NAME"
-								valueFrom: fieldRef: fieldPath: "spec.nodeName"
-							},
-							{
-								name:                           "POD_IP"
-								valueFrom: fieldRef: fieldPath: "status.podIP"
-							},
-						]
-						ports: [{
-							name:          "http"
-							containerPort: #config.settings.serverPort
-							protocol:      "TCP"
-						}]
-						#probes: {
-							initialDelaySeconds: 3
-							httpGet: {
-								path: "/healthz"
-								port: "http"
-							}
+						if #config.settings.nodePool.enable {
+							"--node-pool-service-account-namespace=\(#config.metadata.namespace)"
 						}
-						readinessProbe: #probes
-						livenessProbe:  #probes
-						volumeMounts: [{
-							name:      "tmpfs"
-							mountPath: "/tmp"
-						}]
-						if #config.pod.resources != _|_ {
-							resources: #config.pod.resources
+						if #config.settings.logLevel != _|_ {
+							"--log-level=\(#config.settings.logLevel)"
 						}
-					},
-				]
+						if #config.settings.serverPort != _|_ {
+							"--server-port=\(#config.settings.serverPort)"
+						}
+						if #config.settings.watchPods.enable {
+							"--watch-pods"
+						}
+						if #config.settings.watchPods.enable && #config.settings.watchPods.disableFallback {
+							"--watch-pods-disable-fallback"
+						}
+						if #config.settings.watchPods.enable && #config.settings.watchPods.resyncPeriod != _|_ {
+							"--watch-pods-resync-period=\(#config.settings.watchPods.resyncPeriod)"
+						}
+						if #config.settings.watchNode.enable {
+							"--watch-node"
+						}
+						if #config.settings.watchNode.enable && #config.settings.watchNode.disableFallback {
+							"--watch-node-disable-fallback"
+						}
+						if #config.settings.watchNode.enable && #config.settings.watchNode.resyncPeriod != _|_ {
+							"--watch-node-resync-period=\(#config.settings.watchNode.resyncPeriod)"
+						}
+						if #config.settings.watchServiceAccounts.enable {
+							"--watch-service-accounts"
+						}
+						if #config.settings.watchServiceAccounts.enable && #config.settings.watchServiceAccounts.disableFallback {
+							"--watch-service-accounts-disable-fallback"
+						}
+						if #config.settings.watchServiceAccounts.enable && #config.settings.watchServiceAccounts.resyncPeriod != _|_ {
+							"--watch-service-accounts-resync-period=\(#config.settings.watchServiceAccounts.resyncPeriod)"
+						}
+						if #config.settings.cacheTokens.enable {
+							"--cache-tokens"
+						}
+						if #config.settings.cacheTokens.enable && #config.settings.cacheTokens.concurrency != _|_ {
+							"--cache-tokens-concurrency=\(#config.settings.cacheTokens.concurrency)"
+						}
+					]
+					env: [
+						{
+							name:                           "NODE_NAME"
+							valueFrom: fieldRef: fieldPath: "spec.nodeName"
+						},
+						{
+							name:                           "POD_IP"
+							valueFrom: fieldRef: fieldPath: "status.podIP"
+						},
+					]
+					ports: [{
+						name:          "http"
+						containerPort: #config.settings.serverPort
+						protocol:      "TCP"
+					}]
+					#probes: {
+						initialDelaySeconds: 3
+						httpGet: {
+							path: "/healthz"
+							port: "http"
+						}
+					}
+					readinessProbe: #probes
+					livenessProbe:  #probes
+					volumeMounts: [{
+						name:      "tmpfs"
+						mountPath: "/tmp"
+					}]
+					if #config.pod.resources != _|_ {
+						resources: #config.pod.resources
+					}
+				}]
 				volumes: [ {
 					name:     "tmpfs"
 					emptyDir: medium: "Memory"

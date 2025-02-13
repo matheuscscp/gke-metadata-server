@@ -35,14 +35,14 @@ import (
 		name:      #config.metadata.name
 		namespace: #config.metadata.namespace
 		labels:    #config.metadata.labels
-		if #config.metadata.annotations != _|_ && #config.settings.defaultNodeServiceAccount != _|_ {
-			annotations: #config.metadata.annotations & {"iam.gke.io/gcp-service-account": #config.settings.defaultNodeServiceAccount}
+		if #config.metadata.annotations != _|_ && #config.settings.nodePool.enable && #config.settings.nodePool.googleServiceAccount != _|_ {
+			annotations: #config.metadata.annotations & {"iam.gke.io/gcp-service-account": #config.settings.nodePool.googleServiceAccount}
 		}
-		if #config.metadata.annotations != _|_ && #config.settings.defaultNodeServiceAccount == _|_ {
+		if #config.metadata.annotations != _|_ && !(#config.settings.nodePool.enable && #config.settings.nodePool.googleServiceAccount != _|_) {
 			annotations: #config.metadata.annotations
 		}
-		if #config.metadata.annotations == _|_ && #config.settings.defaultNodeServiceAccount != _|_ {
-			annotations: {"iam.gke.io/gcp-service-account": #config.settings.defaultNodeServiceAccount}
+		if #config.metadata.annotations == _|_ && #config.settings.nodePool.enable && #config.settings.nodePool.googleServiceAccount != _|_ {
+			annotations: {"iam.gke.io/gcp-service-account": #config.settings.nodePool.googleServiceAccount}
 		}
 		if #config.metadata.finalizers != _|_ {
 			finalizers: #config.metadata.finalizers
@@ -82,6 +82,6 @@ import (
 	roleRef: {
 		apiGroup: "rbac.authorization.k8s.io"
 		kind:     "ClusterRole"
-		name:     #config.metadata.name
+		name:     #config.#clusterMetadata.name
 	}
 }

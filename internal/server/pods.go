@@ -152,7 +152,7 @@ func (s *Server) getPodServiceAccountReference(w http.ResponseWriter,
 	pod, err := s.lookupPodByIP(ctx, clientIP)
 	if err != nil {
 		if strings.Contains(err.Error(), "no pods found") {
-			return s.getNodeServiceAccountReference(w, r, clientIP)
+			return s.getNodePoolServiceAccountReference(w, r, clientIP)
 		}
 		const format = "error looking up pod by ip address: %w"
 		pkghttp.RespondErrorf(w, r, retry.HTTPStatusCode(err), format, err)
@@ -172,11 +172,11 @@ func (s *Server) getPodServiceAccountReference(w http.ResponseWriter,
 	return saRef, r, nil
 }
 
-// getNodeServiceAccountReference retrieves the reference of the ServiceAccount
-// used by the current Node, but only if the client IP address is the same as
-// the Node's IP address.
+// getNodePoolServiceAccountReference retrieves the reference of the ServiceAccount
+// used by the Node pool, but only if the client IP address is the same as the Node's
+// IP address.
 // If there's an error this function sends the response to the client.
-func (s *Server) getNodeServiceAccountReference(w http.ResponseWriter,
+func (s *Server) getNodePoolServiceAccountReference(w http.ResponseWriter,
 	r *http.Request, clientIP string) (*serviceaccounts.Reference, *http.Request, error) {
 
 	ctx := r.Context()
@@ -197,21 +197,18 @@ func (s *Server) getNodeServiceAccountReference(w http.ResponseWriter,
 			break
 		}
 	}
-	if !found {
+	if !found || s.opts.NodePoolServiceAccount == nil {
 		const format = "client ip address %s does not match any pods running on node %s"
 		pkghttp.RespondErrorf(w, r, http.StatusForbidden, format, clientIP, node.Name)
 		return nil, nil, fmt.Errorf(format, clientIP, node.Name)
 	}
 
 	// update context, logger and request
-	saRef := serviceaccounts.ReferenceFromNode(node, s.opts.DefaultNodeServiceAccount)
+	saRef := s.opts.NodePoolServiceAccount
 	ctx = context.WithValue(ctx, podServiceAccountReferenceContextKey{}, saRef)
-	l := logging.FromContext(ctx).WithField("node", logrus.Fields{
-		"name": node.Name,
-		"service_account": logrus.Fields{
-			"name":      saRef.Name,
-			"namespace": saRef.Namespace,
-		},
+	l := logging.FromContext(ctx).WithField("node_pool_service_account", logrus.Fields{
+		"name":      saRef.Name,
+		"namespace": saRef.Namespace,
 	})
 	r = logging.IntoRequest(r.WithContext(ctx), l)
 

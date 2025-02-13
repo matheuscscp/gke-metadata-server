@@ -25,3 +25,18 @@ kind: Cluster
 nodes:
 - role: control-plane
 - role: worker
+- role: worker
+  labels:
+    gke-metadata-server.matheuscscp.io/nodePoolName: gke-metadata-server
+    gke-metadata-server.matheuscscp.io/nodePoolNamespace: kube-system
+  kubeadmConfigPatches:
+  - |
+    kind: JoinConfiguration
+    nodeRegistration:
+      taints:
+      - key: gke-metadata-server.matheuscscp.io/nodePoolName
+        value: gke-metadata-server
+        effect: NoExecute
+      - key: gke-metadata-server.matheuscscp.io/nodePoolNamespace
+        value: kube-system
+        effect: NoExecute

@@ -44,5 +44,5 @@ runs:
         exit 1
       fi
 
-  - run: make ci-cluster build ci-test
+  - run: make gen-ebpf ci-cluster build ci-test
     shell: bash

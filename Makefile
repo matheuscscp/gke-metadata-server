@@ -67,10 +67,12 @@ ci-cluster:
 
 .PHONY: dev-test
 dev-test:
+	make test-unit
 	make test TEST_ID=test
 
 .PHONY: ci-test
 ci-test:
+	make test-unit
 	make test TEST_ID=$$(cat ci-test-id.txt)
 
 .PHONY: cluster
@@ -122,6 +124,11 @@ build:
 		--version $$(yq .timoni versions.yaml) \
 		--output yaml | yq .digest > timoni-digest.txt
 
+.PHONY: test-unit
+test-unit:
+	go test -v ${TEST_ARGS} $$(go list ./... | grep -v github.com/matheuscscp/gke-metadata-server/internal/server | \
+		grep -vE github.com/matheuscscp/gke-metadata-server$$)
+
 .PHONY: test
 test:
 	@if [ "${TEST_ID}" == "" ]; then echo "TEST_ID variable is required."; exit -1; fi
@@ -131,7 +138,7 @@ test:
 		TIMONI_DIGEST=$$(cat timoni-digest.txt) \
 		HELM_PACKAGE=$$(cat helm-package.txt) \
 		GO_TEST_DIGEST=$$(cat go-test-digest.txt) \
-		go test -v
+		go test -v ${TEST_ARGS}
 
 .PHONY: update-branch
 update-branch:

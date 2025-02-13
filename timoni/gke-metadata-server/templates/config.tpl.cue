@@ -27,8 +27,6 @@ import (
 	timoniv1 "timoni.sh/core/v1alpha1"
 )
 
-#apiGroup: "gke-metadata-server.matheuscscp.io"
-
 // Config defines the schema and defaults for the Instance values.
 #Config: {
 	// The kubeVersion is a required field, set at apply-time
@@ -84,19 +82,8 @@ import (
 	settings: #Settings
 
 	// Helper definitions.
-	#metadataWithoutName: {
-		namespace: metadata.namespace
-		labels:    metadata.labels
-		if metadata.annotations != _|_ {
-			annotations: metadata.annotations
-		}
-		if metadata.finalizers != _|_ {
-			finalizers: metadata.finalizers
-		}
-		...
-	}
 	#clusterMetadata: {
-		name:   metadata.name
+		name:   "\(metadata.name).\(metadata.namespace)"
 		labels: metadata.labels
 		if metadata.annotations != _|_ {
 			annotations: metadata.annotations

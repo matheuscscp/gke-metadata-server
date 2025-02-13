@@ -41,3 +41,7 @@ runs:
       registry: ghcr.io
       username: ${{ github.actor }}
       password: ${{ inputs.github-token }}
+  - name: Install dependencies
+    shell: bash
+    run: |
+      sudo apt-get update && sudo apt-get install -y clang llvm bpfcc-tools libbpf-dev

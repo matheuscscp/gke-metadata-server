@@ -34,5 +34,6 @@ COPY ./internal/ ./internal/
 COPY ./ebpf/ ./ebpf/
 
 RUN go generate ./internal/redirect
+RUN go test -c github.com/matheuscscp/gke-metadata-server/internal/server
 
-CMD [ "go", "test", "-v", "./..." ]
+CMD [ "sh", "-c", "sleep 2 && ./server.test -test.v" ]

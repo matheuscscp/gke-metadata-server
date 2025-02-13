@@ -23,34 +23,55 @@
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: gke-metadata-server
-  namespace: {{ .Values.namespace }}
+  name: {{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
 spec:
   selector:
     matchLabels:
-      app: gke-metadata-server
+      app: {{ .Release.Name }}
   template:
     metadata:
       labels:
-        app: gke-metadata-server
+        app: {{ .Release.Name }}
+        podAntiAffinity: gke-metadata-server
       {{- with .Values.podAnnotations }}
       annotations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
-      {{- with .Values.nodeSelector }}
+      {{- if (.Values.config.nodePool | default dict).enable }}
       nodeSelector:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.affinity }}
-      affinity:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.tolerations }}
+        gke-metadata-server.matheuscscp.io/nodePoolName: {{ .Release.Name }}
+        gke-metadata-server.matheuscscp.io/nodePoolNamespace: {{ .Release.Namespace }}
       tolerations:
-        {{- toYaml . | nindent 6 }}
+      - key: gke-metadata-server.matheuscscp.io/nodePoolName
+        operator: Equal
+        value: {{ .Release.Name }}
+        effect: NoExecute
+      - key: gke-metadata-server.matheuscscp.io/nodePoolNamespace
+        operator: Equal
+        value: {{ .Release.Namespace }}
+        effect: NoExecute
       {{- end }}
-      serviceAccountName: gke-metadata-server
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                podAntiAffinity: gke-metadata-server
+            namespaceSelector: {}
+            topologyKey: kubernetes.io/hostname
+        {{- if not (.Values.config.nodePool | default dict).enable }}
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: gke-metadata-server.matheuscscp.io/nodePoolName
+                operator: DoesNotExist
+              - key: gke-metadata-server.matheuscscp.io/nodePoolNamespace
+                operator: DoesNotExist
+        {{- end }}
+      serviceAccountName: {{ .Release.Name }}
       priorityClassName: {{ .Values.priorityClass }}
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
@@ -67,8 +88,10 @@ spec:
         args:
         - server
         - --workload-identity-provider={{ .Values.config.workloadIdentityProvider }}
-        - --default-node-service-account-name=gke-metadata-server
-        - --default-node-service-account-namespace={{ .Values.namespace }}
+        {{- if (.Values.config.nodePool | default dict).enable }}
+        - --node-pool-service-account-name={{ .Release.Name }}
+        - --node-pool-service-account-namespace={{ .Release.Namespace }}
+        {{- end }}
         {{- if .Values.config.serverPort }}
         - --server-port={{ .Values.config.serverPort }}
         {{- end }}

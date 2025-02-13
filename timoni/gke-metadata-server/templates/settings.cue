@@ -32,10 +32,37 @@ import (
 	// This full name can be retrieved on the Google Cloud Console webpage for the provider.
 	workloadIdentityProvider: string & =~"^projects/\\d+/locations/global/workloadIdentityPools/[^/]+/providers/[^/]+$"
 
-	// defaultNodeServiceAccount is an optional Google Service Account email to add on the gke-metadata-server
-	// ServiceAccount annotation. The emulator will use this ServiceAccount for Pods running on the host network
-	// in case the Node where they are running does on not specify a ServiceAccount in the annotations (see README.md).
-	defaultNodeServiceAccount?: string & =~"^[a-zA-Z0-9-]+@[a-zA-Z0-9-]+\\.iam\\.gserviceaccount\\.com$"
+	// nodePool are settings for allowing gke-metadata-server to run on a specific set of Nodes.
+	// When using Node pools, multiple instances of gke-metadata-server can be deployed with
+	// different settings in the same cluster. There are two main benefits of using Node pools:
+	// - The workloads that need gke-metadata-server can be isolated to specific Nodes. This is
+	//   useful when other tools that depend on listening on the IP address 169.254.169.254 are
+	//   also running in the cluster, e.g. similar tools or workload identity infrastructure from
+	//   managed Kubernetes services from other cloud providers.
+	// - Serving client Pods that need to run on the host network. Because gke-metadata-server
+	//   identifies the client Pods by their Cluster IP address, it can't serve Pods running on the
+	//   host network because their IP address is not from the Cluster IP address space. In this
+	//   case, the ServiceAccount gke-metadata-server will use for issuing GCP tokens will be its
+	//   own ServiceAccount. In this case, it's also possible to impersonate a Google Service Account
+	//   that can be configured in the googleServiceAccount field below.
+	nodePool: {
+		// enable is a flag to enable the Node pooling feature.
+		//
+		// When set to true, the DaemonSet Pods will only be scheduled on Nodes with the following labels:
+		// - gke-metadata-server.matheuscscp.io/nodePoolName: <timoni module instance name>
+		// - gke-metadata-server.matheuscscp.io/nodePoolNamespace: <timoni module instance namespace>
+		// A pair of NoExecute tolerations is also added in case users want to be strict about which Pods
+		// can run on the Node by tainting it with the same key-value pairs of the nodeSelector.
+		//
+		// When set to false, the DaemonSet Pods will only be scheduled on Nodes without the above labels.
+		enable: bool | *false
+
+		// googleServiceAccount is an optional Google Service Account email to add on the gke-metadata-server
+		// ServiceAccount annotation. The emulator will use this ServiceAccount for Pods running on the host
+		// network (see README.md). The GCP tokens granted to these Pods will be either representing the
+		// Kubernetes ServiceAccount (direct access) or the Google Service Account (impersonation).
+		googleServiceAccount?: string & =~"^[a-zA-Z0-9-]+@[a-zA-Z0-9-]+\\.iam\\.gserviceaccount\\.com$"
+	}
 
 	// logLevel is the log level for gke-metadata-server.
 	logLevel?: string & ("panic" | "fatal" | "error" | "warning" | "info" | "debug" | "trace")
