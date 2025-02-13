@@ -82,6 +82,7 @@ cluster:
 	kind create cluster -n gke-metadata-server --config testdata/kind-config.yaml
 	make create-or-update-provider TEST_ID=${TEST_ID} PROVIDER_COMMAND=${PROVIDER_COMMAND}
 	kubectl --context kind-gke-metadata-server apply -f testdata/anon-oidc-rbac.yaml
+	make install-cilium
 
 .PHONY: create-or-update-provider
 create-or-update-provider:
@@ -95,6 +96,18 @@ create-or-update-provider:
 		--issuer-uri=$$(kubectl --context kind-gke-metadata-server get --raw /.well-known/openid-configuration | jq -r .issuer) \
 		--attribute-mapping=google.subject=assertion.sub \
 		--jwk-json-path=jwks.json
+
+.PHONY: install-cilium
+install-cilium:
+	sudo sysctl fs.inotify.max_user_watches=524288
+	sudo sysctl fs.inotify.max_user_instances=512
+	helm repo add cilium https://helm.cilium.io/
+	docker pull quay.io/cilium/cilium:v1.17.1
+	kind load docker-image quay.io/cilium/cilium:v1.17.1 -n gke-metadata-server
+	helm install cilium cilium/cilium --version 1.17.1 \
+		--namespace kube-system \
+		--set image.pullPolicy=IfNotPresent \
+		--set ipam.mode=kubernetes
 
 .PHONY: build
 build:

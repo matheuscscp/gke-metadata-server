@@ -40,3 +40,5 @@ nodes:
       - key: gke-metadata-server.matheuscscp.io/nodePoolNamespace
         value: kube-system
         effect: NoExecute
+networking:
+  disableDefaultCNI: true

@@ -233,14 +233,11 @@ Pods from being created with such high privileges in the majority of cases.)*
 
 In a cluster there may also be Pods running on the *host network*, i.e. Pods with the
 field `spec.hostNetwork` set to `true`. Such Pods ***share the IP address*** of the Node
-where they are running on, and therefore they cannot be uniquely identified by the server
-using the client IP address reported in the HTTP request, like mentioned
-[above](#pod-identification-by-ip-address).
+where they are running on, i.e their IP is not unique, and therefore they cannot be
+uniquely identified by the server using the client IP address reported in the HTTP
+request like mentioned [here](#pod-identification-by-ip-address).
 
-*Try to avoid using identities shared by many different workloads, this is obviously
-a significant security risk!*
-
-But if your use case requires, Pods running on the host network are allowed to use a
+If your use case requires, Pods running on the host network are allowed to use a
 ***shared*** Kubernetes ServiceAccount configured in the emulator through *Node pools*
 (Helm values `config.nodePool.*` or Timoni values `values.settings.nodePool.*`). When
 `*.nodePool.enable == true`, the emulator Pods will contain a `nodeSelector` to ensure
@@ -251,9 +248,11 @@ gke-metadata-server.matheuscscp.io/nodePoolName: {{ helm release or timoni modul
 gke-metadata-server.matheuscscp.io/nodePoolNamespace: {{ helm release or timoni module instance namespace }}
 ```
 
-Also, `tolerations` with the same key-value pairs above are added with `effect` `NoSchedule`,
-in case you want to taint the Nodes in the pool to prevent unaware Pods from running on them,
-i.e. only Pods with the same `tolerations` as the emulator Pods will be able to run on them.
+Also, `tolerations` with the same key-value pairs as above are added with the effect `NoSchedule`.
+This is in case you want to taint the Nodes in the pool to prevent unaware Pods from running on them,
+i.e. only Pods with the same `tolerations` as the emulator Pods will be able to run on them. This
+is obviously not any kind of security enforcement, but rather just a way to make users think deeply
+about the question "is it ok, or, should my Pod run on this Node?".
 
 The ServiceAccount configured on the emulator for Pods running on the host network to use
 is the following:
@@ -270,6 +269,9 @@ Using either *direct resource access* or *impersonation*, this is the ServiceAcc
 you must grant permissions in GCP to. For impersonation there's the optional field
 `*.nodePool.googleServiceAccount`, the GKE annotation is added with this Google
 Service Account email on the Kubernetes ServiceAccount above.
+
+*Try to avoid using identities shared by many different workloads, this is obviously
+(not a good practice and) a security risk!*
 
 ### eBPF magic 🐝
 
