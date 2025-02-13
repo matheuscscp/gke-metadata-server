@@ -373,7 +373,7 @@ func printDebugInfo(t *testing.T, emulators []emulator, pods []pod, exitCodes []
 	}
 
 	for i, p := range pods {
-		if exitCodes[i] == 0 {
+		if exitCodes[i] == p.expectedExitCode {
 			continue
 		}
 
