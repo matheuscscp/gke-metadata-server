@@ -57,14 +57,23 @@ type nodePool struct {
 
 var (
 	// testID is used to isolate test resources.
-	testID = os.Getenv("TEST_ID")
+	testID      = os.Getenv("TEST_ID")
+	testImage   = os.Getenv("TEST_IMAGE")
+	helmVersion = os.Getenv("HELM_VERSION")
 
-	testImage       = os.Getenv("TEST_IMAGE")
-	containerDigest = os.Getenv("CONTAINER_DIGEST")
-	timoniDigest    = os.Getenv("TIMONI_DIGEST")
-	helmPackage     = os.Getenv("HELM_PACKAGE")
-	goTestDigest    = os.Getenv("GO_TEST_DIGEST")
+	containerDigest = readDigest("container")
+	timoniDigest    = readDigest("timoni")
+	helmDigest      = readDigest("helm")
+	goTestDigest    = readDigest("go-test")
 )
+
+func readDigest(s string) string {
+	b, err := os.ReadFile(fmt.Sprintf("%s-digest.txt", s))
+	if err != nil {
+		panic(err)
+	}
+	return strings.TrimSpace(string(b))
+}
 
 func TestEndToEnd(t *testing.T) {
 	for _, tt := range []struct {
@@ -178,6 +187,34 @@ func applyEmulators(t *testing.T, emulators []emulator) {
 		var emulatorCmdName string
 		var emulatorCmdArgs []string
 		if strings.Contains(e.values, "helm") {
+			// remove previous helm package
+			helmPackage := fmt.Sprintf("gke-metadata-server-helm-%s.tgz", helmVersion)
+			os.Remove(helmPackage)
+
+			// pull helm package
+			cmd := exec.Command(
+				"helm",
+				"pull",
+				fmt.Sprintf("oci://%s/gke-metadata-server-helm", testImage),
+				"--version", helmVersion)
+			b, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Fatalf("error pulling helm chart: %v: %s", err, string(b))
+			}
+
+			// verify helm package digest
+			var digest string
+			for _, line := range strings.Split(string(b), "\n") {
+				if strings.Contains(line, "Digest:") {
+					digest = strings.Fields(line)[1]
+					break
+				}
+			}
+			if digest != helmDigest {
+				t.Fatalf("expected helm digest %s, got %s", helmDigest, digest)
+			}
+
+			// set helm command
 			emulatorCmdName = "helm"
 			emulatorCmdArgs = []string{
 				"--kube-context", "kind-gke-metadata-server",
@@ -186,6 +223,7 @@ func applyEmulators(t *testing.T, emulators []emulator) {
 				"-f", "-",
 			}
 		} else {
+			// set timoni command
 			emulatorCmdName = "timoni"
 			emulatorCmdArgs = []string{
 				"--kube-context", "kind-gke-metadata-server",
@@ -197,9 +235,9 @@ func applyEmulators(t *testing.T, emulators []emulator) {
 		}
 
 		// apply
-		emulatorCmd := exec.Command(emulatorCmdName, emulatorCmdArgs...)
-		emulatorCmd.Stdin = strings.NewReader(values)
-		if b, err := emulatorCmd.CombinedOutput(); err != nil {
+		cmd := exec.Command(emulatorCmdName, emulatorCmdArgs...)
+		cmd.Stdin = strings.NewReader(values)
+		if b, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("error applying emulator from %s: %v: %s", e.values, err, string(b))
 		}
 	}

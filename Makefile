@@ -124,8 +124,9 @@ build:
 	sed "s|<HELM_VERSION>|$$(yq .helm versions.yaml)|g" helm/gke-metadata-server/Chart.tpl.yaml | \
 		sed "s|<CONTAINER_VERSION>|$$(yq .container versions.yaml)|g" > helm/gke-metadata-server/Chart.yaml
 	helm lint helm/gke-metadata-server
-	helm package helm/gke-metadata-server | tee helm-package.logs
-	basename $$(cat helm-package.logs | grep .tgz | awk '{print $$NF}') > helm-package.txt
+	helm package helm/gke-metadata-server
+	helm push gke-metadata-server-helm-$$(yq .helm versions.yaml).tgz oci://${TEST_IMAGE} 2>&1 | tee helm-push.logs
+	cat helm-push.logs | grep Digest: | awk '{print $$NF}' > helm-digest.txt
 
 	sed "s|<CONTAINER_VERSION>|$$(yq .container versions.yaml)|g" \
 		timoni/gke-metadata-server/templates/config.tpl.cue > timoni/gke-metadata-server/templates/config.cue
@@ -145,13 +146,7 @@ test-unit:
 .PHONY: test
 test:
 	@if [ "${TEST_ID}" == "" ]; then echo "TEST_ID variable is required."; exit -1; fi
-	TEST_ID=${TEST_ID} \
-		TEST_IMAGE=${TEST_IMAGE} \
-		CONTAINER_DIGEST=$$(cat container-digest.txt) \
-		TIMONI_DIGEST=$$(cat timoni-digest.txt) \
-		HELM_PACKAGE=$$(cat helm-package.txt) \
-		GO_TEST_DIGEST=$$(cat go-test-digest.txt) \
-		go test -v ${TEST_ARGS}
+	TEST_ID=${TEST_ID} TEST_IMAGE=${TEST_IMAGE} HELM_VERSION=$$(yq .helm versions.yaml) go test -v ${TEST_ARGS}
 
 .PHONY: update-branch
 update-branch:

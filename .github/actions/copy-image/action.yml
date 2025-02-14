@@ -21,21 +21,36 @@
 # SOFTWARE.
 
 inputs:
-  registry:
+  component:
     required: true
+  source-repository:
+    required: true
+  target-repository:
+    required: true
+  latest:
+    required: false
 
 outputs:
-  helm-with-digest:
-    value: ${{ steps.release.outputs.helm-with-digest }}
+  image-with-digest:
+    value: ${{ steps.copy.outputs.image-with-digest }}
 
 runs:
   using: composite
   steps:
-  - id: release
-    run: |
-      helm push $(cat helm-package.txt) oci://${repository} 2>&1 | tee helm-push.logs
-      cat helm-push.logs | grep Digest: | awk '{print $NF}' > helm-digest.txt
-      echo "helm-with-digest=${repository}/gke-metadata-server-helm@$(cat helm-digest.txt)" >> $GITHUB_OUTPUT
+  - id: copy
     shell: bash
     env:
-      repository: ${{ inputs.registry }}/matheuscscp
+      COMPONENT: ${{ inputs.component }}
+      SOURCE_REPOSITORY: ${{ inputs.source-repository }}
+      TARGET_REPOSITORY: ${{ inputs.target-repository }}
+      LATEST: ${{ inputs.latest }}
+    run: |
+      digest=$(cat ${COMPONENT}-digest.txt)
+      src=docker://ghcr.io/matheuscscp/gke-metadata-server/${SOURCE_REPOSITORY}@${digest}
+      dst=docker://ghcr.io/matheuscscp/${TARGET_REPOSITORY}@${digest}
+      skopeo copy $src $dst
+      skopeo copy $dst docker://ghcr.io/matheuscscp/${TARGET_REPOSITORY}:$(yq .${COMPONENT} versions.yaml)
+      if [ "$LATEST" != "skip" ]; then
+        skopeo copy $dst docker://ghcr.io/matheuscscp/${TARGET_REPOSITORY}:latest
+      fi
+      echo "image-with-digest=$dst" >> $GITHUB_OUTPUT
