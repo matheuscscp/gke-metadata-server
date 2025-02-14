@@ -73,8 +73,6 @@ spec:
         {{- end }}
       serviceAccountName: {{ .Release.Name }}
       priorityClassName: {{ .Values.priorityClass }}
-      hostNetwork: true
-      dnsPolicy: ClusterFirstWithHostNet
       containers:
       - name: server
         {{- if .Values.image.digest }}

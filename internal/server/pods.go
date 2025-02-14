@@ -24,6 +24,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -189,22 +190,52 @@ func (s *Server) getNodePoolServiceAccountReference(w http.ResponseWriter,
 		return nil, nil, fmt.Errorf(format, err)
 	}
 
-	// check if client ip address matches the current node's ip address
-	found := false
-	for _, addr := range node.Status.Addresses {
-		if addr.Type == corev1.NodeInternalIP && addr.Address == clientIP {
+	// check if client ip matches the current node's pod cidr
+	var found bool
+	var errs []error
+	podIP := net.ParseIP(clientIP)
+	podCIDRs := node.Spec.PodCIDRs
+	if len(podCIDRs) == 0 {
+		podCIDRs = []string{node.Spec.PodCIDR}
+	}
+	for _, c := range podCIDRs {
+		if c == "" {
+			continue
+		}
+		_, podCIDR, err := net.ParseCIDR(c)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("error parsing pod cidr %s: %w", c, err))
+			continue
+		}
+		if podCIDR.Contains(podIP) {
 			found = true
 			break
 		}
 	}
-	if !found || s.opts.NodePoolServiceAccount == nil {
-		const format = "client ip address %s does not match any pods running on node %s"
-		pkghttp.RespondErrorf(w, r, http.StatusForbidden, format, clientIP, node.Name)
-		return nil, nil, fmt.Errorf(format, clientIP, node.Name)
+	if !found {
+		if len(errs) == 0 {
+			const format = "client ip address %s does not match any pods running on node %s"
+			pkghttp.RespondErrorf(w, r, http.StatusForbidden, format, clientIP, node.Name)
+			return nil, nil, fmt.Errorf(format, clientIP, node.Name)
+		}
+		err := errs[0]
+		if len(errs) > 1 {
+			err = errors.Join(errs...)
+		}
+		const format = "client ip address %s does not match any pods running on node %s (errors: %w)"
+		pkghttp.RespondErrorf(w, r, http.StatusForbidden, format, clientIP, node.Name, err)
+		return nil, nil, fmt.Errorf(format, clientIP, node.Name, err)
+	}
+
+	// check if node pool service account is configured
+	saRef := s.opts.NodePoolServiceAccount
+	if saRef == nil {
+		const format = "node pool service account is not configured"
+		pkghttp.RespondErrorf(w, r, http.StatusForbidden, format)
+		return nil, nil, fmt.Errorf(format)
 	}
 
 	// update context, logger and request
-	saRef := s.opts.NodePoolServiceAccount
 	ctx = context.WithValue(ctx, podServiceAccountReferenceContextKey{}, saRef)
 	l := logging.FromContext(ctx).WithField("node_pool_service_account", logrus.Fields{
 		"name":      saRef.Name,
