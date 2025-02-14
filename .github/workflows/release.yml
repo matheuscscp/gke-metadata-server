@@ -62,13 +62,15 @@ jobs:
     - name: Release Container in GitHub Container Registry
       id: release-container-ghcr
       if: steps.check-new-releases.outputs.release-container == 'yes'
-      uses: ./.github/actions/release-container/
+      uses: ./.github/actions/copy-image/
       with:
-        registry: ghcr.io
+        component: container
+        source-repository: test
+        target-repository: gke-metadata-server
     - uses: ./.github/actions/sign-and-verify-image/
       if: steps.check-new-releases.outputs.release-container == 'yes'
       with:
-        image: ${{ steps.release-container-ghcr.outputs.container-with-digest }}
+        image: ${{ steps.release-container-ghcr.outputs.image-with-digest }}
     - name: Release Container in GitHub
       if: steps.check-new-releases.outputs.release-container == 'yes'
       env:
@@ -83,13 +85,16 @@ jobs:
     - name: Release Helm Chart in GitHub Container Registry
       id: release-helm-ghcr
       if: steps.check-new-releases.outputs.release-helm == 'yes'
-      uses: ./.github/actions/release-helm/
+      uses: ./.github/actions/copy-image/
       with:
-        registry: ghcr.io
+        component: helm
+        source-repository: test/gke-metadata-server-helm
+        target-repository: gke-metadata-server-helm
+        latest: skip
     - uses: ./.github/actions/sign-and-verify-image/
       if: steps.check-new-releases.outputs.release-helm == 'yes'
       with:
-        image: ${{ steps.release-helm-ghcr.outputs.helm-with-digest }}
+        image: ${{ steps.release-helm-ghcr.outputs.image-with-digest }}
     - name: Release Helm Chart in GitHub
       if: steps.check-new-releases.outputs.release-helm == 'yes'
       env:
@@ -104,13 +109,15 @@ jobs:
     - name: Release Timoni Module in GitHub Container Registry
       id: release-timoni-ghcr
       if: steps.check-new-releases.outputs.release-timoni == 'yes'
-      uses: ./.github/actions/release-timoni/
+      uses: ./.github/actions/copy-image/
       with:
-        registry: ghcr.io
+        component: timoni
+        source-repository: test/timoni
+        target-repository: gke-metadata-server-timoni
     - uses: ./.github/actions/sign-and-verify-image/
       if: steps.check-new-releases.outputs.release-timoni == 'yes'
       with:
-        image: ${{ steps.release-timoni-ghcr.outputs.timoni-with-digest }}
+        image: ${{ steps.release-timoni-ghcr.outputs.image-with-digest }}
     - name: Release Timoni Module in GitHub
       if: steps.check-new-releases.outputs.release-timoni == 'yes'
       env:
