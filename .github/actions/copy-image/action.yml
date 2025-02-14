@@ -46,11 +46,11 @@ runs:
       LATEST: ${{ inputs.latest }}
     run: |
       digest=$(cat ${COMPONENT}-digest.txt)
-      src=docker://ghcr.io/matheuscscp/gke-metadata-server/${SOURCE_REPOSITORY}@${digest}
-      dst=docker://ghcr.io/matheuscscp/${TARGET_REPOSITORY}@${digest}
-      skopeo copy $src $dst
-      skopeo copy $dst docker://ghcr.io/matheuscscp/${TARGET_REPOSITORY}:$(yq .${COMPONENT} versions.yaml)
+      src=ghcr.io/matheuscscp/gke-metadata-server/${SOURCE_REPOSITORY}@${digest}
+      dst=ghcr.io/matheuscscp/${TARGET_REPOSITORY}@${digest}
+      skopeo copy docker://$src docker://$dst
+      skopeo copy docker://$dst docker://ghcr.io/matheuscscp/${TARGET_REPOSITORY}:$(yq .${COMPONENT} versions.yaml)
       if [ "$LATEST" != "skip" ]; then
-        skopeo copy $dst docker://ghcr.io/matheuscscp/${TARGET_REPOSITORY}:latest
+        skopeo copy docker://$dst docker://ghcr.io/matheuscscp/${TARGET_REPOSITORY}:latest
       fi
       echo "image-with-digest=$dst" >> $GITHUB_OUTPUT
