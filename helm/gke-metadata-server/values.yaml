@@ -25,6 +25,8 @@
 # Declare variables to be passed into your templates.
 
 config:
+  # Mandatory GCP project ID.
+  projectID: ""
   # Mandatory fully-qualified name of the GCP Workload Identity Provider.
   # This full name can be retrieved on the Google Cloud Console webpage for the provider.
   # Must match the pattern: projects/<gcp_project_number>/locations/global/workloadIdentityPools/<pool_name>/providers/<provider_name>

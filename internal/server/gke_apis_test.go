@@ -179,7 +179,8 @@ func TestGKEServiceAccountIdentityAPI(t *testing.T) {
 Please add the iam.gke.io/gcp-service-account=[GSA_NAME]@[PROJECT_ID] annotation to your Kubernetes service account.
 Refer to https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity
 `
-		resp := requestURL(t, gkeHeaders, url, "application/text", gkeMetadataFlavor, http.StatusNotFound)
+		const expectedMetadataFlavor = ""
+		resp := requestURL(t, gkeHeaders, url, "application/text", expectedMetadataFlavor, http.StatusNotFound)
 		assert.Equal(t, expectedMsg, resp)
 		return
 	}

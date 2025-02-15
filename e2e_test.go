@@ -43,6 +43,7 @@ type emulator struct {
 
 type pod struct {
 	name               string
+	file               string
 	serviceAccountName string
 	hostNetwork        bool
 	nodePool           nodePool
@@ -123,6 +124,15 @@ func TestEndToEnd(t *testing.T) {
 				},
 				{
 					name:               "test-direct-access",
+					serviceAccountName: "test",
+					nodePool: nodePool{
+						name:      "gke-metadata-server",
+						namespace: "kube-system",
+					},
+				},
+				{
+					name:               "test-gcloud",
+					file:               "pod-gcloud.yaml",
 					serviceAccountName: "test",
 					nodePool: nodePool{
 						name:      "gke-metadata-server",
@@ -278,7 +288,11 @@ func applyPods(t *testing.T, pods []pod) {
 
 		// execute pod template
 		var pod string
-		b, err := os.ReadFile("testdata/pod.yaml")
+		file := "pod.yaml"
+		if p.file != "" {
+			file = p.file
+		}
+		b, err := os.ReadFile("testdata/" + file)
 		require.NoError(t, err)
 		serviceAccountName := "default"
 		if sa := p.serviceAccountName; sa != "" {

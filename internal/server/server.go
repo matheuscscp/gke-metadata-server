@@ -58,6 +58,8 @@ type (
 		ServiceAccountTokens   serviceaccounttokens.Provider
 		MetricsRegistry        *prometheus.Registry
 		NodePoolServiceAccount *serviceaccounts.Reference
+		ProjectID              string
+		NumericProjectID       string
 		WorkloadIdentityPool   string
 	}
 
@@ -69,6 +71,9 @@ type (
 
 const (
 	gkeNodeNameAPI               = "/computeMetadata/v1/instance/name"
+	gkeProjectIDAPI              = "/computeMetadata/v1/project/project-id"
+	gkeNumericProjectIDAPI       = "/computeMetadata/v1/project/numeric-project-id"
+	gkeServiceAccountsDirectory  = "/computeMetadata/v1/instance/service-accounts/$service_account"
 	gkeServiceAccountAliasesAPI  = "/computeMetadata/v1/instance/service-accounts/$service_account/aliases"
 	gkeServiceAccountEmailAPI    = "/computeMetadata/v1/instance/service-accounts/$service_account/email"
 	gkeServiceAccountIdentityAPI = "/computeMetadata/v1/instance/service-accounts/$service_account/identity"
@@ -103,7 +108,7 @@ func New(ctx context.Context, opts ServerOptions) *Server {
 
 	// create server
 	l := logging.FromContext(ctx).WithField("server_port", opts.ServerPort)
-	metadataDirectory := &pkghttp.DirectoryHandler{}
+	dirHandler := &pkghttp.DirectoryHandler{}
 	internalServeMux := http.NewServeMux()
 	s := &Server{
 		opts: opts,
@@ -137,49 +142,27 @@ func New(ctx context.Context, opts ServerOptions) *Server {
 				}
 
 				// metadataDirectory path
-				metadataDirectory.ServeHTTP(w, r)
+				dirHandler.ServeHTTP(w, r)
 			}),
 		},
 	}
 
-	// gke apis
-	metadataFlavorMiddleware := func(next http.HandlerFunc) http.Handler {
-		const (
-			metadataFlavorHeader = "Metadata-Flavor"
-			metadataFlavorGoogle = "Google"
-		)
+	// metadata directory
+	dirHandler.HandleMetadata(gkeNodeNameAPI, s.gkeNodeNameAPI())
+	dirHandler.HandleMetadata(gkeProjectIDAPI, s.gkeProjectIDAPI())
+	dirHandler.HandleMetadata(gkeNumericProjectIDAPI, s.gkeNumericProjectIDAPI())
+	dirHandler.HandleDirectory(gkeServiceAccountsDirectory, s.listPodGoogleServiceAccounts)
+	dirHandler.HandleMetadata(gkeServiceAccountAliasesAPI, s.gkeServiceAccountAliasesAPI())
+	dirHandler.HandleMetadata(gkeServiceAccountEmailAPI, s.gkeServiceAccountEmailAPI())
+	dirHandler.HandleMetadata(gkeServiceAccountIdentityAPI, s.gkeServiceAccountIdentityAPI())
+	dirHandler.HandleMetadata(gkeServiceAccountScopesAPI, s.gkeServiceAccountScopesAPI())
+	dirHandler.HandleMetadata(gkeServiceAccountTokenAPI, s.gkeServiceAccountTokenAPI())
 
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			metadataFlavor := r.Header.Get(metadataFlavorHeader)
-			if metadataFlavor == metadataFlavorGoogle {
-				w.Header().Set(metadataFlavorHeader, metadataFlavorGoogle)
-				w.Header().Set("Server", "GKE Metadata Server")
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			msg := fmt.Sprintf("Missing required header %q: %q\n", metadataFlavorHeader, metadataFlavorGoogle)
-			w.WriteHeader(http.StatusForbidden)
-			w.Write([]byte(msg))
-		})
-	}
-	metadataDirectory.Handle(gkeNodeNameAPI, metadataFlavorMiddleware(s.gkeNodeNameAPI))
-	metadataDirectory.Handle(gkeServiceAccountAliasesAPI, metadataFlavorMiddleware(s.gkeServiceAccountAliasesAPI),
-		s.listPodGoogleServiceAccounts)
-	metadataDirectory.Handle(gkeServiceAccountEmailAPI, metadataFlavorMiddleware(s.gkeServiceAccountEmailAPI),
-		s.listPodGoogleServiceAccounts)
-	metadataDirectory.Handle(gkeServiceAccountIdentityAPI, metadataFlavorMiddleware(s.gkeServiceAccountIdentityAPI),
-		s.listPodGoogleServiceAccounts)
-	metadataDirectory.Handle(gkeServiceAccountScopesAPI, metadataFlavorMiddleware(s.gkeServiceAccountScopesAPI),
-		s.listPodGoogleServiceAccounts)
-	metadataDirectory.Handle(gkeServiceAccountTokenAPI, metadataFlavorMiddleware(s.gkeServiceAccountTokenAPI),
-		s.listPodGoogleServiceAccounts)
-
-	l.WithField("metadata_directory", metadataDirectory).Info("metadata directory")
+	l.WithField("metadata_directory", dirHandler).Info("metadata directory")
 
 	// internal endpoints
 	health := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		pkghttp.RespondJSON(w, r, http.StatusOK, metadataDirectory)
+		w.WriteHeader(http.StatusOK)
 	})
 	internalServeMux.Handle("/schema", health)
 	internalServeMux.Handle("/healthz", health)

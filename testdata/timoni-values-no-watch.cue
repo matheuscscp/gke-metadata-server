@@ -23,6 +23,7 @@
 package main
 
 values: settings: {
+	projectID:                "gke-metadata-server"
 	workloadIdentityProvider: "projects/637293746831/locations/global/workloadIdentityPools/test-kind-cluster/providers/<TEST_ID>"
 	watchPods:                enable: false
 	watchNode:                enable: false

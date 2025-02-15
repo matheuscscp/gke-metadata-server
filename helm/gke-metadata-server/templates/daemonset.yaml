@@ -85,6 +85,7 @@ spec:
           privileged: true
         args:
         - server
+        - --project-id={{ .Values.config.projectID }}
         - --workload-identity-provider={{ .Values.config.workloadIdentityProvider }}
         {{- if (.Values.config.nodePool | default dict).enable }}
         - --node-pool-service-account-name={{ .Release.Name }}

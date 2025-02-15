@@ -28,6 +28,9 @@ import (
 
 // #Settings is the schema for the gke-metadata-server application settings.
 #Settings: {
+	// projectID is the mandatory GCP project ID.
+	projectID: string
+
 	// workloadIdentityProvider is the mandatory fully-qualified name of the GCP Workload Identity Provider.
 	// This full name can be retrieved on the Google Cloud Console webpage for the provider.
 	workloadIdentityProvider: string & =~"^projects/\\d+/locations/global/workloadIdentityPools/[^/]+/providers/[^/]+$"
