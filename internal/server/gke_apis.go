@@ -38,42 +38,42 @@ import (
 	"google.golang.org/api/googleapi"
 )
 
-func (s *Server) gkeNodeNameAPI() pkghttp.MetadataHandler {
-	return pkghttp.MetadataHandlerFunc(func(w http.ResponseWriter, r *http.Request) (any, error) {
+func (s *Server) gkeNodeNameAPI() pkghttp.MetadataHandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) (any, error) {
 		return s.opts.NodeName, nil
-	})
+	}
 }
 
-func (s *Server) gkeProjectIDAPI() pkghttp.MetadataHandler {
-	return pkghttp.MetadataHandlerFunc(func(w http.ResponseWriter, r *http.Request) (any, error) {
+func (s *Server) gkeProjectIDAPI() pkghttp.MetadataHandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) (any, error) {
 		return s.opts.ProjectID, nil
-	})
+	}
 }
 
-func (s *Server) gkeNumericProjectIDAPI() pkghttp.MetadataHandler {
-	return pkghttp.MetadataHandlerFunc(func(w http.ResponseWriter, r *http.Request) (any, error) {
+func (s *Server) gkeNumericProjectIDAPI() pkghttp.MetadataHandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) (any, error) {
 		return s.opts.NumericProjectID, nil
-	})
+	}
 }
 
-func (s *Server) gkeServiceAccountAliasesAPI() pkghttp.MetadataHandler {
-	return pkghttp.MetadataHandlerFunc(func(w http.ResponseWriter, r *http.Request) (any, error) {
+func (s *Server) gkeServiceAccountAliasesAPI() pkghttp.MetadataHandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) (any, error) {
 		return []string{"default"}, nil
-	})
+	}
 }
 
-func (s *Server) gkeServiceAccountEmailAPI() pkghttp.MetadataHandler {
-	return pkghttp.MetadataHandlerFunc(func(w http.ResponseWriter, r *http.Request) (any, error) {
+func (s *Server) gkeServiceAccountEmailAPI() pkghttp.MetadataHandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) (any, error) {
 		email, r, err := s.getPodGoogleServiceAccountEmailOrWorkloadIdentityPool(w, r)
 		if err != nil {
 			return nil, err
 		}
 		return email, nil
-	})
+	}
 }
 
 func (s *Server) gkeServiceAccountIdentityAPI() pkghttp.MetadataHandler {
-	mh := pkghttp.MetadataHandlerFunc(func(w http.ResponseWriter, r *http.Request) (any, error) {
+	mh := func(w http.ResponseWriter, r *http.Request) (any, error) {
 		audience := strings.TrimSpace(r.URL.Query().Get("audience"))
 		if audience == "" {
 			w.WriteHeader(http.StatusBadRequest)
@@ -106,19 +106,19 @@ Refer to https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identit
 			return nil, err
 		}
 		return token, nil
-	})
+	}
 
-	return pkghttp.TokenHandler{MetadataHandler: mh}
+	return pkghttp.TokenHandler{MetadataHandler: pkghttp.MetadataHandlerFunc(mh)}
 }
 
-func (s *Server) gkeServiceAccountScopesAPI() pkghttp.MetadataHandler {
-	return pkghttp.MetadataHandlerFunc(func(w http.ResponseWriter, r *http.Request) (any, error) {
+func (s *Server) gkeServiceAccountScopesAPI() pkghttp.MetadataHandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) (any, error) {
 		return googlecredentials.AccessScopes(), nil
-	})
+	}
 }
 
 func (s *Server) gkeServiceAccountTokenAPI() pkghttp.MetadataHandler {
-	mh := pkghttp.MetadataHandlerFunc(func(w http.ResponseWriter, r *http.Request) (any, error) {
+	mh := func(w http.ResponseWriter, r *http.Request) (any, error) {
 		saToken, r, err := s.getPodServiceAccountToken(w, r)
 		if err != nil {
 			return nil, err
@@ -138,9 +138,9 @@ func (s *Server) gkeServiceAccountTokenAPI() pkghttp.MetadataHandler {
 			"expires_in":   int(time.Until(expiresAt).Seconds()),
 			"token_type":   "Bearer",
 		}, nil
-	})
+	}
 
-	return pkghttp.TokenHandler{MetadataHandler: mh}
+	return pkghttp.TokenHandler{MetadataHandler: pkghttp.MetadataHandlerFunc(mh)}
 }
 
 func respondGoogleAPIErrorf(w http.ResponseWriter, r *http.Request, format string, err error) {
