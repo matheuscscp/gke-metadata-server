@@ -23,7 +23,6 @@
 package templates
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	timoniv1 "timoni.sh/core/v1alpha1"
 )
 
@@ -67,23 +66,29 @@ import (
 		digest:     string | *""
 	}
 
-	// The pod allows setting the Kubernetes Pod annotations, resources and
-	// priority class. The default priority class is "system-node-critical".
+	// The pod allows setting the Kubernetes Pod annotations and resources.
 	pod: {
 		annotations?:  timoniv1.#Annotations
 		resources?:    timoniv1.#ResourceRequirements
-		priorityClass: string | *"system-node-critical"
-		nodeSelector?: {[string]: string}
-		affinity?:     corev1.#Affinity
-		tolerations?:  [...corev1.#Toleration]
 	}
 
 	// The application settings.
 	settings: #Settings
 
 	// Helper definitions.
-	#clusterMetadata: {
-		name:   "\(metadata.name).\(metadata.namespace)"
+	#namespacedMetadata: {
+		name:      "gke-metadata-server"
+		namespace: "kube-system"
+		labels:    metadata.labels
+		if metadata.annotations != _|_ {
+			annotations: metadata.annotations
+		}
+		if metadata.finalizers != _|_ {
+			finalizers: metadata.finalizers
+		}
+	}
+	#clusterScopedMetadata: {
+		name:   "gke-metadata-server"
 		labels: metadata.labels
 		if metadata.annotations != _|_ {
 			annotations: metadata.annotations

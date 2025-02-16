@@ -31,29 +31,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-type emulator struct {
-	name      string
-	namespace string
-	values    string
-}
 
 type pod struct {
 	name               string
 	file               string
 	serviceAccountName string
+	nodeSelector       map[string]string
 	hostNetwork        bool
-	nodePool           nodePool
 	expectedExitCode   int
-	expectedLogs       []string
-}
-
-type nodePool struct {
-	name      string
-	namespace string
 }
 
 var (
@@ -78,200 +65,181 @@ func readDigest(s string) string {
 
 func TestEndToEnd(t *testing.T) {
 	for _, tt := range []struct {
-		name      string
-		emulators []emulator
-		pods      []pod
+		name           string
+		emulatorValues string
+		pods           []pod
 	}{
 		{
-			name: "helm",
-			emulators: []emulator{{
-				name:      "gke-metadata-server",
-				namespace: "kube-system",
-				values:    "helm-values.yaml",
-			}},
+			name:           "helm",
+			emulatorValues: "helm.yaml",
 			pods: []pod{{
 				name:               "test-impersonation",
 				serviceAccountName: "test-impersonated",
 			}},
 		},
 		{
-			name: "timoni without watch",
-			emulators: []emulator{{
-				name:      "gke-metadata-server",
-				namespace: "kube-system",
-				values:    "timoni-values-no-watch.cue",
-			}},
+			name:           "timoni without watch",
+			emulatorValues: "timoni-no-watch.cue",
 			pods: []pod{{
 				name:               "test-impersonation",
 				serviceAccountName: "test-impersonated",
 			}},
 		},
 		{
-			name: "timoni with watch",
-			emulators: []emulator{{
-				name:      "gke-metadata-server",
-				namespace: "kube-system",
-				values:    "timoni-values-watch.cue",
-			}},
+			name:           "timoni with watch",
+			emulatorValues: "timoni-watch.cue",
 			pods: []pod{
 				{
 					name:               "test-impersonation",
 					serviceAccountName: "test-impersonated",
-					nodePool: nodePool{
-						name:      "gke-metadata-server",
-						namespace: "kube-system",
-					},
 				},
 				{
 					name:               "test-direct-access",
 					serviceAccountName: "test",
-					nodePool: nodePool{
-						name:      "gke-metadata-server",
-						namespace: "kube-system",
-					},
 				},
 				{
 					name:               "test-gcloud",
 					file:               "pod-gcloud.yaml",
 					serviceAccountName: "test",
-					nodePool: nodePool{
-						name:      "gke-metadata-server",
-						namespace: "kube-system",
-					},
 				},
-				// for host network pods the service account is retrieved from the emulator config
+				// for host network pods the service account is retrieved from the node
 				{
 					name:               "test-host-network",
 					serviceAccountName: "",
 					hostNetwork:        true,
-					nodePool: nodePool{
-						name:      "gke-metadata-server",
-						namespace: "kube-system",
-					},
+					nodeSelector:       map[string]string{"hasHostNetworkServiceAccount": "true"},
 				},
 				{
-					name:               "test-host-network-outside-node-pool",
+					name:               "test-host-network-on-node-without-service-account",
 					serviceAccountName: "",
 					hostNetwork:        true,
+					nodeSelector:       map[string]string{"hasHostNetworkServiceAccount": "false"},
 					expectedExitCode:   1,
 				},
 			},
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			applyEmulators(t, tt.emulators)
+			applyEmulator(t, tt.emulatorValues)
 			applyPods(t, tt.pods)
 			exitCodes := waitForPods(t, tt.pods)
-			checkExitCodes(t, tt.emulators, tt.pods, exitCodes)
+			checkExitCodes(t, tt.pods, exitCodes)
 		})
 	}
 }
 
-func applyEmulators(t *testing.T, emulators []emulator) {
+func applyEmulator(t *testing.T, valuesFile string) {
 	t.Helper()
 
-	// apply
-	for _, e := range emulators {
-		// delete previous instances
-		_ = exec.Command(
+	// delete previous instances
+	_ = exec.Command(
+		"helm",
+		"--kube-context", "kind-gke-metadata-server",
+		"--namespace", "kube-system",
+		"uninstall", "gke-metadata-server",
+		"--wait").Run()
+	_ = exec.Command(
+		"timoni",
+		"--kube-context", "kind-gke-metadata-server",
+		"--namespace", "kube-system",
+		"delete", "gke-metadata-server",
+		"--wait").Run()
+
+	// execute values template
+	var values string
+	b, err := os.ReadFile(fmt.Sprintf("testdata/%s", valuesFile))
+	require.NoError(t, err)
+	values = strings.ReplaceAll(string(b), "<TEST_ID>", testID)
+	values = strings.ReplaceAll(values, "<CONTAINER_DIGEST>", containerDigest)
+
+	// detect helm or timoni
+	var emulatorCmdName string
+	var emulatorCmdArgs []string
+	if strings.Contains(valuesFile, "helm") {
+		// remove previous helm package
+		helmPackage := fmt.Sprintf("gke-metadata-server-helm-%s.tgz", helmVersion)
+		os.Remove(helmPackage)
+
+		// pull helm package
+		cmd := exec.Command(
 			"helm",
-			"--kube-context", "kind-gke-metadata-server",
-			"--namespace", e.namespace,
-			"uninstall", e.name,
-			"--wait").Run()
-		_ = exec.Command(
-			"timoni",
-			"--kube-context", "kind-gke-metadata-server",
-			"--namespace", e.namespace,
-			"delete", e.name,
-			"--wait").Run()
-
-		// execute values template
-		var values string
-		b, err := os.ReadFile(fmt.Sprintf("testdata/%s", e.values))
-		require.NoError(t, err)
-		values = strings.ReplaceAll(string(b), "<TEST_ID>", testID)
-		values = strings.ReplaceAll(values, "<CONTAINER_DIGEST>", containerDigest)
-
-		// detect helm or timoni
-		var emulatorCmdName string
-		var emulatorCmdArgs []string
-		if strings.Contains(e.values, "helm") {
-			// remove previous helm package
-			helmPackage := fmt.Sprintf("gke-metadata-server-helm-%s.tgz", helmVersion)
-			os.Remove(helmPackage)
-
-			// pull helm package
-			cmd := exec.Command(
-				"helm",
-				"pull",
-				fmt.Sprintf("oci://%s/gke-metadata-server-helm", testImage),
-				"--version", helmVersion)
-			b, err := cmd.CombinedOutput()
-			if err != nil {
-				t.Fatalf("error pulling helm chart: %v: %s", err, string(b))
-			}
-
-			// verify helm package digest
-			var digest string
-			for _, line := range strings.Split(string(b), "\n") {
-				if strings.Contains(line, "Digest:") {
-					digest = strings.Fields(line)[1]
-					break
-				}
-			}
-			if digest != helmDigest {
-				t.Fatalf("expected helm digest %s, got %s", helmDigest, digest)
-			}
-
-			// set helm command
-			emulatorCmdName = "helm"
-			emulatorCmdArgs = []string{
-				"--kube-context", "kind-gke-metadata-server",
-				"--namespace", e.namespace,
-				"upgrade", "--install", e.name, helmPackage,
-				"-f", "-",
-			}
-		} else {
-			// set timoni command
-			emulatorCmdName = "timoni"
-			emulatorCmdArgs = []string{
-				"--kube-context", "kind-gke-metadata-server",
-				"--namespace", e.namespace,
-				"apply", e.name, fmt.Sprintf("oci://%s/timoni", testImage),
-				"--digest", timoniDigest,
-				"-f", "-",
-			}
+			"pull",
+			fmt.Sprintf("oci://%s/gke-metadata-server-helm", testImage),
+			"--version", helmVersion)
+		b, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("error pulling helm chart: %v: %s", err, string(b))
 		}
 
-		// apply
-		cmd := exec.Command(emulatorCmdName, emulatorCmdArgs...)
-		cmd.Stdin = strings.NewReader(values)
-		if b, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("error applying emulator from %s: %v: %s", e.values, err, string(b))
+		// verify helm package digest
+		var digest string
+		for _, line := range strings.Split(string(b), "\n") {
+			if strings.Contains(line, "Digest:") {
+				digest = strings.Fields(line)[1]
+				break
+			}
+		}
+		if digest != helmDigest {
+			t.Fatalf("expected helm digest %s, got %s", helmDigest, digest)
+		}
+
+		// set helm command
+		emulatorCmdName = "helm"
+		emulatorCmdArgs = []string{
+			"--kube-context", "kind-gke-metadata-server",
+			"--namespace", "kube-system",
+			"upgrade", "--install", "gke-metadata-server", helmPackage,
+			"-f", "-",
+		}
+	} else {
+		// set timoni command
+		emulatorCmdName = "timoni"
+		emulatorCmdArgs = []string{
+			"--kube-context", "kind-gke-metadata-server",
+			"--namespace", "kube-system",
+			"apply", "gke-metadata-server", fmt.Sprintf("oci://%s/timoni", testImage),
+			"--digest", timoniDigest,
+			"-f", "-",
 		}
 	}
 
+	// apply
+	cmd := exec.Command(emulatorCmdName, emulatorCmdArgs...)
+	cmd.Stdin = strings.NewReader(values)
+	if b, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("error applying emulator from %s: %v: %s", valuesFile, err, string(b))
+	}
+
+	// annotate sa
+	cmd = exec.Command(
+		"kubectl",
+		"--context", "kind-gke-metadata-server",
+		"--namespace", "kube-system",
+		"annotate", "sa", "gke-metadata-server",
+		"iam.gke.io/gcp-service-account=test-sa@gke-metadata-server.iam.gserviceaccount.com")
+	if b, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("error annotating emulator service account: %v: %s", err, string(b))
+	}
+
 	// wait
-	for _, e := range emulators {
-		for {
-			cmdString := fmt.Sprintf(
-				"kubectl --context kind-gke-metadata-server -n %s get ds %s | grep %s | awk '{print $4}'",
-				e.namespace, e.name, e.name)
-			b, err := exec.Command("sh", "-c", cmdString).CombinedOutput()
-			if err != nil {
-				t.Fatalf("error getting emulator %s/%s state: %v: %s", e.namespace, e.name, err, string(b))
-			}
-
-			if strings.TrimSpace(string(b)) == "1" {
-				t.Logf("Emulator %s/%s is ready", e.namespace, e.name)
-				break
-			}
-
-			const sleepSecs = 10
-			t.Logf("Sleeping for %d secs and checking emulator %s/%s status...", sleepSecs, e.namespace, e.name)
-			time.Sleep(sleepSecs * time.Second)
+	for {
+		cmd := exec.Command(
+			"sh",
+			"-c",
+			"kubectl --context kind-gke-metadata-server --namespace kube-system get ds gke-metadata-server | grep gke | awk '{print $4}'")
+		b, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("error getting emulator state: %v: %s", err, string(b))
 		}
+
+		if strings.TrimSpace(string(b)) == "2" {
+			t.Log("Emulator is ready")
+			break
+		}
+
+		const sleepSecs = 10
+		t.Logf("Sleeping for %d secs and checking emulator status...", sleepSecs)
+		time.Sleep(sleepSecs * time.Second)
 	}
 }
 
@@ -298,30 +266,21 @@ func applyPods(t *testing.T, pods []pod) {
 		if sa := p.serviceAccountName; sa != "" {
 			serviceAccountName = sa
 		}
-		var nodeSelectorAndTolerations string
-		if p.nodePool != (nodePool{}) {
-			nodeSelectorAndTolerations = fmt.Sprintf(`
-  nodeSelector:
-    gke-metadata-server.matheuscscp.io/nodePoolName: %[1]s
-    gke-metadata-server.matheuscscp.io/nodePoolNamespace: %[2]s
-  tolerations:
-  - key: gke-metadata-server.matheuscscp.io/nodePoolName
-    operator: Equal
-    value: %[1]s
-    effect: NoExecute
-  - key: gke-metadata-server.matheuscscp.io/nodePoolNamespace
-    operator: Equal
-    value: %[2]s
-    effect: NoExecute
-`,
-				p.nodePool.name,
-				p.nodePool.namespace)
+		var nodeSelector string
+		if len(p.nodeSelector) > 0 {
+			var b strings.Builder
+			b.WriteString("  nodeSelector:\n")
+			for k, v := range p.nodeSelector {
+				b.WriteString(fmt.Sprintf(`    %s: "%s"`, k, v))
+				b.WriteString("\n")
+			}
+			nodeSelector = b.String()
 		}
 		pod = strings.ReplaceAll(string(b), "<POD_NAME>", p.name)
 		pod = strings.ReplaceAll(pod, "<SERVICE_ACCOUNT>", serviceAccountName)
 		pod = strings.ReplaceAll(pod, "<HOST_NETWORK>", fmt.Sprint(p.hostNetwork))
 		pod = strings.ReplaceAll(pod, "<GO_TEST_DIGEST>", fmt.Sprint(goTestDigest))
-		pod = strings.ReplaceAll(pod, "<NODE_SELECTOR_AND_TOLERATIONS>", nodeSelectorAndTolerations)
+		pod = strings.ReplaceAll(pod, "<NODE_SELECTOR>", nodeSelector)
 
 		// apply
 		cmd := exec.Command(
@@ -342,10 +301,13 @@ func waitForPods(t *testing.T, pods []pod) []int {
 	var exitCodes []int
 	for _, p := range pods {
 		for {
-			cmdString := fmt.Sprintf(
-				"kubectl --context kind-gke-metadata-server -n default get po %s -o jsonpath='{.status.containerStatuses[0].state.terminated.exitCode}'",
-				p.name)
-			b, err := exec.Command("sh", "-c", cmdString).CombinedOutput()
+			cmd := exec.Command(
+				"kubectl",
+				"--context", "kind-gke-metadata-server",
+				"--namespace", "default",
+				"get", "po", p.name,
+				"-o", "jsonpath={.status.containerStatuses[0].state.terminated.exitCode}")
+			b, err := cmd.CombinedOutput()
 			if err != nil {
 				t.Fatalf("error getting pod %s state: %v: %s", p.name, err, string(b))
 			}
@@ -369,7 +331,7 @@ func waitForPods(t *testing.T, pods []pod) []int {
 	return exitCodes
 }
 
-func checkExitCodes(t *testing.T, emulators []emulator, pods []pod, exitCodes []int) {
+func checkExitCodes(t *testing.T, pods []pod, exitCodes []int) {
 	t.Helper()
 
 	var failed bool
@@ -380,20 +342,7 @@ func checkExitCodes(t *testing.T, emulators []emulator, pods []pod, exitCodes []
 	}
 
 	if failed {
-		printDebugInfo(t, emulators, pods, exitCodes)
-	}
-
-	for _, p := range pods {
-		if len(p.expectedLogs) > 0 {
-			logs := getTestPodLogs(t, p.name)
-			for _, expectedLog := range p.expectedLogs {
-				if !strings.Contains(logs, expectedLog) && !failed {
-					failed = true
-					printDebugInfo(t, emulators, pods, exitCodes)
-				}
-				assert.Contains(t, logs, expectedLog)
-			}
-		}
+		printDebugInfo(t, pods, exitCodes)
 	}
 
 	for i := range pods {
@@ -405,23 +354,39 @@ func checkExitCodes(t *testing.T, emulators []emulator, pods []pod, exitCodes []
 	}
 }
 
-func printDebugInfo(t *testing.T, emulators []emulator, pods []pod, exitCodes []int) {
+func printDebugInfo(t *testing.T, pods []pod, exitCodes []int) {
 	t.Helper()
 
-	for _, e := range emulators {
-		// describe emulator pod
-		cmdString := fmt.Sprintf(
-			"kubectl --context kind-gke-metadata-server -n %s describe ds %s",
-			e.namespace,
-			e.name)
-		runDebugCommand(t, "sh", "-c", cmdString)
+	// for each emulator pod
+	b, err := exec.Command(
+		"kubectl",
+		"--context", "kind-gke-metadata-server",
+		"--namespace", "kube-system",
+		"--output", "name",
+		"get", "po").CombinedOutput()
+	if err != nil {
+		t.Errorf("error listing pods: %v: %s", err, string(b))
+	} else {
+		for _, line := range strings.Split(string(b), "\n") {
+			if !strings.Contains(line, "pod/gke-metadata-server") {
+				continue
+			}
+			pod := strings.TrimPrefix(line, "pod/")
 
-		// print emulator logs
-		runDebugCommand(t,
-			"kubectl",
-			"--context", "kind-gke-metadata-server",
-			"--namespace", e.namespace,
-			"logs", "ds/"+e.name)
+			// describe emulator pod
+			runDebugCommand(t,
+				"kubectl",
+				"--context", "kind-gke-metadata-server",
+				"--namespace", "kube-system",
+				"describe", "po", pod)
+
+			// print emulator logs
+			runDebugCommand(t,
+				"kubectl",
+				"--context", "kind-gke-metadata-server",
+				"--namespace", "kube-system",
+				"logs", pod)
+		}
 	}
 
 	for i, p := range pods {
@@ -437,32 +402,20 @@ func printDebugInfo(t *testing.T, emulators []emulator, pods []pod, exitCodes []
 			"describe", "po", p.name)
 
 		// print pod logs
-		t.Log(getTestPodLogs(t, p.name))
+		runDebugCommand(t,
+			"kubectl",
+			"--context", "kind-gke-metadata-server",
+			"--namespace", "default",
+			"logs", p.name)
 	}
 }
 
 func runDebugCommand(t *testing.T, cmdName string, cmdArgs ...string) {
 	t.Helper()
 
-	t.Log(runCommand(t, cmdName, cmdArgs...))
-}
-
-func runCommand(t *testing.T, cmdName string, cmdArgs ...string) string {
-	t.Helper()
-
 	b, err := exec.Command(cmdName, cmdArgs...).CombinedOutput()
 	if err != nil {
 		t.Fatalf("error running command %s %v: %v: %s", cmdName, cmdArgs, err, string(b))
 	}
-	return string(b)
-}
-
-func getTestPodLogs(t *testing.T, podName string) string {
-	t.Helper()
-
-	return runCommand(t,
-		"kubectl",
-		"--context", "kind-gke-metadata-server",
-		"--namespace", "default",
-		"logs", podName)
+	t.Log(string(b))
 }

@@ -77,4 +77,4 @@ spec:
   containers:
   - name: test
     image: ghcr.io/matheuscscp/gke-metadata-server/test@<GO_TEST_DIGEST>
-<NODE_SELECTOR_AND_TOLERATIONS>
+<NODE_SELECTOR>

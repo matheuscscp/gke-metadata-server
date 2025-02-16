@@ -111,7 +111,7 @@ func (p *Provider) GetGoogleIdentityToken(ctx context.Context, saToken, googleEm
 func (p *Provider) runWithGoogleCredentialsFromKubernetesServiceAccountToken(ctx context.Context,
 	token string, email *string, f func(context.Context, *google.Credentials) error) error {
 	// write k8s sa token to tmp file
-	file, err := os.CreateTemp("/tmp", "*.json")
+	file, err := os.CreateTemp("/tmp", "*")
 	if err != nil {
 		return fmt.Errorf("error creating temporary file for service account token: %w", err)
 	}

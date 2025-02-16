@@ -164,7 +164,7 @@ func (s *Server) getPodServiceAccountReference(w http.ResponseWriter,
 	pod, err := s.lookupPodByIP(ctx, clientIP)
 	if err != nil {
 		if strings.Contains(err.Error(), "no pods found") {
-			return s.getNodePoolServiceAccountReference(w, r, clientIP)
+			return s.getNodeServiceAccountReference(w, r, clientIP)
 		}
 		const format = "error looking up pod by ip address: %w"
 		pkghttp.RespondErrorf(w, r, retry.HTTPStatusCode(err), format, err)
@@ -184,11 +184,10 @@ func (s *Server) getPodServiceAccountReference(w http.ResponseWriter,
 	return saRef, r, nil
 }
 
-// getNodePoolServiceAccountReference retrieves the reference of the ServiceAccount
-// used by the Node pool, but only if the client IP address is the same as the Node's
-// IP address.
+// getNodeServiceAccountReference retrieves the reference of the ServiceAccount that should
+// be used by the Node, but only if the client IP address is the same as the Node's IP address.
 // If there's an error this function sends the response to the client.
-func (s *Server) getNodePoolServiceAccountReference(w http.ResponseWriter,
+func (s *Server) getNodeServiceAccountReference(w http.ResponseWriter,
 	r *http.Request, clientIP string) (*serviceaccounts.Reference, *http.Request, error) {
 
 	ctx := r.Context()
@@ -238,19 +237,22 @@ func (s *Server) getNodePoolServiceAccountReference(w http.ResponseWriter,
 		return nil, nil, fmt.Errorf(format, clientIP, node.Name, err)
 	}
 
-	// check if node pool service account is configured
-	saRef := s.opts.NodePoolServiceAccount
+	// get node service account reference
+	saRef := serviceaccounts.ReferenceFromNode(node)
 	if saRef == nil {
-		const format = "node pool service account is not configured"
-		pkghttp.RespondErrorf(w, r, http.StatusForbidden, format)
-		return nil, nil, fmt.Errorf(format)
+		const format = "node does not have the service account annotations/labels: %s"
+		pkghttp.RespondErrorf(w, r, http.StatusForbidden, format, node.Name)
+		return nil, nil, fmt.Errorf(format, node.Name)
 	}
 
 	// update context, logger and request
 	ctx = context.WithValue(ctx, podServiceAccountReferenceContextKey{}, saRef)
-	l := logging.FromContext(ctx).WithField("node_pool_service_account", logrus.Fields{
-		"name":      saRef.Name,
-		"namespace": saRef.Namespace,
+	l := logging.FromContext(ctx).WithField("node", logrus.Fields{
+		"name": node.Name,
+		"service_account": logrus.Fields{
+			"name":      saRef.Name,
+			"namespace": saRef.Namespace,
+		},
 	})
 	r = logging.IntoRequest(r.WithContext(ctx), l)
 

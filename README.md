@@ -15,10 +15,14 @@ automatically by Google in the `kube-system` namespace of GKE clusters that have
 Steps:
 1. Configure GCP Workload Identity Federation for Kubernetes.
 2. Deploy `gke-metadata-server` in the cluster using the Workload Identity Provider full name,
-obtained after step 2.
-3. See [`./testdata/pod.yaml`](./testdata/pod.yaml) for an example of how to configure your Pods
+obtained after step 1.
+3. Add the label `iam.gke.io/gke-metadata-server-enabled: "true"` to the Nodes you want to have
+the emulator Pods running on. Only Pods running on these Nodes will be able to use the emulator.
+The most recommended way to do this is by using Node pooling/grouping features from your Kubernetes
+provider.
+4. See [`./testdata/pod.yaml`](./testdata/pod.yaml) for an example of how to configure your Pods
 and their ServiceAccounts.
-4. (Optional but highly recommended) Verify gke-metadata-server's artifact signatures to make sure
+5. (Optional but highly recommended) Verify gke-metadata-server's artifact signatures to make sure
 you are deploying authentic artifacts distributed by this project.
 
 ### Configure GCP Workload Identity Federation for Kubernetes
@@ -215,7 +219,7 @@ using [Keyless Verification](https://timoni.sh/cue/module/signing/#sign-with-cos
 
 ### Pod identification by IP address
 
-The server uses the client IP address reported in the HTTP request to uniquely identify
+The emulator uses the client IP address reported in the HTTP request to uniquely identify
 the requesting Pod in the Kubernetes API (just like in the native GKE implementation).
 
 If an attacker can easily perform IP address impersonation attacks in your cluster, e.g.
@@ -232,46 +236,33 @@ Pods from being created with such high privileges in the majority of cases.)*
 ### Pods running on the host network
 
 In a cluster there may also be Pods running on the *host network*, i.e. Pods with the
-field `spec.hostNetwork` set to `true`. Such Pods ***share the IP address*** of the Node
-where they are running on, i.e their IP is not unique, and therefore they cannot be
-uniquely identified by the server using the client IP address reported in the HTTP
-request like mentioned [here](#pod-identification-by-ip-address).
+field `spec.hostNetwork` set to `true`. Such Pods share the IP address of the Node
+where they are running on, i.e *their IP is not unique*, and therefore they cannot be
+uniquely identified by the emulator through the client IP address reported in the HTTP
+request (like mentioned in the previous section).
 
 If your use case requires, Pods running on the host network are allowed to use a
-***shared*** Kubernetes ServiceAccount configured in the emulator through *Node pools*
-(Helm values `config.nodePool.*` or Timoni values `values.settings.nodePool.*`). When
-`*.nodePool.enable == true`, the emulator Pods will contain a `nodeSelector` to ensure
-that they only run on Nodes that have the following labels:
+***shared*** Kubernetes ServiceAccount configured through annotations/labels on the
+Node:
 
 ```yaml
-gke-metadata-server.matheuscscp.io/nodePoolName: {{ helm release or timoni module instance name }}
-gke-metadata-server.matheuscscp.io/nodePoolNamespace: {{ helm release or timoni module instance namespace }}
+gke-metadata-server.matheuscscp.io/hostNetworkServiceAccountName: <k8s service account name>
+gke-metadata-server.matheuscscp.io/hostNetworkServiceAccountNamespace: <k8s service account namespace>
 ```
 
-Also, `tolerations` with the same key-value pairs as above are added with the effect `NoSchedule`.
-This is in case you want to taint the Nodes in the pool to prevent unaware Pods from running on them,
-i.e. only Pods with the same `tolerations` as the emulator Pods will be able to run on them. This
-is obviously not any kind of security enforcement, but rather just a way to make users think deeply
-about the question "is it ok, or, should my Pod run on this Node?".
+Annotations are preferred over labels because they are less impactful to etcd since
+they are not indexed. Labels are also supported because not all Kubernetes providers
+support configuring annotations on Node pools/groups. KinD, for example, does not
+(see [testdata/kind.yaml](./testdata/kind.yaml)).
 
-The ServiceAccount configured on the emulator for Pods running on the host network to use
-is the following:
+Remember to add appropriate Node selectors/tolerations to your Pods so they are
+scheduled on the Nodes where the shared ServiceAccount is configured. There are
+many different ways to achieve this depending on your use case, so please refer
+to the Kubernetes documentation for more information.
 
-```yaml
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: {{ helm release or timoni module instance name }}
-  namespace: {{ helm release or timoni module instance namespace }}
-```
-
-Using either *direct resource access* or *impersonation*, this is the ServiceAccount
-you must grant permissions in GCP to. For impersonation there's the optional field
-`*.nodePool.googleServiceAccount`, the GKE annotation is added with this Google
-Service Account email on the Kubernetes ServiceAccount above.
-
-*Try to avoid using identities shared by many different workloads, this is obviously
-(not a good practice and) a security risk!*
+*Be careful when sharing identities between too many workloads! Please assess
+your security requirements and the risks of sharing identities between workloads
+in your cluster.*
 
 ### eBPF magic 🐝
 
@@ -284,14 +275,15 @@ ensure the *unencrypted* communication between the emulator and a client Pod to 
 leave the Node they are both running on. In other words, an emulator Pod only serves
 a client Pod if they are both running on the same Node. GKE has this same guarantee.
 
-If you are using similar tools or equivalent workload identity features of managed
-Kubernetes services from other clouds, *this configuration may have a direct conflict
-with other such tools or features.* It's a recurrent practice among cloud providers
-using this hard-coded IP address and port to implement workload identity. If your use
-case requires, the same solution described in
-[Pods running on the host network](#pods-running-on-the-host-network) can be applied,
-i.e. you can create Node pools dedicated to the workloads for which you want to use
-GCP Workload Identity Federation through the emulator.
+If you are using similar tools or workload identity features of managed Kubernetes
+services from other clouds, *this configuration may have a direct conflict with other
+such tools or features.* It's a recurrent practice among cloud providers using this
+hard-coded IP address and port to implement workload identity. If your use case requires,
+the recommended solution is to use Node pooling/grouping features from your Kubernetes
+provider to isolate the workloads that need to use the emulator as mentioned in the
+[Usage](#usage) section (remember to add the label
+`iam.gke.io/gke-metadata-server-enabled: "true"` to such Nodes and appropriate Node
+selectors/tolerations to your Pods).
 
 ### Token Cache
 
@@ -305,7 +297,7 @@ they expire. This is a limitation of how the permissions are evaluated: they are
 only when the tokens are issued, which is what caching tries to avoid. If your use case
 requires immediate revocation of permissions, then you should not use token caching.
 
-Tokens usually expire in 1 hour.
+Tokens usually expire in at most one hour.
 
 ## Disclaimer
 

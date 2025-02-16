@@ -37,7 +37,6 @@ import (
 	watchpods "github.com/matheuscscp/gke-metadata-server/internal/pods/watch"
 	"github.com/matheuscscp/gke-metadata-server/internal/redirect"
 	"github.com/matheuscscp/gke-metadata-server/internal/server"
-	"github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts"
 	getserviceaccount "github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts/get"
 	watchserviceaccounts "github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts/watch"
 	cacheserviceaccounttokens "github.com/matheuscscp/gke-metadata-server/internal/serviceaccounttokens/cache"
@@ -51,8 +50,6 @@ func newServerCommand() *cobra.Command {
 		serverPort                          int
 		projectID                           string
 		workloadIdentityProvider            string
-		nodePoolServiceAccountName          string
-		nodePoolServiceAccountNamespace     string
 		watchPods                           bool
 		watchPodsResyncPeriod               time.Duration
 		watchPodsDisableFallback            bool
@@ -86,18 +83,6 @@ func newServerCommand() *cobra.Command {
 			}
 			if !emulatorIP.Is4() {
 				return fmt.Errorf("POD_IP environment variable must be an IPv4 address")
-			}
-			nodePoolSANameSet := nodePoolServiceAccountName != ""
-			nodePoolSANamespaceSet := nodePoolServiceAccountNamespace != ""
-			if nodePoolSANameSet != nodePoolSANamespaceSet {
-				return fmt.Errorf("--node-pool-service-account-name and --node-pool-service-account-namespace arguments must be either both specified or both empty")
-			}
-			var nodePoolServiceAccount *serviceaccounts.Reference
-			if nodePoolSANameSet {
-				nodePoolServiceAccount = &serviceaccounts.Reference{
-					Name:      nodePoolServiceAccountName,
-					Namespace: nodePoolServiceAccountNamespace,
-				}
 			}
 			googleCredentialsConfig, numericProjectID, workloadIdentityPool, err := googlecredentials.NewConfig(googlecredentials.ConfigOptions{
 				WorkloadIdentityProvider: workloadIdentityProvider,
@@ -201,15 +186,17 @@ func newServerCommand() *cobra.Command {
 			})
 			if cacheTokens {
 				p := cacheserviceaccounttokens.NewProvider(ctx, cacheserviceaccounttokens.ProviderOptions{
-					Source:                 serviceAccountTokens,
-					ServiceAccounts:        serviceAccounts,
-					MetricsRegistry:        metricsRegistry,
-					Concurrency:            cacheTokensConcurrency,
-					NodePoolServiceAccount: nodePoolServiceAccount,
+					Source:          serviceAccountTokens,
+					ServiceAccounts: serviceAccounts,
+					MetricsRegistry: metricsRegistry,
+					Concurrency:     cacheTokensConcurrency,
 				})
 				defer p.Close()
 				if wp != nil {
 					wp.AddListener(p)
+				}
+				if wn != nil {
+					wn.AddListener(p)
 				}
 				if wsa != nil {
 					wsa.AddListener(p)
@@ -228,17 +215,16 @@ func newServerCommand() *cobra.Command {
 				wsa.Start(ctx)
 			}
 			s := server.New(ctx, server.ServerOptions{
-				NodeName:               nodeName,
-				ServerPort:             serverPort,
-				Pods:                   pods,
-				Node:                   node,
-				ServiceAccounts:        serviceAccounts,
-				ServiceAccountTokens:   serviceAccountTokens,
-				MetricsRegistry:        metricsRegistry,
-				NodePoolServiceAccount: nodePoolServiceAccount,
-				ProjectID:              projectID,
-				NumericProjectID:       numericProjectID,
-				WorkloadIdentityPool:   workloadIdentityPool,
+				NodeName:             nodeName,
+				ServerPort:           serverPort,
+				Pods:                 pods,
+				Node:                 node,
+				ServiceAccounts:      serviceAccounts,
+				ServiceAccountTokens: serviceAccountTokens,
+				MetricsRegistry:      metricsRegistry,
+				ProjectID:            projectID,
+				NumericProjectID:     numericProjectID,
+				WorkloadIdentityPool: workloadIdentityPool,
 			})
 
 			ctx, cancel := waitForShutdown(ctx)
@@ -257,10 +243,6 @@ func newServerCommand() *cobra.Command {
 		"Project ID of the GCP project where the GCP Workload Identity Provider is configured")
 	cmd.Flags().StringVar(&workloadIdentityProvider, "workload-identity-provider", "",
 		"Mandatory fully-qualified resource name of the GCP Workload Identity Provider (projects/<project_number>/locations/global/workloadIdentityPools/<pool_name>/providers/<provider_name>)")
-	cmd.Flags().StringVar(&nodePoolServiceAccountName, "node-pool-service-account-name", "",
-		"Name of the default service account to be used by pods running on the host network")
-	cmd.Flags().StringVar(&nodePoolServiceAccountNamespace, "node-pool-service-account-namespace", "",
-		"Namespace of the default service account to be used by pods running on the host network")
 	cmd.Flags().BoolVar(&watchPods, "watch-pods", false,
 		"Whether or not to watch the pods running on the same node (default false)")
 	cmd.Flags().DurationVar(&watchPodsResyncPeriod, "watch-pods-resync-period", 10*time.Minute,

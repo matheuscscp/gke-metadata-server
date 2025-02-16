@@ -56,7 +56,7 @@ gen-ebpf:
 
 .PHONY: dev-cluster
 dev-cluster:
-	kind delete cluster -n gke-metadata-server || true
+	kind delete cluster --name gke-metadata-server || true
 	make cluster TEST_ID=test PROVIDER_COMMAND=update
 	kubens kube-system
 
@@ -79,9 +79,8 @@ ci-test:
 cluster:
 	@if [ "${TEST_ID}" == "" ]; then echo "TEST_ID variable is required."; exit -1; fi
 	@if [ "${PROVIDER_COMMAND}" == "" ]; then echo "PROVIDER_COMMAND variable is required."; exit -1; fi
-	kind create cluster -n gke-metadata-server --config testdata/kind-config.yaml
+	kind create cluster --name gke-metadata-server --config testdata/kind.yaml
 	make create-or-update-provider TEST_ID=${TEST_ID} PROVIDER_COMMAND=${PROVIDER_COMMAND}
-	kubectl --context kind-gke-metadata-server apply -f testdata/anon-oidc-rbac.yaml
 	make install-cilium
 
 .PHONY: create-or-update-provider
@@ -103,7 +102,7 @@ install-cilium:
 	sudo sysctl fs.inotify.max_user_instances=512
 	helm repo add cilium https://helm.cilium.io/
 	docker pull quay.io/cilium/cilium:v1.17.1
-	kind load docker-image quay.io/cilium/cilium:v1.17.1 -n gke-metadata-server
+	kind load docker-image --name gke-metadata-server quay.io/cilium/cilium:v1.17.1
 	helm install cilium cilium/cilium --version 1.17.1 \
 		--namespace kube-system \
 		--set image.pullPolicy=IfNotPresent \

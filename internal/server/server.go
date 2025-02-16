@@ -50,17 +50,16 @@ type (
 	}
 
 	ServerOptions struct {
-		NodeName               string
-		ServerPort             int
-		Pods                   pods.Provider
-		Node                   node.Provider
-		ServiceAccounts        serviceaccounts.Provider
-		ServiceAccountTokens   serviceaccounttokens.Provider
-		MetricsRegistry        *prometheus.Registry
-		NodePoolServiceAccount *serviceaccounts.Reference
-		ProjectID              string
-		NumericProjectID       string
-		WorkloadIdentityPool   string
+		NodeName             string
+		ServerPort           int
+		Pods                 pods.Provider
+		Node                 node.Provider
+		ServiceAccounts      serviceaccounts.Provider
+		ServiceAccountTokens serviceaccounttokens.Provider
+		MetricsRegistry      *prometheus.Registry
+		ProjectID            string
+		NumericProjectID     string
+		WorkloadIdentityPool string
 	}
 
 	serverMetrics struct {
@@ -124,13 +123,11 @@ func New(ctx context.Context, opts ServerOptions) *Server {
 			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				r = pkghttp.InitRequest(r, observeLatencyMillis)
 
+				// add log fields
 				r = logging.IntoRequest(r, logging.FromRequest(r).WithField("http_request", logrus.Fields{
 					"method": r.Method,
 					"path":   r.URL.Path,
-					"query": logrus.Fields{
-						"pretty":   pkghttp.Pretty(r),
-						"audience": r.URL.Query().Get("audience"),
-					},
+					"query":  r.URL.Query(),
 				}))
 
 				// internalServeMux path?
