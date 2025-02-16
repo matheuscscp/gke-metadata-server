@@ -49,6 +49,7 @@ import (
 func newServerCommand() *cobra.Command {
 	var (
 		serverPort                          int
+		projectID                           string
 		workloadIdentityProvider            string
 		nodePoolServiceAccountName          string
 		nodePoolServiceAccountNamespace     string
@@ -98,7 +99,7 @@ func newServerCommand() *cobra.Command {
 					Namespace: nodePoolServiceAccountNamespace,
 				}
 			}
-			googleCredentialsConfig, workloadIdentityPool, err := googlecredentials.NewConfig(googlecredentials.ConfigOptions{
+			googleCredentialsConfig, numericProjectID, workloadIdentityPool, err := googlecredentials.NewConfig(googlecredentials.ConfigOptions{
 				WorkloadIdentityProvider: workloadIdentityProvider,
 			})
 			if err != nil {
@@ -235,6 +236,8 @@ func newServerCommand() *cobra.Command {
 				ServiceAccountTokens:   serviceAccountTokens,
 				MetricsRegistry:        metricsRegistry,
 				NodePoolServiceAccount: nodePoolServiceAccount,
+				ProjectID:              projectID,
+				NumericProjectID:       numericProjectID,
 				WorkloadIdentityPool:   workloadIdentityPool,
 			})
 
@@ -250,6 +253,8 @@ func newServerCommand() *cobra.Command {
 
 	cmd.Flags().IntVar(&serverPort, "server-port", 8080,
 		"Network address where the metadata server must listen on")
+	cmd.Flags().StringVar(&projectID, "project-id", "",
+		"Project ID of the GCP project where the GCP Workload Identity Provider is configured")
 	cmd.Flags().StringVar(&workloadIdentityProvider, "workload-identity-provider", "",
 		"Mandatory fully-qualified resource name of the GCP Workload Identity Provider (projects/<project_number>/locations/global/workloadIdentityPools/<pool_name>/providers/<provider_name>)")
 	cmd.Flags().StringVar(&nodePoolServiceAccountName, "node-pool-service-account-name", "",

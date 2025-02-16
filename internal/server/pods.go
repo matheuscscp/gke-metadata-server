@@ -76,18 +76,29 @@ func (s *Server) getPodGoogleServiceAccountEmail(w http.ResponseWriter, r *http.
 	return email, r, nil
 }
 
+// getPodGoogleServiceAccountEmailOrWorkloadIdentityPool gets the Google Service Account email associated with the given pod,
+// or the Workload Identity Pool if the pod doesn't have a Google Service Account.
+// If there's an error this function sends the response to the client.
+func (s *Server) getPodGoogleServiceAccountEmailOrWorkloadIdentityPool(w http.ResponseWriter, r *http.Request) (string, *http.Request, error) {
+	podGoogleServiceAccountEmail, r, err := s.getPodGoogleServiceAccountEmail(w, r)
+	if err != nil {
+		return "", nil, err
+	}
+	email := s.opts.WorkloadIdentityPool
+	if podGoogleServiceAccountEmail != nil {
+		email = *podGoogleServiceAccountEmail
+	}
+	return email, r, nil
+}
+
 // listPodGoogleServiceAccounts lists the available Google Service Accounts for the requesting Pod.
 // If there's an error this function sends the response to the client.
 func (s *Server) listPodGoogleServiceAccounts(w http.ResponseWriter, r *http.Request) ([]string, *http.Request, error) {
-	accs := []string{"default"}
-	podGoogleServiceAccountEmail, r, err := s.getPodGoogleServiceAccountEmail(w, r)
+	email, r, err := s.getPodGoogleServiceAccountEmailOrWorkloadIdentityPool(w, r)
 	if err != nil {
 		return nil, nil, err
 	}
-	if podGoogleServiceAccountEmail != nil {
-		accs = append(accs, *podGoogleServiceAccountEmail)
-	}
-	return accs, r, nil
+	return []string{"default", email}, r, nil
 }
 
 // getPodServiceAccountToken creates a ServiceAccount Token for the

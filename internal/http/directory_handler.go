@@ -23,7 +23,6 @@
 package pkghttp
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -33,13 +32,16 @@ import (
 )
 
 type (
+	MetadataHandler interface {
+		GetMetadata(http.ResponseWriter, *http.Request) (any, error)
+	}
+
+	MetadataHandlerFunc func(http.ResponseWriter, *http.Request) (any, error)
+
+	TokenHandler struct{ MetadataHandler }
+
 	DirectoryHandler struct{ directoryNode }
 
-	// DirectoryLister is a function that must read the current request context if necessary
-	// and list the entries for a directory. If there are errors the function should send
-	// the response to the client immediately, otherwise it should return an updated request
-	// context possibly containing useful information extracted from the request for future
-	// callers.
 	DirectoryLister func(http.ResponseWriter, *http.Request) ([]string, *http.Request, error)
 
 	directoryNode struct {
@@ -54,54 +56,84 @@ type (
 	}
 )
 
-func (h *DirectoryHandler) HandleFunc(pattern string, handler func(http.ResponseWriter, *http.Request), dirListers ...DirectoryLister) {
-	h.Handle(pattern, http.HandlerFunc(handler), dirListers...)
+const (
+	metadataFlavorHeader = "Metadata-Flavor"
+	metadataFlavorGoogle = "Google"
+)
+
+func (f MetadataHandlerFunc) GetMetadata(w http.ResponseWriter, r *http.Request) (any, error) {
+	return f(w, r)
 }
 
-func (h *DirectoryHandler) Handle(pattern string, handler http.Handler, dirListers ...DirectoryLister) {
+func (h *DirectoryHandler) HandleDirectory(pattern string, dirLister DirectoryLister) {
+	if dirLister == nil {
+		panic("nil directory lister")
+	}
+	path := splitPathPieces(pattern)
+	if len(path) == 0 {
+		panic("cannot handle directory on empty path")
+	}
+	const prefix = ""
+	var handler MetadataHandler = nil
+	h.handle(prefix, path, handler, dirLister)
+}
+
+func (h *DirectoryHandler) HandleMetadata(pattern string, handler MetadataHandler) {
+	if handler == nil {
+		panic("nil handler")
+	}
 	path := splitPathPieces(pattern)
 	if len(path) == 0 {
 		panic("cannot handle empty path")
 	}
 	const prefix = ""
-	h.handle(prefix, path, handler, dirListers)
+	var dirLister DirectoryLister = nil
+	h.handle(prefix, path, handler, dirLister)
 }
 
-func (n *directoryNode) handle(prefix string, path []string, handler http.Handler, dirListers []DirectoryLister) {
+func (n *directoryNode) handle(prefix string, path []string, handler MetadataHandler, dirLister DirectoryLister) {
 	piece := path[0]
-	prefix += "/" + piece
-	l := logging.
-		FromContext(context.Background()).
-		WithField("prefix", prefix).
-		WithField("path", path).
-		WithField("piece", piece)
-	l.
-		WithField("len(n.children) before", len(n.children)).
-		Trace("handle start")
 
-	// find correct edge
+	panicPrefix := prefix
+	if prefix == "" {
+		panicPrefix = "/"
+	}
+	panicPath := strings.Join(append([]string{prefix}, path...), "/")
+
+	// let's find the correct edge (a static directory edge or a path param)
 	var edge *directoryEdge
-	if strings.HasPrefix(piece, "$") { // is this a path param?
+
+	// is this a path param?
+	if strings.HasPrefix(piece, "$") {
+		// yes. create or find the path param edge
+
+		// is there no path param edge yet?
 		if n.pathParam == nil {
+			// is there a conflicting directory?
+			if len(n.children) > 0 {
+				children := make([]string, len(n.children))
+				for i, e := range n.children {
+					children[i] = e.name
+				}
+				panic(fmt.Sprintf("conflicting static directory and parameterized directory: %s with children {%s} and %s",
+					panicPrefix,
+					strings.Join(children, ", "),
+					panicPath))
+			}
 			edge = &directoryEdge{name: piece}
 			n.pathParam = edge
-		} else if n.pathParam.name == piece {
+		} else if n.pathParam.name == piece { // there's already a path param edge. is it the same?
 			edge = n.pathParam
-		} else {
-			panic(fmt.Sprintf("conflicting path parameters at %s and %s", prefix,
-				strings.Join(append([]string{prefix}, path[1:]...), "/")))
+		} else { // no, it's a conflicting one
+			panic(fmt.Sprintf("conflicting parameterized directories: %s and %s",
+				prefix+"/"+n.pathParam.name,
+				panicPath))
 		}
-
-		// copy directory lister
-		if len(dirListers) == 0 || dirListers[0] == nil {
-			panic(fmt.Sprintf("path parameter %q at %s provided without a matching directory lister", piece, prefix))
-		}
-		if n.dirLister != nil {
-			l.Trace("overriding previous dirLister")
-		}
-		n.dirLister = dirListers[0]
-		dirListers = dirListers[1:]
-	} else { // no, it's a static path piece/directory
+	} else if n.pathParam != nil { // no, it's a static directory edge. is there a conflicting path param edge?
+		panic(fmt.Sprintf("conflicting parameterized directory and static directory: %s and %s",
+			prefix+"/"+n.pathParam.name,
+			panicPath))
+	} else { // no conflicting path param edge. find or create the static directory edge
 		for _, e := range n.children {
 			if e.name == piece {
 				edge = e
@@ -114,37 +146,57 @@ func (n *directoryNode) handle(prefix string, path []string, handler http.Handle
 		}
 	}
 
-	l.
-		WithField("len(n.children) after", len(n.children)).
-		Trace("handle end")
-
-	// base case
+	// base case? time to register the handler or the directory lister
 	if len(path) == 1 {
-		edge.value = handler
+		if dirLister != nil {
+			if n.dirLister != nil {
+				panic(fmt.Sprintf("conflicting directory listers: %s", panicPrefix))
+			}
+			if n.pathParam == nil {
+				panic(fmt.Sprintf("directory lister with no path parameter: %s", panicPrefix))
+			}
+			n.dirLister = dirLister
+		} else {
+			if edge.value != nil {
+				panic(fmt.Sprintf("conflicting handlers: %s", prefix+"/"+piece))
+			}
+			edge.value = handler
+		}
 		return
 	}
 
-	// len(path) > 1
-	var child *directoryNode
-	if edge.value != nil {
-		if _, ok := edge.value.(http.Handler); ok {
-			panic(fmt.Sprintf("conflicting handlers at %s and %s", prefix,
-				strings.Join(append([]string{prefix}, path[1:]...), "/")))
-		}
-		child = edge.value.(*directoryNode)
-	} else {
-		child = &directoryNode{}
+	// recursive case. if the edge value is nil, create a new directory node
+	if edge.value == nil {
+		child := &directoryNode{}
 		edge.value = child
+		child.handle(prefix+"/"+piece, path[1:], handler, dirLister)
+		return
 	}
-	child.handle(prefix, path[1:], handler, dirListers)
+
+	// if the edge value is not nil, it must be a directory node
+	child, ok := edge.value.(*directoryNode)
+	if !ok {
+		panic(fmt.Sprintf("conflicting handlers: %s and %s",
+			prefix+"/"+piece,
+			panicPath))
+	}
+	child.handle(prefix+"/"+piece, path[1:], handler, dirLister)
 }
 
 func (h *DirectoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	l := logging.FromRequest(r)
 
+	// check metadata flavor
+	if strings.HasPrefix(r.URL.Path, "/computeMetadata/v1") && r.Header.Get(metadataFlavorHeader) != metadataFlavorGoogle {
+		msg := fmt.Sprintf("Missing required header %q: %q\n", metadataFlavorHeader, metadataFlavorGoogle)
+		w.WriteHeader(http.StatusForbidden)
+		w.Write([]byte(msg))
+		return
+	}
+
 	pieces := splitPathPieces(r.URL.Path)
 	if len(pieces) == 0 {
-		h.serveHTTP(w, r)
+		h.ServeHTTP(w, r)
 		l.Debug("empty path")
 		return
 	}
@@ -154,22 +206,12 @@ func (h *DirectoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	for i, piece := range pieces {
 		dirPath += "/" + piece
 
-		// find edge
+		// let's find the correct edge (a static directory edge or a path param)
 		var edge *directoryEdge
-		for _, e := range u.children {
-			if e.name == piece {
-				edge = e
-				break
-			}
-		}
-		if edge == nil && u.pathParam == nil {
-			RespondNotFound(w)
-			l.WithField("dir_path", dirPath).Debug("path edge not found")
-			return
-		}
-		// edge != nil || u.pathParam != nil
-		if edge == nil { // is this edge a path parameter?
-			// yes. use it and add it to the context
+
+		// is this edge a path parameter?
+		if u.pathParam != nil {
+			// yes. use it and add it to the request context
 			edge = u.pathParam
 			var entries []string
 			var err error
@@ -186,7 +228,20 @@ func (h *DirectoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			if !found {
 				RespondNotFound(w)
-				l.WithField("dir_path", dirPath).Debug("entry not found")
+				l.WithField("dir_path", dirPath).Debug("dynamic directory entry not found")
+				return
+			}
+		} else { // no, it's a static directory edge
+			// find the edge
+			for _, e := range u.children {
+				if e.name == piece {
+					edge = e
+					break
+				}
+			}
+			if edge == nil {
+				RespondNotFound(w)
+				l.WithField("dir_path", dirPath).Debug("static directory entry not found")
 				return
 			}
 		}
@@ -203,24 +258,34 @@ func (h *DirectoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// no more path pieces after this one. full match! now, is this a handler?
-		if handler, ok := edge.value.(http.Handler); ok {
-			handler.ServeHTTP(w, r)
+		// no more path pieces after this one. full match! now, is this a directory?
+		if d, ok := edge.value.(*directoryNode); ok {
+			d.ServeHTTP(w, r)
 			return
 		}
-		// no, it's a directory.
-		edge.value.(*directoryNode).serveHTTP(w, r)
+
+		// no, it's a handler
+		serveMetadata(w, r, edge.value.(MetadataHandler))
 		return
 	}
 }
 
-// serveHTTP does not implement http.Handler on purpose, because we chose
-// to identify a leaf nodes by testing the type assetion .(http.Handler),
-// and directoryNode is not a leaf node by definition.
-func (n *directoryNode) serveHTTP(w http.ResponseWriter, r *http.Request) {
+func (n *directoryNode) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if p := r.URL.Path; !strings.HasSuffix(p, "/") {
 		http.Redirect(w, r, p+"/", http.StatusMovedPermanently)
 		logging.FromRequest(r).Debug("directory redirect")
+		return
+	}
+
+	// recursive?
+	recursive := r.URL.Query().Get("recursive")
+	if strings.HasPrefix(r.URL.Path, "/computeMetadata/v1") && strings.ToLower(recursive) == "true" {
+		m, err := n.buildRecursive(w, r)
+		if err != nil {
+			// buildRecursive already responded and observed the error
+			return
+		}
+		RespondJSON(w, r, http.StatusOK, m)
 		return
 	}
 
@@ -252,6 +317,94 @@ func (n *directoryNode) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	RespondText(w, r, http.StatusOK, strings.Join(dirEntries, "\n")+"\n")
 }
 
+func (n *directoryNode) buildRecursive(w http.ResponseWriter, r *http.Request) (map[string]any, error) {
+	m := make(map[string]any)
+
+	for _, e := range n.children {
+		md, err := n.buildValueRecursive(w, r, e.value)
+		if err != nil {
+			// buildValueRecursive already responded and observed the error
+			return nil, err
+		}
+		if md != nil {
+			m[camelCaseFromKebab(e.name)] = *md
+		}
+	}
+
+	if n.dirLister != nil {
+		var dirEntries []string
+		var err error
+		dirEntries, r, err = n.dirLister(w, r)
+		if err != nil {
+			// dirLister already responded and observed the error
+			return nil, err
+		}
+		for _, entry := range dirEntries {
+			md, err := n.buildValueRecursive(w, r, n.pathParam.value)
+			if err != nil {
+				// buildValueRecursive already responded and observed the error
+				return nil, err
+			}
+			if md != nil {
+				m[entry] = md
+			}
+		}
+	}
+
+	return m, nil
+}
+
+func (n *directoryNode) buildValueRecursive(w http.ResponseWriter, r *http.Request, value any) (*any, error) {
+	var res any
+	var err error
+	switch v := value.(type) {
+	case TokenHandler:
+		return nil, nil
+	case MetadataHandler:
+		res, err = v.GetMetadata(w, r)
+	case *directoryNode:
+		res, err = v.buildRecursive(w, r)
+	}
+	return &res, err
+}
+
+func (n *directoryNode) MarshalJSON() ([]byte, error) {
+	m := make(map[string]any)
+	for _, e := range n.children {
+		v := e.value
+		if _, ok := v.(*directoryNode); !ok {
+			v = fmt.Sprintf("%T", v)
+		}
+		m[camelCaseFromKebab(e.name)] = v
+	}
+	if n.pathParam != nil {
+		v := n.pathParam.value
+		if _, ok := v.(*directoryNode); !ok {
+			v = fmt.Sprintf("%T", v)
+		}
+		m[n.pathParam.name] = v
+	}
+	return json.Marshal(m)
+}
+
+func serveMetadata(w http.ResponseWriter, r *http.Request, handler MetadataHandler) {
+	v, err := handler.GetMetadata(w, r)
+	if err != nil {
+		// GetMetadata already responded and observed the error
+		return
+	}
+	switch metadata := v.(type) {
+	case string:
+		RespondText(w, r, http.StatusOK, metadata)
+	case []string:
+		RespondText(w, r, http.StatusOK, strings.Join(metadata, "\n")+"\n")
+	case map[string]any:
+		RespondJSON(w, r, http.StatusOK, metadata)
+	default:
+		RespondErrorf(w, r, http.StatusInternalServerError, "unsupported metadata type: %T", v)
+	}
+}
+
 func splitPathPieces(path string) (pieces []string) {
 	for _, piece := range strings.Split(path, "/") {
 		if s := strings.TrimSpace(piece); s != "" {
@@ -261,18 +414,17 @@ func splitPathPieces(path string) (pieces []string) {
 	return
 }
 
-func (n *directoryNode) MarshalJSON() ([]byte, error) {
-	edges := n.children
-	if n.pathParam != nil {
-		edges = append(edges, n.pathParam)
+func camelCaseFromKebab(s string) string {
+	var b strings.Builder
+	for i, r := range s {
+		if r == '-' {
+			continue
+		}
+		if i > 0 && s[i-1] == '-' {
+			b.WriteString(strings.ToUpper(string(r)))
+			continue
+		}
+		b.WriteRune(r)
 	}
-	return json.Marshal(edges)
-}
-
-func (e *directoryEdge) MarshalJSON() ([]byte, error) {
-	v := e.value
-	if _, ok := v.(http.Handler); ok {
-		v = "http.Handler"
-	}
-	return json.Marshal(map[string]any{e.name: v})
+	return b.String()
 }

@@ -41,7 +41,7 @@ type (
 	}
 )
 
-var workloadIdentityProviderRegex = regexp.MustCompile(`^projects/\d+/locations/global/workloadIdentityPools/([^/]+)/providers/[^/]+$`)
+var workloadIdentityProviderRegex = regexp.MustCompile(`^projects/(\d+)/locations/global/workloadIdentityPools/([^/]+)/providers/[^/]+$`)
 
 func AccessScopes() []string {
 	return []string{
@@ -50,13 +50,14 @@ func AccessScopes() []string {
 	}
 }
 
-func NewConfig(opts ConfigOptions) (*Config, string, error) {
+func NewConfig(opts ConfigOptions) (*Config, string, string, error) {
 	if !workloadIdentityProviderRegex.MatchString(opts.WorkloadIdentityProvider) {
-		return nil, "", fmt.Errorf("workload identity provider name does not match pattern %s",
+		return nil, "", "", fmt.Errorf("workload identity provider name does not match pattern %s",
 			workloadIdentityProviderRegex.String())
 	}
-	workloadIdentityPool := workloadIdentityProviderRegex.FindStringSubmatch(opts.WorkloadIdentityProvider)[1]
-	return &Config{opts}, workloadIdentityPool, nil
+	numericProjectID := workloadIdentityProviderRegex.FindStringSubmatch(opts.WorkloadIdentityProvider)[1]
+	workloadIdentityPool := workloadIdentityProviderRegex.FindStringSubmatch(opts.WorkloadIdentityProvider)[2]
+	return &Config{opts}, numericProjectID, workloadIdentityPool, nil
 }
 
 func (c *Config) Get(ctx context.Context, credFile string, googleServiceAccountEmail *string) (*google.Credentials, error) {

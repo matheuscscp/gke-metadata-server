@@ -86,7 +86,7 @@ func RespondJSON(w http.ResponseWriter, r *http.Request, statusCode int, obj any
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
+	setGKEMetadataServerHeaders(w, "application/json", statusCode)
 	w.WriteHeader(statusCode)
 	if n, err := w.Write(b); err != nil {
 		logging.
@@ -111,7 +111,7 @@ func RespondJSON(w http.ResponseWriter, r *http.Request, statusCode int, obj any
 }
 
 func RespondText(w http.ResponseWriter, r *http.Request, statusCode int, text string) {
-	w.Header().Set("Content-Type", "application/text")
+	setGKEMetadataServerHeaders(w, "application/text", statusCode)
 	w.WriteHeader(statusCode)
 	if n, err := w.Write([]byte(text)); err != nil {
 		logging.
@@ -129,6 +129,14 @@ func RespondText(w http.ResponseWriter, r *http.Request, statusCode int, text st
 	}
 
 	observeRequest(r, statusCode, nil)
+}
+
+func setGKEMetadataServerHeaders(w http.ResponseWriter, contentType string, statusCode int) {
+	w.Header().Set("Content-Type", contentType)
+	if 200 <= statusCode && statusCode < 300 {
+		w.Header().Set(metadataFlavorHeader, metadataFlavorGoogle)
+		w.Header().Set("Server", "GKE Metadata Server")
+	}
 }
 
 func responseLogFields(statusCode int, errResp ...any) logrus.Fields {

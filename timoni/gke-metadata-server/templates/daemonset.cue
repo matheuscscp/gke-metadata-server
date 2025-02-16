@@ -102,6 +102,7 @@ import (
 					}
 					args: [
 						"server",
+						"--project-id=\(#config.settings.projectID)",
 						"--workload-identity-provider=\(#config.settings.workloadIdentityProvider)",
 						if #config.settings.nodePool.enable {
 							"--node-pool-service-account-name=\(#config.metadata.name)"

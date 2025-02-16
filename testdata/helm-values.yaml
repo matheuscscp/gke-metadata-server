@@ -21,6 +21,7 @@
 # SOFTWARE.
 
 config:
+  projectID: gke-metadata-server
   workloadIdentityProvider: projects/637293746831/locations/global/workloadIdentityPools/test-kind-cluster/providers/<TEST_ID>
 
 image:
