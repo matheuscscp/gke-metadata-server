@@ -38,25 +38,25 @@ import (
 )
 
 type Provider struct {
-	opts                 ProviderOptions
-	numTokens            prometheus.Gauge
-	cacheMisses          prometheus.Counter
-	serviceAccounts      map[serviceaccounts.Reference]*serviceAccount
-	googleIDTokens       map[googleIDTokenReference]*tokenAndExpiration
-	ctx                  context.Context
-	cancelCtx            context.CancelFunc
-	serviceAccountsMutex sync.Mutex
-	googleIDTokensMutex  sync.RWMutex
-	wg                   sync.WaitGroup
-	semaphore            chan struct{}
+	opts                  ProviderOptions
+	numTokens             prometheus.Gauge
+	cacheMisses           prometheus.Counter
+	serviceAccounts       map[serviceaccounts.Reference]*serviceAccount
+	googleIDTokens        map[googleIDTokenReference]*tokenAndExpiration
+	nodeServiceAccountRef *serviceaccounts.Reference
+	ctx                   context.Context
+	cancelCtx             context.CancelFunc
+	serviceAccountsMutex  sync.Mutex
+	googleIDTokensMutex   sync.RWMutex
+	wg                    sync.WaitGroup
+	semaphore             chan struct{}
 }
 
 type ProviderOptions struct {
-	Source                 serviceaccounttokens.Provider
-	ServiceAccounts        serviceaccounts.Provider
-	MetricsRegistry        *prometheus.Registry
-	Concurrency            int
-	NodePoolServiceAccount *serviceaccounts.Reference
+	Source          serviceaccounttokens.Provider
+	ServiceAccounts serviceaccounts.Provider
+	MetricsRegistry *prometheus.Registry
+	Concurrency     int
 }
 
 var errServiceAccountDeleted = errors.New("service account was deleted")
@@ -88,13 +88,6 @@ func NewProvider(ctx context.Context, opts ProviderOptions) *Provider {
 		ctx:             backgroundCtx,
 		cancelCtx:       cancel,
 		semaphore:       make(chan struct{}, opts.Concurrency),
-	}
-
-	// add service account used by the node pool
-	if opts.NodePoolServiceAccount != nil {
-		const podCount = 0
-		const usedByNodePool = true
-		p.addServiceAccount(opts.NodePoolServiceAccount, podCount, usedByNodePool)
 	}
 
 	// start garbage collector for google ID tokens

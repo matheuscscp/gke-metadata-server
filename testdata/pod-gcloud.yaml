@@ -61,4 +61,4 @@ spec:
       fi
       echo "Content mismatch"
       exit 1
-<NODE_SELECTOR_AND_TOLERATIONS>
+<NODE_SELECTOR>

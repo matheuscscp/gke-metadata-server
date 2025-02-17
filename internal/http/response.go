@@ -76,11 +76,7 @@ func RespondError(w http.ResponseWriter, r *http.Request, statusCode int, err er
 }
 
 func RespondJSON(w http.ResponseWriter, r *http.Request, statusCode int, obj any, optErrData ...errData) {
-	marshal := json.Marshal
-	if Pretty(r) {
-		marshal = func(v any) ([]byte, error) { return json.MarshalIndent(v, "", "  ") }
-	}
-	b, err := marshal(obj)
+	b, err := json.Marshal(obj)
 	if err != nil {
 		RespondErrorf(w, r, http.StatusInternalServerError, "error marshaling json response: %w", err)
 		return
@@ -152,11 +148,6 @@ func responseLogFields(statusCode int, errResp ...any) logrus.Fields {
 		f["data"] = errResp[0]
 	}
 	return f
-}
-
-func Pretty(r *http.Request) bool {
-	p := strings.ToLower(r.URL.Query().Get("pretty"))
-	return p == "" || p == "true"
 }
 
 func observeRequest(r *http.Request, statusCode int, err error, errResp ...any) {

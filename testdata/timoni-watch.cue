@@ -28,10 +28,6 @@ values: settings: {
 	watchPods:                disableFallback: false
 	watchNode:                disableFallback: false
 	watchServiceAccounts:     disableFallback: false
-	nodePool: {
-		enable:               true
-		googleServiceAccount: "test-sa@gke-metadata-server.iam.gserviceaccount.com"
-	}
 }
 
 values: image: {

@@ -30,71 +30,32 @@ import (
 	#config:    #Config
 	apiVersion: "apps/v1"
 	kind:       "DaemonSet"
-	metadata:   #config.metadata
+	metadata:   #config.#namespacedMetadata
 	spec: {
 		selector: matchLabels: #config.selector.labels
 		template: {
 			metadata: {
-				labels: #config.selector.labels & {podAntiAffinity: "gke-metadata-server"}
+				labels: #config.selector.labels
 				if #config.pod.annotations != _|_ {
 					annotations: #config.pod.annotations
 				}
 			}
 			spec: {
-				if #config.settings.nodePool.enable {
-					nodeSelector: {
-						"gke-metadata-server.matheuscscp.io/nodePoolName":      #config.metadata.name
-						"gke-metadata-server.matheuscscp.io/nodePoolNamespace": #config.metadata.namespace
-					}
-					tolerations: [
-						{
-							key:      "gke-metadata-server.matheuscscp.io/nodePoolName"
-							operator: "Equal"
-							value:    #config.metadata.name
-							effect:   "NoExecute"
-						},
-						{
-							key:      "gke-metadata-server.matheuscscp.io/nodePoolNamespace"
-							operator: "Equal"
-							value:    #config.metadata.namespace
-							effect:   "NoExecute"
-						},
-					]
+				serviceAccountName: #config.#namespacedMetadata.name
+				priorityClassName:  "system-node-critical"
+				nodeSelector: {
+					"iam.gke.io/gke-metadata-server-enabled": "true"
+					"kubernetes.io/os":                       "linux"
+					"kubernetes.io/arch":                     "amd64"
 				}
-				affinity: {
-					podAntiAffinity: requiredDuringSchedulingIgnoredDuringExecution: [{
-						labelSelector:     matchLabels: {podAntiAffinity: "gke-metadata-server"}
-						namespaceSelector: {}
-						topologyKey:       "kubernetes.io/hostname"
-					}]
-					if !#config.settings.nodePool.enable {
-						nodeAffinity: requiredDuringSchedulingIgnoredDuringExecution: nodeSelectorTerms: [{
-							matchExpressions: [
-								{
-									key:      "gke-metadata-server.matheuscscp.io/nodePoolName"
-									operator: "DoesNotExist"
-								},
-								{
-									key:      "gke-metadata-server.matheuscscp.io/nodePoolNamespace"
-									operator: "DoesNotExist"
-								},
-							]
-						}]
-					}
-				}
-				if #config.pod.nodeSelector != _|_ {
-					nodeSelector: #config.pod.nodeSelector
-				}
-				if #config.pod.affinity != _|_ {
-					affinity: #config.pod.affinity
-				}
-				if #config.pod.tolerations != _|_ {
-					tolerations: #config.pod.tolerations
-				}
-				serviceAccountName: #config.metadata.name
-				priorityClassName:  #config.pod.priorityClass
+				tolerations: [{
+					key:      "iam.gke.io/gke-metadata-server-enabled"
+					operator: "Equal"
+					value:    "true"
+					effect:   "NoExecute"
+				}]
 				containers: [{
-					name:            #config.metadata.name
+					name:            #config.#namespacedMetadata.name
 					image:           #config.image.reference
 					imagePullPolicy: #config.image.pullPolicy
 					securityContext: {
@@ -104,12 +65,6 @@ import (
 						"server",
 						"--project-id=\(#config.settings.projectID)",
 						"--workload-identity-provider=\(#config.settings.workloadIdentityProvider)",
-						if #config.settings.nodePool.enable {
-							"--node-pool-service-account-name=\(#config.metadata.name)"
-						}
-						if #config.settings.nodePool.enable {
-							"--node-pool-service-account-namespace=\(#config.metadata.namespace)"
-						}
 						if #config.settings.logLevel != _|_ {
 							"--log-level=\(#config.settings.logLevel)"
 						}

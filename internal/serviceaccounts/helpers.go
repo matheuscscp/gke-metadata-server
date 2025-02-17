@@ -42,8 +42,8 @@ const (
 	gkeAnnotation = "iam.gke.io/gcp-service-account"
 
 	emulatorAPIGroup        = "gke-metadata-server.matheuscscp.io"
-	serviceAccountName      = emulatorAPIGroup + "/serviceAccountName"
-	serviceAccountNamespace = emulatorAPIGroup + "/serviceAccountNamespace"
+	serviceAccountName      = emulatorAPIGroup + "/hostNetworkServiceAccountName"
+	serviceAccountNamespace = emulatorAPIGroup + "/hostNetworkServiceAccountNamespace"
 )
 
 var googleEmailRegex = regexp.MustCompile(`^[a-zA-Z0-9-]+@[a-zA-Z0-9-]+\.iam\.gserviceaccount\.com$`)
@@ -62,6 +62,29 @@ func ReferenceFromPod(pod *corev1.Pod) *Reference {
 		Name:      pod.Spec.ServiceAccountName,
 		Namespace: pod.Namespace,
 	}
+}
+
+// ReferenceFromNode returns a ServiceAccount reference from the Node object annotations or labels.
+// Annotations take precedence over labels because we encourage users to use annotations instead of
+// labels in this case since. Labels are more impactful to etcd since they are indexed, and we don't
+// need indexing here so we prefer annotations. However, we support labels because not all cloud
+// providers support customizing annotations on Node pools/groups. Not even KinD supports it.
+//
+// The ServiceAccount reference is retrieved from the following pair of annotations or labels:
+//
+// gke-metadata-server.matheuscscp.io/hostNetworkServiceAccountName
+//
+// gke-metadata-server.matheuscscp.io/hostNetworkServiceAccountNamespace
+//
+// Only Pods running on the host network should use this ServiceAccount.
+func ReferenceFromNode(node *corev1.Node) *Reference {
+	if ref := getServiceAccountReference(node.Annotations); ref != nil {
+		return ref
+	}
+	if ref := getServiceAccountReference(node.Labels); ref != nil {
+		return ref
+	}
+	return nil
 }
 
 // ReferenceFromToken returns a ServiceAccount reference from a ServiceAccount Token.
@@ -85,4 +108,25 @@ func GoogleEmail(sa *corev1.ServiceAccount) (*string, error) {
 		return nil, ErrGKEAnnotationInvalid
 	}
 	return &v, nil
+}
+
+func getServiceAccountReference(m map[string]string) *Reference {
+	if m == nil {
+		return nil
+	}
+	name, ok := m[serviceAccountName]
+	if !ok {
+		return nil
+	}
+	namespace, ok := m[serviceAccountNamespace]
+	if !ok {
+		return nil
+	}
+	if name == "" || namespace == "" {
+		return nil
+	}
+	return &Reference{
+		Name:      name,
+		Namespace: namespace,
+	}
 }

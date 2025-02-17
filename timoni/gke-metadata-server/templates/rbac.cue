@@ -31,30 +31,14 @@ import (
 	#config:    #Config
 	apiVersion: "v1"
 	kind:       "ServiceAccount"
-	metadata: {
-		name:      #config.metadata.name
-		namespace: #config.metadata.namespace
-		labels:    #config.metadata.labels
-		if #config.metadata.annotations != _|_ && #config.settings.nodePool.enable && #config.settings.nodePool.googleServiceAccount != _|_ {
-			annotations: #config.metadata.annotations & {"iam.gke.io/gcp-service-account": #config.settings.nodePool.googleServiceAccount}
-		}
-		if #config.metadata.annotations != _|_ && !(#config.settings.nodePool.enable && #config.settings.nodePool.googleServiceAccount != _|_) {
-			annotations: #config.metadata.annotations
-		}
-		if #config.metadata.annotations == _|_ && #config.settings.nodePool.enable && #config.settings.nodePool.googleServiceAccount != _|_ {
-			annotations: {"iam.gke.io/gcp-service-account": #config.settings.nodePool.googleServiceAccount}
-		}
-		if #config.metadata.finalizers != _|_ {
-			finalizers: #config.metadata.finalizers
-		}
-	}
+	metadata:   #config.#namespacedMetadata
 }
 
 #ClusterRole: rbacv1.#ClusterRole & {
 	#config:    #Config
 	apiVersion: "rbac.authorization.k8s.io/v1"
 	kind:       "ClusterRole"
-	metadata:   #config.#clusterMetadata
+	metadata:   #config.#clusterScopedMetadata
 	rules: [
 		{
 			apiGroups: [""]
@@ -73,15 +57,15 @@ import (
 	#config:    #Config
 	apiVersion: "rbac.authorization.k8s.io/v1"
 	kind:       "ClusterRoleBinding"
-	metadata:   #config.#clusterMetadata
-	subjects: [{
-		kind:      "ServiceAccount"
-		name:      #config.metadata.name
-		namespace: #config.metadata.namespace
-	}]
+	metadata:   #config.#clusterScopedMetadata
 	roleRef: {
 		apiGroup: "rbac.authorization.k8s.io"
 		kind:     "ClusterRole"
-		name:     #config.#clusterMetadata.name
+		name:     #config.#clusterScopedMetadata.name
 	}
+	subjects: [{
+		kind:      "ServiceAccount"
+		name:      #config.#namespacedMetadata.name
+		namespace: #config.#namespacedMetadata.namespace
+	}]
 }

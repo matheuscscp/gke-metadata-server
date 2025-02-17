@@ -24,8 +24,8 @@
 # https://cloud.google.com/iam/docs/workload-identity-federation-with-kubernetes
 
 locals {
-  test_bucket      = "gke-metadata-server-test"
-  principal_prefix = "principal://iam.googleapis.com/${google_iam_workload_identity_pool.test_kind_cluster.name}/subject/system:serviceaccount"
+  test_bucket          = "gke-metadata-server-test"
+  k8s_principal_prefix = "principal://iam.googleapis.com/${google_iam_workload_identity_pool.test_kind_cluster.name}/subject/system:serviceaccount"
 }
 
 resource "google_iam_workload_identity_pool" "test_kind_cluster" {
@@ -40,8 +40,7 @@ resource "google_service_account_iam_binding" "test_workload_identity_users" {
   service_account_id = google_service_account.test.name
   role               = local.wi_user_role
   members = [
-    "${local.principal_prefix}:kube-system:gke-metadata-server",
-    "${local.principal_prefix}:default:test-impersonated",
+    "${local.k8s_principal_prefix}:default:test-impersonated",
   ]
 }
 
@@ -79,6 +78,6 @@ resource "google_storage_bucket_iam_binding" "test_bucket_object_admins" {
   role   = "roles/storage.objectAdmin"
   members = [
     google_service_account.test.member,
-    "${local.principal_prefix}:default:test",
+    "${local.k8s_principal_prefix}:default:test",
   ]
 }
