@@ -38,6 +38,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
+      hostNetwork: true
       serviceAccountName: gke-metadata-server
       priorityClassName: system-node-critical
       nodeSelector:
@@ -65,6 +66,9 @@ spec:
         - --workload-identity-provider={{ .Values.config.workloadIdentityProvider }}
         {{- if .Values.config.serverPort }}
         - --server-port={{ .Values.config.serverPort }}
+        {{- end }}
+        {{- if .Values.config.healthPort }}
+        - --health-port={{ .Values.config.healthPort }}
         {{- end }}
         {{- if .Values.config.logLevel }}
         - --log-level={{ .Values.config.logLevel }}
@@ -112,19 +116,19 @@ spec:
             fieldRef:
               fieldPath: status.podIP
         ports:
-        - name: http
-          containerPort: {{ .Values.config.serverPort }}
+        - name: health
+          containerPort: {{ .Values.config.healthPort }}
           protocol: TCP
         livenessProbe:
           initialDelaySeconds: 3
           httpGet:
             path: /healthz
-            port: http
+            port: health
         readinessProbe:
           initialDelaySeconds: 3
           httpGet:
             path: /readyz
-            port: http
+            port: health
         resources:
           {{- toYaml .Values.resources | nindent 10 }}
         volumeMounts:

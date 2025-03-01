@@ -26,9 +26,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
-	"net/http/httptest"
 
 	pkghttp "github.com/matheuscscp/gke-metadata-server/internal/http"
 	"github.com/matheuscscp/gke-metadata-server/internal/logging"
@@ -44,14 +44,17 @@ import (
 
 type (
 	Server struct {
-		opts       ServerOptions
-		httpServer *http.Server
-		metrics    serverMetrics
+		opts           ServerOptions
+		metadataServer *http.Server
+		healthServer   *http.Server
+		metrics        serverMetrics
 	}
 
 	ServerOptions struct {
 		NodeName             string
-		ServerPort           int
+		PodIP                string
+		Addr                 string
+		HealthPort           int
 		Pods                 pods.Provider
 		Node                 node.Provider
 		ServiceAccounts      serviceaccounts.Provider
@@ -81,9 +84,21 @@ const (
 )
 
 func New(ctx context.Context, opts ServerOptions) *Server {
-	const subsystem = "" // "server" would stutter with the "gke_metadata_server" namespace
-	labelNames := []string{"method", "path", "status"}
-	latencyMillis := metrics.NewLatencyMillis(subsystem, labelNames...)
+	// prepare logger and base context
+	healthAddr := fmt.Sprintf(":%d", opts.HealthPort)
+	l := logging.FromContext(ctx).WithFields(logrus.Fields{
+		"server_addr": opts.Addr,
+		"health_addr": healthAddr,
+	})
+	ctx = logging.IntoContext(context.Background(), l)
+	baseContext := func(net.Listener) context.Context { return ctx }
+
+	// prepare metrics
+
+	const metricsSubsystem = "" // "server" would stutter with the "gke_metadata_server" namespace
+
+	latencyLabelNames := []string{"method", "path", "status"}
+	latencyMillis := metrics.NewLatencyMillis(metricsSubsystem, latencyLabelNames...)
 	opts.MetricsRegistry.MustRegister(latencyMillis)
 	observeLatencyMillis := func(r *http.Request, statusCode int, latencyMs float64) {
 		latencyMillis.
@@ -105,74 +120,111 @@ func New(ctx context.Context, opts ServerOptions) *Server {
 	})
 	opts.MetricsRegistry.MustRegister(getNodeFailures)
 
+	observabilityMiddleware := func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r = pkghttp.InitRequest(r, observeLatencyMillis)
+
+			r = logging.IntoRequest(r, logging.FromRequest(r).WithField("http_request", logrus.Fields{
+				"method": r.Method,
+				"path":   r.URL.Path,
+				"query":  r.URL.Query(),
+			}))
+
+			h.ServeHTTP(w, r)
+		})
+	}
+
 	// create server
-	l := logging.FromContext(ctx).WithField("server_port", opts.ServerPort)
-	dirHandler := &pkghttp.DirectoryHandler{}
-	internalServeMux := http.NewServeMux()
+	metadataHandler := &pkghttp.DirectoryHandler{}
+	healthHandler := http.NewServeMux()
 	s := &Server{
 		opts: opts,
 		metrics: serverMetrics{
 			lookupPodFailures: lookupPodFailures,
 			getNodeFailures:   getNodeFailures,
 		},
-		httpServer: &http.Server{
-			Addr: fmt.Sprintf(":%d", opts.ServerPort),
-			BaseContext: func(net.Listener) context.Context {
-				return logging.IntoContext(context.Background(), l)
-			},
-			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				r = pkghttp.InitRequest(r, observeLatencyMillis)
-
-				// add log fields
-				r = logging.IntoRequest(r, logging.FromRequest(r).WithField("http_request", logrus.Fields{
-					"method": r.Method,
-					"path":   r.URL.Path,
-					"query":  r.URL.Query(),
-				}))
-
-				// internalServeMux path?
-				routeDetector := httptest.NewRecorder()
-				internalServeMux.ServeHTTP(routeDetector, r)
-				if statusCode := routeDetector.Result().StatusCode; 200 <= statusCode && statusCode < 300 {
-					internalServeMux.ServeHTTP(w, r)
-					return
-				}
-
-				// metadataDirectory path
-				dirHandler.ServeHTTP(w, r)
-			}),
+		metadataServer: &http.Server{
+			Addr:        opts.Addr,
+			BaseContext: baseContext,
+			Handler:     observabilityMiddleware(metadataHandler),
+		},
+		healthServer: &http.Server{
+			Addr:        healthAddr,
+			BaseContext: baseContext,
+			Handler:     observabilityMiddleware(healthHandler),
 		},
 	}
 
-	// metadata directory
-	dirHandler.HandleMetadata(gkeNodeNameAPI, s.gkeNodeNameAPI())
-	dirHandler.HandleMetadata(gkeProjectIDAPI, s.gkeProjectIDAPI())
-	dirHandler.HandleMetadata(gkeNumericProjectIDAPI, s.gkeNumericProjectIDAPI())
-	dirHandler.HandleDirectory(gkeServiceAccountsDirectory, s.listPodGoogleServiceAccounts)
-	dirHandler.HandleMetadata(gkeServiceAccountAliasesAPI, s.gkeServiceAccountAliasesAPI())
-	dirHandler.HandleMetadata(gkeServiceAccountEmailAPI, s.gkeServiceAccountEmailAPI())
-	dirHandler.HandleMetadata(gkeServiceAccountIdentityAPI, s.gkeServiceAccountIdentityAPI())
-	dirHandler.HandleMetadata(gkeServiceAccountScopesAPI, s.gkeServiceAccountScopesAPI())
-	dirHandler.HandleMetadata(gkeServiceAccountTokenAPI, s.gkeServiceAccountTokenAPI())
+	// setup metadata handlers
+	metadataHandler.HandleMetadata(gkeNodeNameAPI, s.gkeNodeNameAPI())
+	metadataHandler.HandleMetadata(gkeProjectIDAPI, s.gkeProjectIDAPI())
+	metadataHandler.HandleMetadata(gkeNumericProjectIDAPI, s.gkeNumericProjectIDAPI())
+	metadataHandler.HandleDirectory(gkeServiceAccountsDirectory, s.listPodGoogleServiceAccounts)
+	metadataHandler.HandleMetadata(gkeServiceAccountAliasesAPI, s.gkeServiceAccountAliasesAPI())
+	metadataHandler.HandleMetadata(gkeServiceAccountEmailAPI, s.gkeServiceAccountEmailAPI())
+	metadataHandler.HandleMetadata(gkeServiceAccountIdentityAPI, s.gkeServiceAccountIdentityAPI())
+	metadataHandler.HandleMetadata(gkeServiceAccountScopesAPI, s.gkeServiceAccountScopesAPI())
+	metadataHandler.HandleMetadata(gkeServiceAccountTokenAPI, s.gkeServiceAccountTokenAPI())
 
-	l.WithField("metadata_directory", dirHandler).Info("metadata directory")
+	l.WithField("metadata_directory", metadataHandler).Info("metadata directory initialized")
 
-	// internal endpoints
-	health := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// setup health handlers
+	healthHandler.Handle("/metrics", metrics.HandlerFor(opts.MetricsRegistry, l))
+	healthHandler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	internalServeMux.Handle("/schema", health)
-	internalServeMux.Handle("/healthz", health)
-	internalServeMux.Handle("/health", health)
-	internalServeMux.Handle("/readyz", health)
-	internalServeMux.Handle("/ready", health)
-	internalServeMux.Handle("/metrics", metrics.HandlerFor(opts.MetricsRegistry, l))
+	healthHandler.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
+		url := fmt.Sprintf("http://%s%s", opts.Addr, gkeNodeNameAPI)
+		req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, url, nil)
+		if err != nil {
+			logging.FromRequest(r).WithError(err).Error("error creating healthcheck request")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		req.Header.Set(pkghttp.MetadataFlavorHeader, pkghttp.MetadataFlavorGoogle)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			logging.FromRequest(r).WithError(err).Error("error performing healthcheck request")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			logging.FromRequest(r).WithField("status_code", resp.StatusCode).Error("healthcheck request failed")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		b, err := io.ReadAll(resp.Body)
+		if err != nil {
+			logging.FromRequest(r).WithError(err).Error("error reading healthcheck response")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		if string(b) != opts.NodeName {
+			l := logging.FromRequest(r).WithFields(logrus.Fields{
+				"node_name": opts.NodeName,
+				"response":  string(b),
+			})
+			l.Error("healthcheck failed, response does not match expected node name")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
 
-	// start server
+	// start metadata server
+	l.Info("starting metadata server...")
 	go func() {
-		l.Info("starting server...")
-		if err := s.httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			l.WithError(err).Fatal("error listening and serving server")
+		if err := s.metadataServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			l.WithError(err).Fatal("error listening and serving metadata server")
+		}
+	}()
+
+	// start health server
+	l.Info("starting health server...")
+	go func() {
+		if err := s.healthServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			l.WithError(err).Fatal("error listening and serving health server")
 		}
 	}()
 
@@ -180,5 +232,13 @@ func New(ctx context.Context, opts ServerOptions) *Server {
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
-	return s.httpServer.Shutdown(ctx)
+	e1 := s.metadataServer.Shutdown(ctx)
+	e2 := s.healthServer.Shutdown(ctx)
+	if e1 == nil {
+		return e2
+	}
+	if e2 == nil {
+		return e1
+	}
+	return errors.Join(e1, e2)
 }

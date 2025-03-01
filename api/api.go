@@ -1,6 +1,6 @@
 // MIT License
 //
-// Copyright (c) 2024 Matheus Pimenta
+// Copyright (c) 2025 Matheus Pimenta
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -20,17 +20,22 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package main
+package api
 
-values: settings: {
-	projectID:                "gke-metadata-server"
-	workloadIdentityProvider: "projects/637293746831/locations/global/workloadIdentityPools/test-kind-cluster/providers/<TEST_ID>"
-	watchPods:                disableFallback: false
-	watchNode:                disableFallback: false
-	watchServiceAccounts:     disableFallback: false
-}
+const (
+	GroupCore = "gke-metadata-server.matheuscscp.io"
+	GroupNode = "node." + GroupCore
 
-values: image: {
-	repository: "ghcr.io/matheuscscp/gke-metadata-server/test"
-	digest:     "<CONTAINER_DIGEST>"
-}
+	GroupGKE = "iam.gke.io"
+
+	AnnotationRoutingMode             = GroupNode + "/routingMode"
+	AnnotationServiceAccountName      = GroupNode + "/serviceAccountName"
+	AnnotationServiceAccountNamespace = GroupNode + "/serviceAccountNamespace"
+
+	RoutingModeDefault  = RoutingModeBPF
+	RoutingModeBPF      = "eBPF"
+	RoutingModeLoopback = "Loopback"
+
+	GKEAnnotationServiceAccount = GroupGKE + "/gcp-service-account"
+	GKELabelNodeEnabled         = GroupGKE + "/gke-metadata-server-enabled"
+)

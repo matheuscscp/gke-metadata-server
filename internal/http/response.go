@@ -130,7 +130,7 @@ func RespondText(w http.ResponseWriter, r *http.Request, statusCode int, text st
 func setGKEMetadataServerHeaders(w http.ResponseWriter, contentType string, statusCode int) {
 	w.Header().Set("Content-Type", contentType)
 	if 200 <= statusCode && statusCode < 300 {
-		w.Header().Set(metadataFlavorHeader, metadataFlavorGoogle)
+		w.Header().Set(MetadataFlavorHeader, MetadataFlavorGoogle)
 		w.Header().Set("Server", "GKE Metadata Server")
 	}
 }

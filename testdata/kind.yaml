@@ -27,12 +27,14 @@ nodes:
 - role: worker
   labels:
     iam.gke.io/gke-metadata-server-enabled: "true"
-    hasHostNetworkServiceAccount: "true"
-    gke-metadata-server.matheuscscp.io/hostNetworkServiceAccountName: test-impersonated
-    gke-metadata-server.matheuscscp.io/hostNetworkServiceAccountNamespace: default
+    node.gke-metadata-server.matheuscscp.io/routingMode: eBPF
+    node.gke-metadata-server.matheuscscp.io/serviceAccountName: test-impersonated
+    node.gke-metadata-server.matheuscscp.io/serviceAccountNamespace: default
+    hasServiceAccount: "true"
 - role: worker
   labels:
     iam.gke.io/gke-metadata-server-enabled: "true"
-    hasHostNetworkServiceAccount: "false"
+    node.gke-metadata-server.matheuscscp.io/routingMode: Loopback
+    hasServiceAccount: "false"
 networking:
   disableDefaultCNI: true

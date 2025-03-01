@@ -57,8 +57,8 @@ type (
 )
 
 const (
-	metadataFlavorHeader = "Metadata-Flavor"
-	metadataFlavorGoogle = "Google"
+	MetadataFlavorHeader = "Metadata-Flavor"
+	MetadataFlavorGoogle = "Google"
 )
 
 func (f MetadataHandlerFunc) GetMetadata(w http.ResponseWriter, r *http.Request) (any, error) {
@@ -187,8 +187,8 @@ func (h *DirectoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	l := logging.FromRequest(r)
 
 	// check metadata flavor
-	if strings.HasPrefix(r.URL.Path, "/computeMetadata/v1") && r.Header.Get(metadataFlavorHeader) != metadataFlavorGoogle {
-		msg := fmt.Sprintf("Missing required header %q: %q\n", metadataFlavorHeader, metadataFlavorGoogle)
+	if strings.HasPrefix(r.URL.Path, "/computeMetadata/v1") && r.Header.Get(MetadataFlavorHeader) != MetadataFlavorGoogle {
+		msg := fmt.Sprintf("Missing required header %q: %q\n", MetadataFlavorHeader, MetadataFlavorGoogle)
 		w.WriteHeader(http.StatusForbidden)
 		w.Write([]byte(msg))
 		return

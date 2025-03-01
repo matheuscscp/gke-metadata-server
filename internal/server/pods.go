@@ -24,7 +24,6 @@ package server
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -62,7 +61,7 @@ func (s *Server) getPodGoogleServiceAccountEmail(w http.ResponseWriter, r *http.
 		pkghttp.RespondErrorf(w, r, http.StatusInternalServerError, format, err)
 		return nil, nil, fmt.Errorf(format, err)
 	}
-	email, err := serviceaccounts.GoogleEmail(sa)
+	email, err := serviceaccounts.GoogleServiceAccountEmail(sa)
 	if err != nil {
 		pkghttp.RespondError(w, r, http.StatusBadRequest, err)
 		return nil, nil, err
@@ -192,6 +191,13 @@ func (s *Server) getNodeServiceAccountReference(w http.ResponseWriter,
 
 	ctx := r.Context()
 
+	// check if client ip matches the current node's ip
+	if clientIP != s.opts.PodIP {
+		const format = "client ip address does not match any pods running on the node %s: %s"
+		pkghttp.RespondErrorf(w, r, http.StatusForbidden, format, s.opts.NodeName, clientIP)
+		return nil, nil, fmt.Errorf(format, s.opts.NodeName, clientIP)
+	}
+
 	// get current node
 	node, err := s.getCurrentNode(ctx)
 	if err != nil {
@@ -200,55 +206,18 @@ func (s *Server) getNodeServiceAccountReference(w http.ResponseWriter,
 		return nil, nil, fmt.Errorf(format, err)
 	}
 
-	// check if client ip matches the current node's pod cidr
-	var found bool
-	var errs []error
-	podIP := net.ParseIP(clientIP)
-	podCIDRs := node.Spec.PodCIDRs
-	if len(podCIDRs) == 0 {
-		podCIDRs = []string{node.Spec.PodCIDR}
-	}
-	for _, c := range podCIDRs {
-		if c == "" {
-			continue
-		}
-		_, podCIDR, err := net.ParseCIDR(c)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("error parsing pod cidr %s: %w", c, err))
-			continue
-		}
-		if podCIDR.Contains(podIP) {
-			found = true
-			break
-		}
-	}
-	if !found {
-		if len(errs) == 0 {
-			const format = "client ip address %s does not match any pods running on node %s"
-			pkghttp.RespondErrorf(w, r, http.StatusForbidden, format, clientIP, node.Name)
-			return nil, nil, fmt.Errorf(format, clientIP, node.Name)
-		}
-		err := errs[0]
-		if len(errs) > 1 {
-			err = errors.Join(errs...)
-		}
-		const format = "client ip address %s does not match any pods running on node %s (errors: %w)"
-		pkghttp.RespondErrorf(w, r, http.StatusForbidden, format, clientIP, node.Name, err)
-		return nil, nil, fmt.Errorf(format, clientIP, node.Name, err)
-	}
-
 	// get node service account reference
 	saRef := serviceaccounts.ReferenceFromNode(node)
 	if saRef == nil {
 		const format = "node does not have the service account annotations/labels: %s"
-		pkghttp.RespondErrorf(w, r, http.StatusForbidden, format, node.Name)
-		return nil, nil, fmt.Errorf(format, node.Name)
+		pkghttp.RespondErrorf(w, r, http.StatusForbidden, format, s.opts.NodeName)
+		return nil, nil, fmt.Errorf(format, s.opts.NodeName)
 	}
 
 	// update context, logger and request
 	ctx = context.WithValue(ctx, podServiceAccountReferenceContextKey{}, saRef)
 	l := logging.FromContext(ctx).WithField("node", logrus.Fields{
-		"name": node.Name,
+		"name": s.opts.NodeName,
 		"service_account": logrus.Fields{
 			"name":      saRef.Name,
 			"namespace": saRef.Namespace,

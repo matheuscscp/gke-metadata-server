@@ -35,12 +35,15 @@ import (
 		selector: matchLabels: #config.selector.labels
 		template: {
 			metadata: {
-				labels: #config.selector.labels
+				labels: #config.selector.labels & {
+					app: "gke-metadata-server"
+				}
 				if #config.pod.annotations != _|_ {
 					annotations: #config.pod.annotations
 				}
 			}
 			spec: {
+				hostNetwork:        true
 				serviceAccountName: #config.#namespacedMetadata.name
 				priorityClassName:  "system-node-critical"
 				nodeSelector: {
@@ -70,6 +73,9 @@ import (
 						}
 						if #config.settings.serverPort != _|_ {
 							"--server-port=\(#config.settings.serverPort)"
+						}
+						if #config.settings.healthPort != _|_ {
+							"--health-port=\(#config.settings.healthPort)"
 						}
 						if #config.settings.watchPods.enable {
 							"--watch-pods"
@@ -116,19 +122,24 @@ import (
 						},
 					]
 					ports: [{
-						name:          "http"
-						containerPort: #config.settings.serverPort
+						name:          "health"
+						containerPort: #config.settings.healthPort
 						protocol:      "TCP"
 					}]
-					#probes: {
+					livenessProbe: {
 						initialDelaySeconds: 3
 						httpGet: {
 							path: "/healthz"
-							port: "http"
+							port: "health"
 						}
 					}
-					readinessProbe: #probes
-					livenessProbe:  #probes
+					readinessProbe: {
+						initialDelaySeconds: 3
+						httpGet: {
+							path: "/readyz"
+							port: "health"
+						}
+					}
 					volumeMounts: [{
 						name:      "tmpfs"
 						mountPath: "/tmp"

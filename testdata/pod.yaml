@@ -61,8 +61,6 @@ spec:
   # address as the hostname "metadata.google.internal". Sometimes they also hardcode the
   # IP address. Sometimes they only hardcode the IP address, in which case this setting
   # would not be needed. It all depends on what library your Pod is using. Test it!
-  # The emulator uses eBPF magic 🐝 to redirect traffic from your Pods targeting this IP
-  # address to the emulator.
   hostAliases:
   - hostnames: [metadata.google.internal]
     ip: 169.254.169.254
