@@ -131,10 +131,3 @@ spec:
             port: health
         resources:
           {{- toYaml .Values.resources | nindent 10 }}
-        volumeMounts:
-        - name: tmpfs
-          mountPath: /tmp
-      volumes:
-      - name: tmpfs
-        emptyDir:
-          medium: Memory
