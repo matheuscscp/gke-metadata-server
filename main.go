@@ -42,6 +42,7 @@ import (
 	watchpods "github.com/matheuscscp/gke-metadata-server/internal/pods/watch"
 	"github.com/matheuscscp/gke-metadata-server/internal/routing"
 	"github.com/matheuscscp/gke-metadata-server/internal/server"
+	"github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts"
 	getserviceaccount "github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts/get"
 	watchserviceaccounts "github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts/watch"
 	cacheserviceaccounttokens "github.com/matheuscscp/gke-metadata-server/internal/serviceaccounttokens/cache"
@@ -69,6 +70,8 @@ func main() {
 		stringLogLevel                      string
 		serverPort                          int
 		healthPort                          int
+		serviceAccountName                  string
+		serviceAccountNamespace             string
 		projectID                           string
 		workloadIdentityProvider            string
 		watchPods                           bool
@@ -92,6 +95,10 @@ func main() {
 		"Network address where the metadata server must listen on. Ignored on nodes annotated/labeled with loopback routing")
 	flags.IntVar(&healthPort, "health-port", 8081,
 		"Network address where the health server must listen on")
+	flags.StringVar(&serviceAccountName, "service-account-name", "gke-metadata-server",
+		"Name of the service account of the emulator for issuing Google Identity Tokens")
+	flags.StringVar(&serviceAccountNamespace, "service-account-namespace", "kube-system",
+		"Namespace of the service account of the emulator for issuing Google Identity Tokens")
 	flags.StringVar(&projectID, "project-id", "",
 		"Project ID of the GCP project where the GCP Workload Identity Provider is configured")
 	flags.StringVar(&workloadIdentityProvider, "workload-identity-provider", "",
@@ -140,6 +147,16 @@ func main() {
 	logging.InitKLog(l, logLevel)
 
 	// validate inputs
+	if serviceAccountName == "" {
+		l.Fatal("--service-account-name must be specified")
+	}
+	if serviceAccountNamespace == "" {
+		l.Fatal("--service-account-namespace must be specified")
+	}
+	serviceAccount := serviceaccounts.Reference{
+		Name:      serviceAccountName,
+		Namespace: serviceAccountNamespace,
+	}
 	nodeName := os.Getenv("NODE_NAME")
 	if nodeName == "" {
 		l.Fatal("NODE_NAME environment variable must be specified")
@@ -251,6 +268,7 @@ func main() {
 			Concurrency:     cacheTokensConcurrency,
 		})
 		defer p.Close()
+		p.AddPodServiceAccount(&serviceAccount)
 		if wp != nil {
 			wp.AddListener(p)
 		}
@@ -295,6 +313,7 @@ func main() {
 
 	// start server
 	s := server.New(ctx, server.ServerOptions{
+		ServiceAccount:       serviceAccount,
 		NodeName:             nodeName,
 		PodIP:                podIP,
 		Addr:                 serverAddr,

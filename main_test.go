@@ -217,17 +217,6 @@ func applyEmulator(t *testing.T, valuesFile string) {
 		t.Fatalf("error applying emulator from %s: %v: %s", valuesFile, err, string(b))
 	}
 
-	// annotate sa
-	cmd = exec.Command(
-		"kubectl",
-		"--context", "kind-gke-metadata-server",
-		"--namespace", "kube-system",
-		"annotate", "sa", "gke-metadata-server",
-		"iam.gke.io/gcp-service-account=test-sa@gke-metadata-server.iam.gserviceaccount.com")
-	if b, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("error annotating emulator service account: %v: %s", err, string(b))
-	}
-
 	// wait
 	for {
 		cmd := exec.Command(

@@ -44,13 +44,11 @@ resource "google_service_account_iam_binding" "test_workload_identity_users" {
   ]
 }
 
-# this allows an OAuth 2.0 Access Token for the Google Service Account to be exchanged
-# for an OpenID Connect ID Token for the Google Service Account. this is necessary
-# for the GET /computeMetadata/v1/instance/service-accounts/*/identity API to work
-resource "google_service_account_iam_member" "openid_token_creator" {
-  service_account_id = google_service_account.test.name
-  role               = "roles/iam.serviceAccountOpenIdTokenCreator"
-  member             = google_service_account.test.member
+# this allows the emulator to issue Google Identity Tokens
+resource "google_project_iam_member" "openid_token_creator" {
+  project = data.google_project.gke_metadata_server.name
+  role    = "roles/iam.serviceAccountOpenIdTokenCreator"
+  member  = "${local.k8s_principal_prefix}:kube-system:gke-metadata-server"
 }
 
 resource "google_storage_bucket" "test" {
