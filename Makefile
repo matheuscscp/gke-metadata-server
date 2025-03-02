@@ -114,9 +114,11 @@ build:
 	docker push ${TEST_IMAGE}:container | tee docker-push.logs
 	cat docker-push.logs | grep digest: | awk '{print $$3}' > container-digest.txt
 
-	mv .dockerignore .dockerignore.ignore
+	mv .dockerignore .dockerignore.bkp
+	mv .dockerignore.test .dockerignore
 	docker build . -t ${TEST_IMAGE}:go-test -f Dockerfile.test
-	mv .dockerignore.ignore .dockerignore
+	mv .dockerignore .dockerignore.test
+	mv .dockerignore.bkp .dockerignore
 	docker push ${TEST_IMAGE}:go-test | tee docker-push.logs
 	cat docker-push.logs | grep digest: | awk '{print $$3}' > go-test-digest.txt
 

@@ -58,9 +58,9 @@ func (p *Provider) createTokens(ctx context.Context, saRef *serviceaccounts.Refe
 		return nil, nil, fmt.Errorf("error getting kubernetes service account: %w", err)
 	}
 
-	email, err := serviceaccounts.GoogleEmail(sa)
+	email, err := serviceaccounts.GoogleServiceAccountEmail(sa)
 	if err != nil {
-		return nil, nil, fmt.Errorf("error getting google service account from kubernetes service account: %w", err)
+		return nil, nil, fmt.Errorf("error getting google service account email from kubernetes service account: %w", err)
 	}
 
 	saToken, saTokenExpiration, err := p.opts.Source.GetServiceAccountToken(ctx, saRef)

@@ -27,6 +27,8 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/matheuscscp/gke-metadata-server/api"
+
 	"github.com/golang-jwt/jwt/v5"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -36,15 +38,9 @@ type Reference struct {
 	Namespace string `json:"namespace"`
 }
 
-var ErrGKEAnnotationInvalid = fmt.Errorf("gke annotation %q has invalid google service account email", gkeAnnotation)
-
-const (
-	gkeAnnotation = "iam.gke.io/gcp-service-account"
-
-	emulatorAPIGroup        = "gke-metadata-server.matheuscscp.io"
-	serviceAccountName      = emulatorAPIGroup + "/hostNetworkServiceAccountName"
-	serviceAccountNamespace = emulatorAPIGroup + "/hostNetworkServiceAccountNamespace"
-)
+var ErrGKEAnnotationInvalid = fmt.Errorf(
+	"gke annotation %q has invalid google service account email",
+	api.GKEAnnotationServiceAccount)
 
 var googleEmailRegex = regexp.MustCompile(`^[a-zA-Z0-9-]+@[a-zA-Z0-9-]+\.iam\.gserviceaccount\.com$`)
 
@@ -72,9 +68,9 @@ func ReferenceFromPod(pod *corev1.Pod) *Reference {
 //
 // The ServiceAccount reference is retrieved from the following pair of annotations or labels:
 //
-// gke-metadata-server.matheuscscp.io/hostNetworkServiceAccountName
+//	{nodeAPIGroup}/serviceAccountName
 //
-// gke-metadata-server.matheuscscp.io/hostNetworkServiceAccountNamespace
+//	{nodeAPIGroup}/serviceAccountNamespace
 //
 // Only Pods running on the host network should use this ServiceAccount.
 func ReferenceFromNode(node *corev1.Node) *Reference {
@@ -95,12 +91,12 @@ func ReferenceFromToken(token string) *Reference {
 	return &Reference{Namespace: s[2], Name: s[3]}
 }
 
-// GoogleEmail returns the Google service account email from the same annotation
+// GoogleServiceAccountEmail returns the Google service account email from the same annotation
 // used in native GCP Workload Identity Federation for GKE. The annotation is:
 //
-// iam.gke.io/gcp-service-account
-func GoogleEmail(sa *corev1.ServiceAccount) (*string, error) {
-	v, ok := sa.Annotations[gkeAnnotation]
+//	iam.gke.io/gcp-service-account
+func GoogleServiceAccountEmail(sa *corev1.ServiceAccount) (*string, error) {
+	v, ok := sa.Annotations[api.GKEAnnotationServiceAccount]
 	if !ok {
 		return nil, nil
 	}
@@ -114,11 +110,11 @@ func getServiceAccountReference(m map[string]string) *Reference {
 	if m == nil {
 		return nil
 	}
-	name, ok := m[serviceAccountName]
+	name, ok := m[api.AnnotationServiceAccountName]
 	if !ok {
 		return nil
 	}
-	namespace, ok := m[serviceAccountNamespace]
+	namespace, ok := m[api.AnnotationServiceAccountNamespace]
 	if !ok {
 		return nil
 	}

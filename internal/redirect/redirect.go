@@ -28,6 +28,8 @@ import (
 	"fmt"
 	"net/netip"
 
+	"github.com/matheuscscp/gke-metadata-server/internal/logging"
+
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 )
@@ -35,52 +37,45 @@ import (
 //go:generate sh -c "bpftool btf dump file /sys/kernel/btf/vmlinux format c > ../../ebpf/vmlinux.h"
 //go:generate go run github.com/cilium/ebpf/cmd/bpf2go -type Config redirect ../../ebpf/redirect.c
 
-type BPF struct {
-	objs redirectObjects
-	link link.Link
-}
+func LoadAndAttach(emulatorIP netip.Addr, emulatorPort int) func() (func() error, error) {
+	return func() (func() error, error) {
+		var objs redirectObjects
+		if err := loadRedirectObjects(&objs, nil); err != nil {
+			return nil, fmt.Errorf("error loading redirect eBPF redirect objects: %w", err)
+		}
 
-func LoadAndAttachBPF(emulatorIP netip.Addr, emulatorPort int, debug bool) (*BPF, error) {
-	var b BPF
+		emulatorIPv4 := emulatorIP.As4()
+		config := redirectConfig{
+			EmulatorIp:   binary.BigEndian.Uint32(emulatorIPv4[:]),
+			EmulatorPort: uint16(emulatorPort),
+		}
+		if logging.Debug() {
+			config.Debug = 1
+		}
+		var key uint32 = 0
+		if err := objs.redirectMaps.MapConfig.Update(&key, &config, ebpf.UpdateAny); err != nil {
+			return nil, fmt.Errorf("error updating redirect eBPF config map: %w", err)
+		}
 
-	if err := loadRedirectObjects(&b.objs, nil); err != nil {
-		return nil, fmt.Errorf("error loading redirect eBPF redirect objects: %w", err)
-	}
+		link, err := link.AttachCgroup(link.CgroupOptions{
+			Path:    "/sys/fs/cgroup",
+			Attach:  ebpf.AttachCGroupInet4Connect,
+			Program: objs.RedirectConnect4,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("error attaching redirect eBPF program to cgroup: %w", err)
+		}
 
-	emulatorIPv4 := emulatorIP.As4()
-	config := redirectConfig{
-		EmulatorIp:   binary.BigEndian.Uint32(emulatorIPv4[:]),
-		EmulatorPort: uint16(emulatorPort),
+		return func() (err error) {
+			e1 := link.Close()
+			e2 := objs.Close()
+			if e1 == nil {
+				return e2
+			}
+			if e2 == nil {
+				return e1
+			}
+			return errors.Join(e1, e2)
+		}, nil
 	}
-	if debug {
-		config.Debug = 1
-	}
-	var key uint32 = 0
-	if err := b.objs.redirectMaps.MapConfig.Update(&key, &config, ebpf.UpdateAny); err != nil {
-		return nil, fmt.Errorf("error updating redirect eBPF config map: %w", err)
-	}
-
-	var err error
-	b.link, err = link.AttachCgroup(link.CgroupOptions{
-		Path:    "/sys/fs/cgroup",
-		Attach:  ebpf.AttachCGroupInet4Connect,
-		Program: b.objs.RedirectConnect4,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("error attaching redirect eBPF program to cgroup: %w", err)
-	}
-
-	return &b, nil
-}
-
-func (b *BPF) Close() error {
-	e1 := b.link.Close()
-	e2 := b.objs.Close()
-	if e1 == nil {
-		return e2
-	}
-	if e2 == nil {
-		return e1
-	}
-	return errors.Join(e1, e2)
 }

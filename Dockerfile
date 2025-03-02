@@ -30,6 +30,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY main.go ./
+COPY ./api/ ./api/
 COPY ./internal/ ./internal/
 COPY ./ebpf/ ./ebpf/
 

@@ -1,3 +1,2 @@
 internal/redirect/redirect_bpf*
 ebpf/vmlinux.h
-**/*_test.go

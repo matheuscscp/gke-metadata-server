@@ -31,14 +31,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/matheuscscp/gke-metadata-server/api"
 	"github.com/matheuscscp/gke-metadata-server/internal/googlecredentials"
 	"github.com/matheuscscp/gke-metadata-server/internal/logging"
+	"github.com/matheuscscp/gke-metadata-server/internal/loopback"
 	"github.com/matheuscscp/gke-metadata-server/internal/metrics"
 	getnode "github.com/matheuscscp/gke-metadata-server/internal/node/get"
 	watchnode "github.com/matheuscscp/gke-metadata-server/internal/node/watch"
 	listpods "github.com/matheuscscp/gke-metadata-server/internal/pods/list"
 	watchpods "github.com/matheuscscp/gke-metadata-server/internal/pods/watch"
-	"github.com/matheuscscp/gke-metadata-server/internal/redirect"
+	"github.com/matheuscscp/gke-metadata-server/internal/routing"
 	"github.com/matheuscscp/gke-metadata-server/internal/server"
 	getserviceaccount "github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts/get"
 	watchserviceaccounts "github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts/watch"
@@ -66,6 +68,7 @@ func main() {
 	var (
 		stringLogLevel                      string
 		serverPort                          int
+		healthPort                          int
 		projectID                           string
 		workloadIdentityProvider            string
 		watchPods                           bool
@@ -86,7 +89,9 @@ func main() {
 	flags.StringVar(&stringLogLevel, "log-level", logrus.InfoLevel.String(),
 		"Log level. Accepted values: "+acceptedLogLevels)
 	flags.IntVar(&serverPort, "server-port", 8080,
-		"Network address where the metadata server must listen on")
+		"Network address where the metadata server must listen on. Ignored on nodes annotated/labeled with loopback routing")
+	flags.IntVar(&healthPort, "health-port", 8081,
+		"Network address where the health server must listen on")
 	flags.StringVar(&projectID, "project-id", "",
 		"Project ID of the GCP project where the GCP Workload Identity Provider is configured")
 	flags.StringVar(&workloadIdentityProvider, "workload-identity-provider", "",
@@ -134,7 +139,7 @@ func main() {
 	ctx = logging.IntoContext(ctx, l)
 	logging.InitKLog(l, logLevel)
 
-	// validate input
+	// validate inputs
 	nodeName := os.Getenv("NODE_NAME")
 	if nodeName == "" {
 		l.Fatal("NODE_NAME environment variable must be specified")
@@ -167,13 +172,6 @@ func main() {
 		l.WithError(err).Fatal("error creating kubernetes client")
 	}
 
-	// install ebpf redirect program
-	redirBPF, err := redirect.LoadAndAttachBPF(emulatorIP, serverPort, logging.Debug())
-	if err != nil {
-		l.WithError(err).Fatal("error loading eBPF redirect program")
-	}
-	defer redirBPF.Close()
-
 	metricsRegistry := metrics.NewRegistry()
 
 	// create pod provider
@@ -203,6 +201,7 @@ func main() {
 		NodeName:   nodeName,
 		KubeClient: kubeClient,
 	})
+	nodeGetter := node
 	var wn *watchnode.Provider
 	if watchNode {
 		opts := watchnode.ProviderOptions{
@@ -264,7 +263,7 @@ func main() {
 		serviceAccountTokens = p
 	}
 
-	// start server
+	// start watches
 	if wp != nil {
 		wp.Start(ctx)
 	}
@@ -274,9 +273,32 @@ func main() {
 	if wsa != nil {
 		wsa.Start(ctx)
 	}
+
+	// load and attach network route based on node annotation
+	curNode, err := nodeGetter.Get(ctx)
+	if err != nil {
+		l.WithError(err).Fatal("error getting current node")
+	}
+	routingMode, closeRoute, err := routing.LoadAndAttach(curNode, emulatorIP, serverPort)
+	if err != nil {
+		l.WithField("routing", routingMode).WithError(err).Fatal("error loading and attaching network route")
+	}
+	defer func() {
+		if err := closeRoute(); err != nil {
+			l.WithField("routing", routingMode).WithError(err).Error("error closing network route")
+		}
+	}()
+	serverAddr := fmt.Sprintf(":%d", serverPort)
+	if routingMode == api.RoutingModeLoopback {
+		serverAddr = loopback.GKEMetadataServerAddr
+	}
+
+	// start server
 	s := server.New(ctx, server.ServerOptions{
 		NodeName:             nodeName,
-		ServerPort:           serverPort,
+		PodIP:                podIP,
+		Addr:                 serverAddr,
+		HealthPort:           healthPort,
 		Pods:                 pods,
 		Node:                 node,
 		ServiceAccounts:      serviceAccounts,
@@ -288,9 +310,10 @@ func main() {
 	})
 
 	<-ctx.Done()
+	l.Info("signal received, shutting down server")
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownGracePeriod)
 	defer cancel()
 	if err := s.Shutdown(ctx); err != nil {
-		l.WithError(err).Error("error in server graceful shutdown")
+		l.WithError(err).Error("error shutting down server")
 	}
 }

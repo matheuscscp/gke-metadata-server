@@ -87,7 +87,7 @@ func TestEndToEnd(t *testing.T) {
 		},
 		{
 			name:           "timoni with watch",
-			emulatorValues: "timoni-watch.cue",
+			emulatorValues: "timoni.cue",
 			pods: []pod{
 				{
 					name:               "test-impersonation",
@@ -102,18 +102,25 @@ func TestEndToEnd(t *testing.T) {
 					file:               "pod-gcloud.yaml",
 					serviceAccountName: "test",
 				},
+				{
+					name:               "test-loopback-routing",
+					serviceAccountName: "test-impersonated",
+					nodeSelector: map[string]string{
+						"node.gke-metadata-server.matheuscscp.io/routingMode": "Loopback",
+					},
+				},
 				// for host network pods the service account is retrieved from the node
 				{
 					name:               "test-host-network",
 					serviceAccountName: "",
 					hostNetwork:        true,
-					nodeSelector:       map[string]string{"hasHostNetworkServiceAccount": "true"},
+					nodeSelector:       map[string]string{"hasServiceAccount": "true"},
 				},
 				{
 					name:               "test-host-network-on-node-without-service-account",
 					serviceAccountName: "",
 					hostNetwork:        true,
-					nodeSelector:       map[string]string{"hasHostNetworkServiceAccount": "false"},
+					nodeSelector:       map[string]string{"hasServiceAccount": "false"},
 					expectedExitCode:   1,
 				},
 			},

@@ -41,6 +41,9 @@ import (
  	// serverPort is the TCP port for gke-metadata-server to listen HTTP on.
 	serverPort: int & >0 & <65536 | *8080
 
+ 	// healthPort is the TCP port for the health server to listen HTTP on.
+	healthPort: int & >0 & <65536 | *8081
+
 	// watchPods is the watch settings for gke-metadata-server to watch Pods running on the same Node.
 	watchPods: #watchSettings
 

@@ -215,7 +215,7 @@ If you are using the Timoni CLI to deploy Modules/Bundles you can automate the i
 using [Keyless Verification](https://timoni.sh/cue/module/signing/#sign-with-cosign-keyless).
 *(Timoni will have a Flux controller in the future.)*
 
-## Security Risks and Limitations
+## Limitations and Security Risks
 
 ### Pod identification by IP address
 
@@ -242,12 +242,12 @@ uniquely identified by the emulator through the client IP address reported in th
 request (like mentioned in the previous section).
 
 If your use case requires, Pods running on the host network are allowed to use a
-***shared*** Kubernetes ServiceAccount configured through annotations/labels on the
-Node:
+***shared*** Kubernetes ServiceAccount configured through the following pair of
+annotations or labels on the Node:
 
 ```yaml
-gke-metadata-server.matheuscscp.io/hostNetworkServiceAccountName: <k8s service account name>
-gke-metadata-server.matheuscscp.io/hostNetworkServiceAccountNamespace: <k8s service account namespace>
+node.gke-metadata-server.matheuscscp.io/serviceAccountName: <name>
+node.gke-metadata-server.matheuscscp.io/serviceAccountNamespace: <namespace>
 ```
 
 Annotations are preferred over labels because they are less impactful to etcd since
@@ -264,16 +264,19 @@ to the Kubernetes documentation for more information.
 your security requirements and the risks of sharing identities between workloads
 in your cluster.*
 
-### eBPF magic 🐝
+### Routing Modes
 
-***Attention:*** The emulator Pod installs an eBPF hook in the kernel of the Node it
-runs on. This hook modifies the input to `connect()` syscalls to target the emulator
-address when the original destination is `169.254.169.254:80`. This is the address
-hard-coded inside the Google libraries for fetching the temporary tokens for apps.
-This is how traffic from the client Pods reaches the emulator, and is also how we
-ensure the *unencrypted* communication between the emulator and a client Pod to never
-leave the Node they are both running on. In other words, an emulator Pod only serves
-a client Pod if they are both running on the same Node. GKE has this same guarantee.
+The Google libraries attempt to retrieve tokens from the hard-coded endpoint
+`169.254.169.254:80`. In order to make this work, the emulator must intercept
+the traffic from the client Pods to this endpoint. To solve this problem, the
+emulator supports two routing modes: `eBPF` and `Loopback`. See details of
+each mode below. In both modes the *unencrypted* communication between the
+emulator Pod and a client Pod never leaves the Node where they are both
+running on. This is exactly how the native GKE implementation works.
+
+The annotation or label `node.gke-metadata-server.matheuscscp.io/routingMode`
+can be added to a Node in order to configure the routing mode of the emulator
+in that particular Node. The default is `eBPF`.
 
 If you are using similar tools or workload identity features of managed Kubernetes
 services from other clouds, *this configuration may have a direct conflict with other
@@ -281,9 +284,39 @@ such tools or features.* It's a recurrent practice among cloud providers using t
 hard-coded IP address and port to implement workload identity. If your use case requires,
 the recommended solution is to use Node pooling/grouping features from your Kubernetes
 provider to isolate the workloads that need to use the emulator as mentioned in the
-[Usage](#usage) section (remember to add the label
+[Usage](#usage) section. Remember to add the label
 `iam.gke.io/gke-metadata-server-enabled: "true"` to such Nodes and appropriate Node
-selectors/tolerations to your Pods).
+selectors/tolerations to your Pods.
+
+#### `eBPF`
+
+In this routing mode the emulator hooks an eBPF program to the `connect()` syscall.
+The eBPF program looks at the destination address and, if it matches the hard-coded
+address mentioned above, modifies the address to the actual address of the emulator.
+
+This mode may have conflicts with other eBPF-based tools running in the cluster.
+It works well with a default installation of Cilium, but if you are using Cilium
+to replace `kube-proxy`
+([docs](https://docs.cilium.io/en/stable/network/kubernetes/kubeproxy-free/))
+then this mode will have a direct conflict with your setup, since for this Cilium
+feature to work it needs to hook to many additional points, including the `connect()`
+syscall.
+
+The advantage of this mode is that the emulator can bind to any port, not just port 80.
+This is because we modify the destination address of connections targeting our endpoint
+of interest, so we have the freedom to choose any port.
+
+#### `Loopback`
+
+In this routing mode the emulator adds the hard-coded address mentioned above to the
+`lo` interface of the Node with the label `lo:gke-md-sv` and the *host* scope. This
+way the emulator can bind to the hard-coded address and port 80, and the traffic from
+the client Pods to this address will be routed to the emulator.
+
+This mode does not clash with other eBPF-based tools running in the cluster, but it
+has the disadvantage of not being able to bind to any port, only port 80. And for
+this to work properly the emulator Pods need to run on the host network, so they
+occupy port 80 in the network namespace of the Node.
 
 ### Token Cache
 
@@ -295,7 +328,9 @@ This means that even if you revoke the required permissions for the Kubernetes S
 to issue those tokens, the client Pods will still get those tokens from the emulator until
 they expire. This is a limitation of how the permissions are evaluated: they are evaluated
 only when the tokens are issued, which is what caching tries to avoid. If your use case
-requires immediate revocation of permissions, then you should not use token caching.
+requires immediate revocation of permissions, then you should not use token caching. The
+Helm Chart and Timoni Module distributed here have options to disable token caching, look
+at their respective values APIs.
 
 Tokens usually expire in at most one hour.
 
