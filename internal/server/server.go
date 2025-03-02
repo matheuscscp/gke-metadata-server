@@ -51,6 +51,7 @@ type (
 	}
 
 	ServerOptions struct {
+		ServiceAccount       serviceaccounts.Reference
 		NodeName             string
 		PodIP                string
 		Addr                 string

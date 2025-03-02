@@ -61,7 +61,8 @@ spec:
         securityContext:
           privileged: true
         args:
-        - server
+        - --service-account-name=gke-metadata-server
+        - --service-account-namespace=kube-system
         - --project-id={{ .Values.config.projectID }}
         - --workload-identity-provider={{ .Values.config.workloadIdentityProvider }}
         {{- if .Values.config.serverPort }}

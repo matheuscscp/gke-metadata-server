@@ -24,7 +24,6 @@ package createserviceaccounttoken
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/matheuscscp/gke-metadata-server/internal/googlecredentials"
@@ -79,26 +78,25 @@ func (p *Provider) GetGoogleAccessToken(ctx context.Context, saToken string, goo
 	return token.AccessToken, token.Expiry, nil
 }
 
-func (p *Provider) GetGoogleIdentityToken(ctx context.Context, saToken, googleEmail, audience string) (string, time.Time, error) {
-	accessToken, err := p.opts.GoogleCredentialsConfig.NewToken(ctx, saToken, &googleEmail)
-	if err != nil {
-		return "", time.Time{}, err
-	}
-	accessTokenSource := oauth2.StaticTokenSource(accessToken)
+func (p *Provider) GetGoogleIdentityToken(ctx context.Context, _ *serviceaccounts.Reference,
+	accessToken, googleEmail, audience string) (string, time.Time, error) {
 
 	conf := impersonate.IDTokenConfig{
 		Audience:        audience,
 		TargetPrincipal: googleEmail,
 		IncludeEmail:    true,
 	}
+	accessTokenSource := oauth2.StaticTokenSource(&oauth2.Token{
+		AccessToken: accessToken,
+	})
 	idTokenSource, err := impersonate.IDTokenSource(ctx, conf, option.WithTokenSource(accessTokenSource))
 	if err != nil {
-		return "", time.Time{}, fmt.Errorf("error creating google identity token source: %w", err)
+		return "", time.Time{}, err
 	}
 
 	idToken, err := idTokenSource.Token()
 	if err != nil {
-		return "", time.Time{}, fmt.Errorf("error creating google identity token: %w", err)
+		return "", time.Time{}, err
 	}
 
 	return idToken.AccessToken, idToken.Expiry, nil

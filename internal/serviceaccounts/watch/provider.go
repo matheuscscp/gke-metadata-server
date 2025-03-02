@@ -93,20 +93,20 @@ func NewProvider(ctx context.Context, opts ProviderOptions) *Provider {
 	}
 
 	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
+		AddFunc: func(obj any) {
 			numServiceAccounts.Inc()
 			saRef := serviceaccounts.ReferenceFromObject(obj.(*corev1.ServiceAccount))
 			for _, l := range p.listeners {
 				l.UpdateServiceAccount(saRef)
 			}
 		},
-		UpdateFunc: func(oldObj, newObj interface{}) {
+		UpdateFunc: func(oldObj, newObj any) {
 			saRef := serviceaccounts.ReferenceFromObject(newObj.(*corev1.ServiceAccount))
 			for _, l := range p.listeners {
 				l.UpdateServiceAccount(saRef)
 			}
 		},
-		DeleteFunc: func(obj interface{}) {
+		DeleteFunc: func(obj any) {
 			numServiceAccounts.Dec()
 			saRef := serviceaccounts.ReferenceFromObject(obj.(*corev1.ServiceAccount))
 			for _, l := range p.listeners {

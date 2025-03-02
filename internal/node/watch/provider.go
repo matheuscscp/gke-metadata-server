@@ -77,13 +77,13 @@ func NewProvider(opts ProviderOptions) *Provider {
 	}
 
 	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
+		AddFunc: func(obj any) {
 			saRef := serviceaccounts.ReferenceFromNode(obj.(*corev1.Node))
 			for _, l := range p.listeners {
 				l.UpdateNodeServiceAccount(saRef)
 			}
 		},
-		UpdateFunc: func(oldObj, newObj interface{}) {
+		UpdateFunc: func(oldObj, newObj any) {
 			saRef := serviceaccounts.ReferenceFromNode(newObj.(*corev1.Node))
 			for _, l := range p.listeners {
 				l.UpdateNodeServiceAccount(saRef)

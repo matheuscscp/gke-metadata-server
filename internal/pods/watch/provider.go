@@ -87,7 +87,7 @@ func NewProvider(opts ProviderOptions) *Provider {
 		corev1.NamespaceAll,
 		opts.ResyncPeriod,
 		cache.Indexers{
-			ipIndex: func(obj interface{}) ([]string, error) {
+			ipIndex: func(obj any) ([]string, error) {
 				if podIP := obj.(*corev1.Pod).Status.PodIP; podIP != "" {
 					return []string{podIP}, nil
 				}
@@ -112,14 +112,14 @@ func NewProvider(opts ProviderOptions) *Provider {
 	}
 
 	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
+		AddFunc: func(obj any) {
 			numPods.Inc()
 			saRef := serviceaccounts.ReferenceFromPod(obj.(*corev1.Pod))
 			for _, l := range p.listeners {
 				l.AddPodServiceAccount(saRef)
 			}
 		},
-		DeleteFunc: func(obj interface{}) {
+		DeleteFunc: func(obj any) {
 			numPods.Dec()
 			saRef := serviceaccounts.ReferenceFromPod(obj.(*corev1.Pod))
 			for _, l := range p.listeners {

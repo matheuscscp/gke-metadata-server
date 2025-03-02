@@ -140,8 +140,9 @@ func (p *Provider) GetGoogleAccessToken(ctx context.Context, saToken string, goo
 	return token.token, token.expiration(), nil
 }
 
-func (p *Provider) GetGoogleIdentityToken(ctx context.Context, saToken, googleEmail, audience string) (string, time.Time, error) {
-	saRef := serviceaccounts.ReferenceFromToken(saToken)
+func (p *Provider) GetGoogleIdentityToken(ctx context.Context, saRef *serviceaccounts.Reference,
+	accessToken, googleEmail, audience string) (string, time.Time, error) {
+
 	ref := googleIDTokenReference{*saRef, googleEmail, audience}
 
 	// check cache first
@@ -161,7 +162,7 @@ func (p *Provider) GetGoogleIdentityToken(ctx context.Context, saToken, googleEm
 		return "", time.Time{}, fmt.Errorf("process terminated while acquiring semaphore: %w", p.ctx.Err())
 	}
 
-	tokenString, expiration, err := p.opts.Source.GetGoogleIdentityToken(ctx, saToken, googleEmail, audience)
+	tokenString, expiration, err := p.opts.Source.GetGoogleIdentityToken(ctx, saRef, accessToken, googleEmail, audience)
 
 	// release concurrency semaphore
 	<-p.semaphore

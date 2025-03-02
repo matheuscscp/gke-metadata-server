@@ -26,6 +26,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/matheuscscp/gke-metadata-server/internal/logging"
@@ -219,14 +220,7 @@ func (h *DirectoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				return
 			}
-			var found bool
-			for _, e := range entries {
-				if e == piece {
-					found = true
-					break
-				}
-			}
-			if !found {
+			if !slices.Contains(entries, piece) {
 				RespondNotFound(w)
 				l.WithField("dir_path", dirPath).Debug("dynamic directory entry not found")
 				return

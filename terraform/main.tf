@@ -34,3 +34,7 @@ locals {
   project      = "gke-metadata-server"
   wi_user_role = "roles/iam.workloadIdentityUser"
 }
+
+data "google_project" "gke_metadata_server" {
+  project_id = "gke-metadata-server"
+}

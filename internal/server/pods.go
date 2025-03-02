@@ -29,6 +29,7 @@ import (
 	"net/http"
 	"net/netip"
 	"strings"
+	"time"
 
 	pkghttp "github.com/matheuscscp/gke-metadata-server/internal/http"
 	"github.com/matheuscscp/gke-metadata-server/internal/logging"
@@ -47,15 +48,14 @@ type (
 // getPodGoogleServiceAccountEmail gets the Google Service Account email associated with the given pod.
 // If there's an error this function sends the response to the client.
 func (s *Server) getPodGoogleServiceAccountEmail(w http.ResponseWriter, r *http.Request) (*string, *http.Request, error) {
-	ctx := r.Context()
-	if v := ctx.Value(podGoogleServiceAccountEmailContextKey{}); v != nil {
+	if v := r.Context().Value(podGoogleServiceAccountEmailContextKey{}); v != nil {
 		return v.(*string), r, nil
 	}
 	saRef, r, err := s.getPodServiceAccountReference(w, r)
 	if err != nil {
 		return nil, nil, err
 	}
-	sa, err := s.opts.ServiceAccounts.Get(ctx, saRef)
+	sa, err := s.opts.ServiceAccounts.Get(r.Context(), saRef)
 	if err != nil {
 		const format = "error getting pod service account: %w"
 		pkghttp.RespondErrorf(w, r, http.StatusInternalServerError, format, err)
@@ -66,7 +66,7 @@ func (s *Server) getPodGoogleServiceAccountEmail(w http.ResponseWriter, r *http.
 		pkghttp.RespondError(w, r, http.StatusBadRequest, err)
 		return nil, nil, err
 	}
-	ctx = context.WithValue(ctx, podGoogleServiceAccountEmailContextKey{}, email)
+	ctx := context.WithValue(r.Context(), podGoogleServiceAccountEmailContextKey{}, email)
 	l := logging.FromRequest(r)
 	if email != nil {
 		l = l.WithField("pod_google_service_account_email", *email)
@@ -117,6 +117,27 @@ func (s *Server) getPodServiceAccountToken(w http.ResponseWriter, r *http.Reques
 	return token, r, nil
 }
 
+// getPodGoogleAccessToken creates a Google Access Token for the
+// given Pod's ServiceAccount.
+// If there's an error this function sends the response to the client.
+func (s *Server) getPodGoogleAccessToken(w http.ResponseWriter, r *http.Request) (string, time.Time, *http.Request, error) {
+	saToken, r, err := s.getPodServiceAccountToken(w, r)
+	if err != nil {
+		return "", time.Time{}, nil, err
+	}
+	podGoogleServiceAccountEmail, r, err := s.getPodGoogleServiceAccountEmail(w, r)
+	if err != nil {
+		return "", time.Time{}, nil, err
+	}
+	token, expiresAt, err := s.opts.ServiceAccountTokens.GetGoogleAccessToken(
+		r.Context(), saToken, podGoogleServiceAccountEmail)
+	if err != nil {
+		respondGoogleAPIErrorf(w, r, "error getting google access token: %w", err)
+		return "", time.Time{}, nil, err
+	}
+	return token, expiresAt, r, nil
+}
+
 // getPodServiceAccountReference retrieves the ServiceAccount reference
 // for the Pod associated with the request by looking up the client IP
 // address.
@@ -125,8 +146,7 @@ func (s *Server) getPodServiceAccountReference(w http.ResponseWriter,
 	r *http.Request) (*serviceaccounts.Reference, *http.Request, error) {
 
 	// check if the pod service account reference is already in the request
-	ctx := r.Context()
-	if v := ctx.Value(podServiceAccountReferenceContextKey{}); v != nil {
+	if v := r.Context().Value(podServiceAccountReferenceContextKey{}); v != nil {
 		return v.(*serviceaccounts.Reference), r, nil
 	}
 
@@ -155,12 +175,11 @@ func (s *Server) getPodServiceAccountReference(w http.ResponseWriter,
 		return nil, nil, fmt.Errorf(format, r.RemoteAddr, err)
 	}
 	clientIP := clientIPAddr.String()
-	l := logging.FromContext(ctx).WithField("client_ip", clientIP)
-	ctx = logging.IntoContext(ctx, l)
-	r = r.WithContext(ctx)
+	l := logging.FromRequest(r).WithField("client_ip", clientIP)
+	r = logging.IntoRequest(r, l)
 
 	// fetch pod by ip
-	pod, err := s.lookupPodByIP(ctx, clientIP)
+	pod, err := s.lookupPodByIP(r.Context(), clientIP)
 	if err != nil {
 		if strings.Contains(err.Error(), "no pods found") {
 			return s.getNodeServiceAccountReference(w, r, clientIP)
@@ -172,7 +191,7 @@ func (s *Server) getPodServiceAccountReference(w http.ResponseWriter,
 
 	// update context, logger and request
 	saRef := serviceaccounts.ReferenceFromPod(pod)
-	ctx = context.WithValue(ctx, podServiceAccountReferenceContextKey{}, saRef)
+	ctx := context.WithValue(r.Context(), podServiceAccountReferenceContextKey{}, saRef)
 	l = l.WithField("pod", logrus.Fields{
 		"name":                 pod.Name,
 		"namespace":            pod.Namespace,
@@ -189,8 +208,6 @@ func (s *Server) getPodServiceAccountReference(w http.ResponseWriter,
 func (s *Server) getNodeServiceAccountReference(w http.ResponseWriter,
 	r *http.Request, clientIP string) (*serviceaccounts.Reference, *http.Request, error) {
 
-	ctx := r.Context()
-
 	// check if client ip matches the current node's ip
 	if clientIP != s.opts.PodIP {
 		const format = "client ip address does not match any pods running on the node %s: %s"
@@ -199,7 +216,7 @@ func (s *Server) getNodeServiceAccountReference(w http.ResponseWriter,
 	}
 
 	// get current node
-	node, err := s.getCurrentNode(ctx)
+	node, err := s.getCurrentNode(r.Context())
 	if err != nil {
 		const format = "error getting current node: %w"
 		pkghttp.RespondErrorf(w, r, retry.HTTPStatusCode(err), format, err)
@@ -215,8 +232,8 @@ func (s *Server) getNodeServiceAccountReference(w http.ResponseWriter,
 	}
 
 	// update context, logger and request
-	ctx = context.WithValue(ctx, podServiceAccountReferenceContextKey{}, saRef)
-	l := logging.FromContext(ctx).WithField("node", logrus.Fields{
+	ctx := context.WithValue(r.Context(), podServiceAccountReferenceContextKey{}, saRef)
+	l := logging.FromRequest(r).WithField("node", logrus.Fields{
 		"name": s.opts.NodeName,
 		"service_account": logrus.Fields{
 			"name":      saRef.Name,

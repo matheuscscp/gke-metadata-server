@@ -54,7 +54,7 @@ func AccessScopes() []string {
 
 func NewConfig(opts ConfigOptions) (*Config, string, string, error) {
 	if !workloadIdentityProviderRegex.MatchString(opts.WorkloadIdentityProvider) {
-		return nil, "", "", fmt.Errorf("workload identity provider name does not match pattern %s",
+		return nil, "", "", fmt.Errorf("workload identity provider name does not match pattern: %s",
 			workloadIdentityProviderRegex.String())
 	}
 	numericProjectID := workloadIdentityProviderRegex.FindStringSubmatch(opts.WorkloadIdentityProvider)[1]
@@ -86,12 +86,12 @@ func (c *Config) NewToken(ctx context.Context, subjectToken string, googleServic
 
 	src, err := externalaccount.NewTokenSource(ctx, conf)
 	if err != nil {
-		return nil, fmt.Errorf("error creating google access token source: %w", err)
+		return nil, err
 	}
 
 	token, err := src.Token()
 	if err != nil {
-		return nil, fmt.Errorf("error creating google access token: %w", err)
+		return nil, err
 	}
 
 	return token, nil
