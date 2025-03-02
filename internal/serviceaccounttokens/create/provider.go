@@ -25,16 +25,14 @@ package createserviceaccounttoken
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/matheuscscp/gke-metadata-server/internal/googlecredentials"
 	"github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts"
 	"github.com/matheuscscp/gke-metadata-server/internal/serviceaccounttokens"
-
 	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/google"
-	"google.golang.org/api/idtoken"
+
+	"google.golang.org/api/impersonate"
 	"google.golang.org/api/option"
 	authnv1 "k8s.io/api/authentication/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -74,11 +72,7 @@ func (p *Provider) GetServiceAccountToken(ctx context.Context, ref *serviceaccou
 }
 
 func (p *Provider) GetGoogleAccessToken(ctx context.Context, saToken string, googleEmail *string) (string, time.Time, error) {
-	var token *oauth2.Token
-	err := p.runWithGoogleCredentialsFromKubernetesServiceAccountToken(ctx, saToken, googleEmail, func(ctx context.Context, c *google.Credentials) (err error) {
-		token, err = c.TokenSource.Token()
-		return
-	})
+	token, err := p.opts.GoogleCredentialsConfig.NewToken(ctx, saToken, googleEmail)
 	if err != nil {
 		return "", time.Time{}, err
 	}
@@ -86,48 +80,26 @@ func (p *Provider) GetGoogleAccessToken(ctx context.Context, saToken string, goo
 }
 
 func (p *Provider) GetGoogleIdentityToken(ctx context.Context, saToken, googleEmail, audience string) (string, time.Time, error) {
-	var token *oauth2.Token
-	err := p.runWithGoogleCredentialsFromKubernetesServiceAccountToken(ctx, saToken, &googleEmail, func(ctx context.Context, c *google.Credentials) (err error) {
-		source, err := idtoken.NewTokenSource(ctx, audience, option.WithCredentials(c))
-		if err != nil {
-			return err
-		}
-		token, err = source.Token()
-		return
-	})
+	accessToken, err := p.opts.GoogleCredentialsConfig.NewToken(ctx, saToken, &googleEmail)
 	if err != nil {
 		return "", time.Time{}, err
 	}
-	return token.AccessToken, token.Expiry, nil
-}
+	accessTokenSource := oauth2.StaticTokenSource(accessToken)
 
-// runWithGoogleCredentialsFromKubernetesServiceAccountToken creates
-// a *google.Credentials object from a Kubernetes ServiceAccount
-// Token. The function internally writes the token
-// to a temporary file and runs the given callback f() passing
-// a *google.Credentials object configured to use this temporary
-// file. The temporary file is removed before the function
-// returns (hence why a callback is used).
-func (p *Provider) runWithGoogleCredentialsFromKubernetesServiceAccountToken(ctx context.Context,
-	token string, email *string, f func(context.Context, *google.Credentials) error) error {
-	// write k8s sa token to tmp file
-	file, err := os.CreateTemp("/tmp", "*")
+	conf := impersonate.IDTokenConfig{
+		Audience:        audience,
+		TargetPrincipal: googleEmail,
+		IncludeEmail:    true,
+	}
+	idTokenSource, err := impersonate.IDTokenSource(ctx, conf, option.WithTokenSource(accessTokenSource))
 	if err != nil {
-		return fmt.Errorf("error creating temporary file for service account token: %w", err)
-	}
-	tokenFile := file.Name()
-	defer os.Remove(tokenFile)
-	file.Close()
-	if err := os.WriteFile(tokenFile, []byte(token), 0600); err != nil {
-		return fmt.Errorf("error writing service account token to temporary file %q: %w", tokenFile, err)
+		return "", time.Time{}, fmt.Errorf("error creating google identity token source: %w", err)
 	}
 
-	// get the credential config with k8s sa token file as the credential source
-	creds, err := p.opts.GoogleCredentialsConfig.Get(ctx, tokenFile, email)
+	idToken, err := idTokenSource.Token()
 	if err != nil {
-		return err
+		return "", time.Time{}, fmt.Errorf("error creating google identity token: %w", err)
 	}
 
-	// run callback with creds, then defer will remove the sa token file
-	return f(ctx, creds)
+	return idToken.AccessToken, idToken.Expiry, nil
 }

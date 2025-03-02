@@ -24,11 +24,11 @@ package googlecredentials
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"regexp"
 
-	"golang.org/x/oauth2/google"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google/externalaccount"
 )
 
 type (
@@ -39,6 +39,8 @@ type (
 	ConfigOptions struct {
 		WorkloadIdentityProvider string
 	}
+
+	tokenSupplier string
 )
 
 var workloadIdentityProviderRegex = regexp.MustCompile(`^projects/(\d+)/locations/global/workloadIdentityPools/([^/]+)/providers/[^/]+$`)
@@ -60,40 +62,41 @@ func NewConfig(opts ConfigOptions) (*Config, string, string, error) {
 	return &Config{opts}, numericProjectID, workloadIdentityPool, nil
 }
 
-func (c *Config) Get(ctx context.Context, credFile string, googleServiceAccountEmail *string) (*google.Credentials, error) {
-	conf := map[string]any{
-		"universe_domain":    "googleapis.com",
-		"type":               "external_account",
-		"audience":           c.WorkloadIdentityProviderAudience(),
-		"subject_token_type": "urn:ietf:params:oauth:token-type:jwt",
-		"token_url":          "https://sts.googleapis.com/v1/token",
-		"credential_source": map[string]any{
-			"file": credFile,
-			"format": map[string]string{
-				"type": "text",
-			},
-		},
+func (c *Config) WorkloadIdentityProviderAudience() string {
+	return fmt.Sprintf("//iam.googleapis.com/%s", c.opts.WorkloadIdentityProvider)
+}
+
+func (c *Config) NewToken(ctx context.Context, subjectToken string, googleServiceAccountEmail *string) (*oauth2.Token, error) {
+	conf := externalaccount.Config{
+		UniverseDomain:       "googleapis.com",
+		Audience:             c.WorkloadIdentityProviderAudience(),
+		SubjectTokenType:     "urn:ietf:params:oauth:token-type:jwt",
+		TokenURL:             "https://sts.googleapis.com/v1/token",
+		Scopes:               AccessScopes(),
+		SubjectTokenSupplier: tokenSupplier(subjectToken),
 	}
 
 	if googleServiceAccountEmail != nil {
-		conf["service_account_impersonation_url"] = fmt.Sprintf(
+		conf.ServiceAccountImpersonationURL = fmt.Sprintf(
 			"https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/%s:generateAccessToken",
 			*googleServiceAccountEmail)
 	} else {
-		conf["token_info_url"] = "https://sts.googleapis.com/v1/introspect"
+		conf.TokenInfoURL = "https://sts.googleapis.com/v1/introspect"
 	}
 
-	b, err := json.Marshal(conf)
+	src, err := externalaccount.NewTokenSource(ctx, conf)
 	if err != nil {
-		return nil, fmt.Errorf("error marshaling google credentials config to json: %w", err)
+		return nil, fmt.Errorf("error creating google access token source: %w", err)
 	}
-	creds, err := google.CredentialsFromJSON(ctx, b, AccessScopes()...)
+
+	token, err := src.Token()
 	if err != nil {
-		return nil, fmt.Errorf("error creating google credentials from json: %w", err)
+		return nil, fmt.Errorf("error creating google access token: %w", err)
 	}
-	return creds, nil
+
+	return token, nil
 }
 
-func (c *Config) WorkloadIdentityProviderAudience() string {
-	return fmt.Sprintf("//iam.googleapis.com/%s", c.opts.WorkloadIdentityProvider)
+func (s tokenSupplier) SubjectToken(ctx context.Context, options externalaccount.SupplierOptions) (string, error) {
+	return string(s), nil
 }

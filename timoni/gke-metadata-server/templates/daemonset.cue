@@ -140,17 +140,9 @@ import (
 							port: "health"
 						}
 					}
-					volumeMounts: [{
-						name:      "tmpfs"
-						mountPath: "/tmp"
-					}]
 					if #config.pod.resources != _|_ {
 						resources: #config.pod.resources
 					}
-				}]
-				volumes: [ {
-					name:     "tmpfs"
-					emptyDir: medium: "Memory"
 				}]
 			}
 		}
