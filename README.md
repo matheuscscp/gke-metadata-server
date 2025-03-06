@@ -221,7 +221,6 @@ cosign verify ghcr.io/matheuscscp/gke-metadata-server-timoni@$(cat timoni-digest
 
 If you are using the Timoni CLI to deploy Modules/Bundles you can automate the image verification
 using [Keyless Verification](https://timoni.sh/cue/module/signing/#sign-with-cosign-keyless).
-*(Timoni will have a Flux controller in the future.)*
 
 ## Limitations and Security Risks
 
