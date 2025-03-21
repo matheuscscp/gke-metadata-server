@@ -8,7 +8,7 @@ require (
 	github.com/cilium/ebpf v0.17.3
 	github.com/coreos/go-oidc/v3 v3.13.0
 	github.com/go-logr/logr v1.4.2
-	github.com/golang-jwt/jwt/v5 v5.2.1
+	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/google/uuid v1.6.0
 	github.com/prometheus/client_golang v1.21.1
 	github.com/sirupsen/logrus v1.9.3
