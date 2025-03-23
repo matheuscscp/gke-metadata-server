@@ -31,10 +31,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/matheuscscp/gke-metadata-server/api"
 	"github.com/matheuscscp/gke-metadata-server/internal/googlecredentials"
 	"github.com/matheuscscp/gke-metadata-server/internal/logging"
-	"github.com/matheuscscp/gke-metadata-server/internal/loopback"
 	"github.com/matheuscscp/gke-metadata-server/internal/metrics"
 	getnode "github.com/matheuscscp/gke-metadata-server/internal/node/get"
 	watchnode "github.com/matheuscscp/gke-metadata-server/internal/node/watch"
@@ -85,6 +83,7 @@ func main() {
 		watchServiceAccountsDisableFallback bool
 		cacheTokens                         bool
 		cacheTokensConcurrency              int
+		attachNetworkRoutingAndExit         bool
 	)
 
 	flags := pflag.NewFlagSet(os.Args[0], pflag.ContinueOnError)
@@ -125,6 +124,8 @@ func main() {
 		"Whether or not to proactively cache tokens for the service accounts used by the pods running on the same node (default false)")
 	flags.IntVar(&cacheTokensConcurrency, "cache-tokens-concurrency", 10,
 		"When proactively caching service account tokens, what is the maximum amount of caching operations that can happen in parallel")
+	flags.BoolVar(&attachNetworkRoutingAndExit, "attach-network-routing-and-exit", false,
+		"Whether or not to attach the network routing and exit immediately")
 
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		if errors.Is(err, pflag.ErrHelp) {
@@ -297,19 +298,23 @@ func main() {
 	if err != nil {
 		l.WithError(err).Fatal("error getting current node")
 	}
-	routingMode, closeRoute, err := routing.LoadAndAttach(curNode, emulatorIP, serverPort)
+
+	routingMode, serverAddr, closeRoute, err := routing.LoadAndAttach(curNode, emulatorIP, serverPort)
 	if err != nil {
 		l.WithField("routing", routingMode).WithError(err).Fatal("error loading and attaching network route")
 	}
+
+	if attachNetworkRoutingAndExit {
+		l.Info("network routing attached, exiting")
+		os.Exit(0)
+	}
+
 	defer func() {
+		l.WithField("routing", routingMode).Info("closing network route")
 		if err := closeRoute(); err != nil {
 			l.WithField("routing", routingMode).WithError(err).Error("error closing network route")
 		}
 	}()
-	serverAddr := fmt.Sprintf(":%d", serverPort)
-	if routingMode == api.RoutingModeLoopback {
-		serverAddr = loopback.GKEMetadataServerAddr
-	}
 
 	// start server
 	s := server.New(ctx, server.ServerOptions{

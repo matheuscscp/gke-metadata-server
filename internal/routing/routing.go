@@ -35,27 +35,27 @@ import (
 
 // LoadAndAttach looks up the routing mode from the Node's annotations
 // or labels and loads and attaches the routing mechanism accordingly.
-func LoadAndAttach(node *corev1.Node, emulatorIP netip.Addr, emulatorPort int) (string, func() error, error) {
+func LoadAndAttach(node *corev1.Node, emulatorIP netip.Addr, emulatorPort int) (string, string, func() error, error) {
 	var loadAndAttach func() (func() error, error)
 
-	mode := getMode(node)
+	mode := GetMode(node)
 	switch mode {
 	case api.RoutingModeBPF:
 		loadAndAttach = redirect.LoadAndAttach(emulatorIP, emulatorPort)
 	case api.RoutingModeLoopback:
 		loadAndAttach = loopback.LoadAndAttach
 	default:
-		return "", nil, fmt.Errorf("invalid routing mode: %s", mode)
+		return "", "", nil, fmt.Errorf("invalid routing mode: %s", mode)
 	}
 
 	close, err := loadAndAttach()
 	if err != nil {
-		return "", nil, err
+		return "", "", nil, err
 	}
-	return mode, close, nil
+	return mode, GetServerAddr(mode, emulatorPort), close, nil
 }
 
-func getMode(node *corev1.Node) string {
+func GetMode(node *corev1.Node) string {
 	if m := node.Annotations[api.AnnotationRoutingMode]; m != "" {
 		return m
 	}
@@ -63,4 +63,12 @@ func getMode(node *corev1.Node) string {
 		return m
 	}
 	return api.RoutingModeDefault
+}
+
+func GetServerAddr(mode string, serverPort int) string {
+	serverAddr := fmt.Sprintf(":%d", serverPort)
+	if mode == api.RoutingModeLoopback {
+		serverAddr = loopback.GKEMetadataServerAddr
+	}
+	return serverAddr
 }
