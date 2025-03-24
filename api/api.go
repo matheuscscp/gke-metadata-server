@@ -35,7 +35,11 @@ const (
 	RoutingModeDefault  = RoutingModeBPF
 	RoutingModeBPF      = "eBPF"
 	RoutingModeLoopback = "Loopback"
+	RoutingModeIPTables = "IPTables"
 
 	GKEAnnotationServiceAccount = GroupGKE + "/gcp-service-account"
 	GKELabelNodeEnabled         = GroupGKE + "/gke-metadata-server-enabled"
+
+	GKEMetadataServerAddressDefault = "169.254.169.254"
+	GKEMetadataServerPortDefault    = 80
 )

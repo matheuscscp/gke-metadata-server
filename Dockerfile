@@ -20,10 +20,13 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-FROM golang:1.24.1-alpine3.21 AS builder
+FROM golang:1.24.1-alpine3.21 AS base
 
 RUN apk add --no-cache clang llvm bpftool libbpf-dev
+ENV CGO_ENABLED=0
+ENV GOOS=linux
 
+FROM base AS builder
 WORKDIR /app
 
 COPY go.mod go.sum ./
@@ -42,6 +45,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o gke-metadata-server \
     github.com/matheuscscp/gke-metadata-server
 
 FROM alpine:3.21
+RUN apk add --no-cache iptables
 
 COPY --from=builder /app/gke-metadata-server .
 
