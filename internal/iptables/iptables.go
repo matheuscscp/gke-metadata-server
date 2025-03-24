@@ -49,7 +49,7 @@ func LoadAndAttach(emulatorAddr netip.Addr, emulatorPort int) func() (func() err
 				natTableArgs[:]...,
 			)
 			err2 := ipTables.DeleteRule(
-				iptables.Table(iptables.TableNAT),
+				iptables.Table(iptables.TableFilter),
 				iptables.ChainForward,
 				filterTableArgs[:]...,
 			)
