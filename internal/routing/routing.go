@@ -27,6 +27,7 @@ import (
 	"net/netip"
 
 	"github.com/matheuscscp/gke-metadata-server/api"
+	"github.com/matheuscscp/gke-metadata-server/internal/iptables"
 	"github.com/matheuscscp/gke-metadata-server/internal/loopback"
 	"github.com/matheuscscp/gke-metadata-server/internal/redirect"
 
@@ -44,6 +45,8 @@ func LoadAndAttach(node *corev1.Node, emulatorIP netip.Addr, emulatorPort int) (
 		loadAndAttach = redirect.LoadAndAttach(emulatorIP, emulatorPort)
 	case api.RoutingModeLoopback:
 		loadAndAttach = loopback.LoadAndAttach
+	case api.RoutingModeIPTables:
+		loadAndAttach = iptables.LoadAndAttach(emulatorIP, emulatorPort)
 	default:
 		return "", nil, fmt.Errorf("invalid routing mode: %s", mode)
 	}
