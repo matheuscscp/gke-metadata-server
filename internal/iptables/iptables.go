@@ -1,12 +1,12 @@
 package iptables
 
 import (
-	"errors"
 	"fmt"
 	"net/netip"
 	"strconv"
 
 	"github.com/matheuscscp/gke-metadata-server/api"
+
 	"k8s.io/kubernetes/pkg/util/iptables"
 	"k8s.io/utils/exec"
 )
@@ -23,7 +23,7 @@ func LoadAndAttach(emulatorAddr netip.Addr, emulatorPort int) func() (func() err
 		ipTables := iptables.New(exec.New(), iptables.ProtocolIPv4)
 
 		// match conditions
-		natTableArgs := [...]string{
+		natTableArgs := []string{
 			"-d", api.GKEMetadataServerAddressDefault,
 			"-p", "tcp",
 			"--dport", strconv.Itoa(api.GKEMetadataServerPortDefault),
@@ -33,7 +33,7 @@ func LoadAndAttach(emulatorAddr netip.Addr, emulatorPort int) func() (func() err
 			"--to-destination", emulatorAddr.String(),
 		}
 
-		filterTableArgs := [...]string{
+		filterTableArgs := []string{
 			"-d", emulatorAddr.String(),
 			"-p", "tcp",
 			"--dport", strconv.Itoa(emulatorPort),
@@ -46,21 +46,28 @@ func LoadAndAttach(emulatorAddr netip.Addr, emulatorPort int) func() (func() err
 			err1 := ipTables.DeleteRule(
 				iptables.Table(iptables.TableNAT),
 				iptables.ChainOutput,
-				natTableArgs[:]...,
+				natTableArgs...,
 			)
 			err2 := ipTables.DeleteRule(
 				iptables.Table(iptables.TableFilter),
 				iptables.ChainForward,
-				filterTableArgs[:]...,
+				filterTableArgs...,
 			)
-			return errors.Join(err1, err2)
+
+			if err1 != nil {
+				return err1
+			}
+			if err2 != nil {
+				return err2
+			}
+			return nil
 		}
 
 		_, err := ipTables.EnsureRule(
 			iptables.Append,
 			iptables.TableNAT,    // NAT rules are applied before routing
 			iptables.ChainOutput, // output chain is for locally generated traffic
-			natTableArgs[:]...,
+			natTableArgs...,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("error adding DNAT rule: %w", err)
@@ -73,7 +80,7 @@ func LoadAndAttach(emulatorAddr netip.Addr, emulatorPort int) func() (func() err
 			iptables.Append,
 			iptables.TableFilter,  // filter table is for access control (should packets be forwarded or dropped?)
 			iptables.ChainForward, // forward chain is for packets that are being routed, i.e. not destined to the local host
-			filterTableArgs[:]...,
+			filterTableArgs...,
 		)
 		return close, err
 	}
