@@ -20,10 +20,13 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-FROM golang:1.24.1-alpine3.21 AS builder
+FROM golang:1.24.1-alpine3.21 AS base
 
-RUN apk add --no-cache clang llvm bpftool libbpf-dev
+RUN apk add --no-cache clang llvm bpftool libbpf-dev iptables
+ENV CGO_ENABLED=0
+ENV GOOS=linux
 
+FROM base AS builder
 WORKDIR /app
 
 COPY go.mod go.sum ./
