@@ -5,8 +5,8 @@ go 1.24.0
 require (
 	cloud.google.com/go/compute/metadata v0.6.0
 	cloud.google.com/go/storage v1.51.0
-	github.com/cilium/ebpf v0.17.3
-	github.com/coreos/go-oidc/v3 v3.13.0
+	github.com/cilium/ebpf v0.18.0
+	github.com/coreos/go-oidc/v3 v3.14.1
 	github.com/go-logr/logr v1.4.2
 	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/google/uuid v1.6.0
@@ -15,7 +15,7 @@ require (
 	github.com/spf13/pflag v1.0.6
 	github.com/stretchr/testify v1.10.0
 	github.com/vishvananda/netlink v1.3.0
-	golang.org/x/oauth2 v0.28.0
+	golang.org/x/oauth2 v0.29.0
 	google.golang.org/api v0.228.0
 	k8s.io/api v0.32.3
 	k8s.io/apimachinery v0.32.3
