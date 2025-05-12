@@ -232,7 +232,7 @@ import (
 	// The types of objects that may be mounted by this volume are defined by the container runtime implementation on a host machine and at minimum must include all valid types supported by the container image field.
 	// The OCI object gets mounted in a single directory (spec.containers[*].volumeMounts.mountPath) by merging the manifest layers in the same way as for container images.
 	// The volume will be mounted read-only (ro) and non-executable files (noexec).
-	// Sub path mounts for containers are not supported (spec.containers[*].volumeMounts.subpath).
+	// Sub path mounts for containers are not supported (spec.containers[*].volumeMounts.subpath) before 1.33.
 	// The field spec.securityContext.fsGroupChangePolicy has no effect on this volume type.
 	// +featureGate=ImageVolume
 	// +optional
@@ -2726,9 +2726,9 @@ import (
 	optional?: null | bool @go(Optional,*bool) @protobuf(3,varint,opt)
 }
 
-// EnvFromSource represents the source of a set of ConfigMaps
+// EnvFromSource represents the source of a set of ConfigMaps or Secrets
 #EnvFromSource: {
-	// An optional identifier to prepend to each key in the ConfigMap. Must be a C_IDENTIFIER.
+	// Optional text to prepend to the name of each environment variable. Must be a C_IDENTIFIER.
 	// +optional
 	prefix?: string @go(Prefix) @protobuf(1,bytes,opt)
 
@@ -3319,6 +3319,143 @@ import (
 	sleep?: null | #SleepAction @go(Sleep,*SleepAction) @protobuf(4,bytes,opt)
 }
 
+// Signal defines the stop signal of containers
+// +enum
+#Signal: string // #enumSignal
+
+#enumSignal:
+	#SIGABRT |
+	#SIGALRM |
+	#SIGBUS |
+	#SIGCHLD |
+	#SIGCLD |
+	#SIGCONT |
+	#SIGFPE |
+	#SIGHUP |
+	#SIGILL |
+	#SIGINT |
+	#SIGIO |
+	#SIGIOT |
+	#SIGKILL |
+	#SIGPIPE |
+	#SIGPOLL |
+	#SIGPROF |
+	#SIGPWR |
+	#SIGQUIT |
+	#SIGSEGV |
+	#SIGSTKFLT |
+	#SIGSTOP |
+	#SIGSYS |
+	#SIGTERM |
+	#SIGTRAP |
+	#SIGTSTP |
+	#SIGTTIN |
+	#SIGTTOU |
+	#SIGURG |
+	#SIGUSR1 |
+	#SIGUSR2 |
+	#SIGVTALRM |
+	#SIGWINCH |
+	#SIGXCPU |
+	#SIGXFSZ |
+	#SIGRTMIN |
+	#SIGRTMINPLUS1 |
+	#SIGRTMINPLUS2 |
+	#SIGRTMINPLUS3 |
+	#SIGRTMINPLUS4 |
+	#SIGRTMINPLUS5 |
+	#SIGRTMINPLUS6 |
+	#SIGRTMINPLUS7 |
+	#SIGRTMINPLUS8 |
+	#SIGRTMINPLUS9 |
+	#SIGRTMINPLUS10 |
+	#SIGRTMINPLUS11 |
+	#SIGRTMINPLUS12 |
+	#SIGRTMINPLUS13 |
+	#SIGRTMINPLUS14 |
+	#SIGRTMINPLUS15 |
+	#SIGRTMAXMINUS14 |
+	#SIGRTMAXMINUS13 |
+	#SIGRTMAXMINUS12 |
+	#SIGRTMAXMINUS11 |
+	#SIGRTMAXMINUS10 |
+	#SIGRTMAXMINUS9 |
+	#SIGRTMAXMINUS8 |
+	#SIGRTMAXMINUS7 |
+	#SIGRTMAXMINUS6 |
+	#SIGRTMAXMINUS5 |
+	#SIGRTMAXMINUS4 |
+	#SIGRTMAXMINUS3 |
+	#SIGRTMAXMINUS2 |
+	#SIGRTMAXMINUS1 |
+	#SIGRTMAX
+
+#SIGABRT:         #Signal & "SIGABRT"
+#SIGALRM:         #Signal & "SIGALRM"
+#SIGBUS:          #Signal & "SIGBUS"
+#SIGCHLD:         #Signal & "SIGCHLD"
+#SIGCLD:          #Signal & "SIGCLD"
+#SIGCONT:         #Signal & "SIGCONT"
+#SIGFPE:          #Signal & "SIGFPE"
+#SIGHUP:          #Signal & "SIGHUP"
+#SIGILL:          #Signal & "SIGILL"
+#SIGINT:          #Signal & "SIGINT"
+#SIGIO:           #Signal & "SIGIO"
+#SIGIOT:          #Signal & "SIGIOT"
+#SIGKILL:         #Signal & "SIGKILL"
+#SIGPIPE:         #Signal & "SIGPIPE"
+#SIGPOLL:         #Signal & "SIGPOLL"
+#SIGPROF:         #Signal & "SIGPROF"
+#SIGPWR:          #Signal & "SIGPWR"
+#SIGQUIT:         #Signal & "SIGQUIT"
+#SIGSEGV:         #Signal & "SIGSEGV"
+#SIGSTKFLT:       #Signal & "SIGSTKFLT"
+#SIGSTOP:         #Signal & "SIGSTOP"
+#SIGSYS:          #Signal & "SIGSYS"
+#SIGTERM:         #Signal & "SIGTERM"
+#SIGTRAP:         #Signal & "SIGTRAP"
+#SIGTSTP:         #Signal & "SIGTSTP"
+#SIGTTIN:         #Signal & "SIGTTIN"
+#SIGTTOU:         #Signal & "SIGTTOU"
+#SIGURG:          #Signal & "SIGURG"
+#SIGUSR1:         #Signal & "SIGUSR1"
+#SIGUSR2:         #Signal & "SIGUSR2"
+#SIGVTALRM:       #Signal & "SIGVTALRM"
+#SIGWINCH:        #Signal & "SIGWINCH"
+#SIGXCPU:         #Signal & "SIGXCPU"
+#SIGXFSZ:         #Signal & "SIGXFSZ"
+#SIGRTMIN:        #Signal & "SIGRTMIN"
+#SIGRTMINPLUS1:   #Signal & "SIGRTMIN+1"
+#SIGRTMINPLUS2:   #Signal & "SIGRTMIN+2"
+#SIGRTMINPLUS3:   #Signal & "SIGRTMIN+3"
+#SIGRTMINPLUS4:   #Signal & "SIGRTMIN+4"
+#SIGRTMINPLUS5:   #Signal & "SIGRTMIN+5"
+#SIGRTMINPLUS6:   #Signal & "SIGRTMIN+6"
+#SIGRTMINPLUS7:   #Signal & "SIGRTMIN+7"
+#SIGRTMINPLUS8:   #Signal & "SIGRTMIN+8"
+#SIGRTMINPLUS9:   #Signal & "SIGRTMIN+9"
+#SIGRTMINPLUS10:  #Signal & "SIGRTMIN+10"
+#SIGRTMINPLUS11:  #Signal & "SIGRTMIN+11"
+#SIGRTMINPLUS12:  #Signal & "SIGRTMIN+12"
+#SIGRTMINPLUS13:  #Signal & "SIGRTMIN+13"
+#SIGRTMINPLUS14:  #Signal & "SIGRTMIN+14"
+#SIGRTMINPLUS15:  #Signal & "SIGRTMIN+15"
+#SIGRTMAXMINUS14: #Signal & "SIGRTMAX-14"
+#SIGRTMAXMINUS13: #Signal & "SIGRTMAX-13"
+#SIGRTMAXMINUS12: #Signal & "SIGRTMAX-12"
+#SIGRTMAXMINUS11: #Signal & "SIGRTMAX-11"
+#SIGRTMAXMINUS10: #Signal & "SIGRTMAX-10"
+#SIGRTMAXMINUS9:  #Signal & "SIGRTMAX-9"
+#SIGRTMAXMINUS8:  #Signal & "SIGRTMAX-8"
+#SIGRTMAXMINUS7:  #Signal & "SIGRTMAX-7"
+#SIGRTMAXMINUS6:  #Signal & "SIGRTMAX-6"
+#SIGRTMAXMINUS5:  #Signal & "SIGRTMAX-5"
+#SIGRTMAXMINUS4:  #Signal & "SIGRTMAX-4"
+#SIGRTMAXMINUS3:  #Signal & "SIGRTMAX-3"
+#SIGRTMAXMINUS2:  #Signal & "SIGRTMAX-2"
+#SIGRTMAXMINUS1:  #Signal & "SIGRTMAX-1"
+#SIGRTMAX:        #Signal & "SIGRTMAX"
+
 // Lifecycle describes actions that the management system should take in response to container lifecycle
 // events. For the PostStart and PreStop lifecycle handlers, management of the container blocks
 // until the action is complete, unless the container process fails, in which case the handler is aborted.
@@ -3341,6 +3478,12 @@ import (
 	// More info: https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/#container-hooks
 	// +optional
 	preStop?: null | #LifecycleHandler @go(PreStop,*LifecycleHandler) @protobuf(2,bytes,opt)
+
+	// StopSignal defines which signal will be sent to a container when it is being stopped.
+	// If not specified, the default is defined by the container runtime in use.
+	// StopSignal can only be set for Pods with a non-empty .spec.os.name
+	// +optional
+	stopSignal?: null | #Signal @go(StopSignal,*Signal) @protobuf(3,bytes,opt)
 }
 
 #ConditionStatus: string // #enumConditionStatus
@@ -3515,6 +3658,11 @@ import (
 	// +listType=map
 	// +listMapKey=name
 	allocatedResourcesStatus?: [...#ResourceStatus] @go(AllocatedResourcesStatus,[]ResourceStatus) @protobuf(14,bytes,rep)
+
+	// StopSignal reports the effective stop signal for this container
+	// +featureGate=ContainerStopSignals
+	// +optional
+	stopSignal?: null | #Signal @go(StopSignal,*Signal) @protobuf(15,bytes,opt)
 }
 
 // ResourceStatus represents the status of a single resource allocated to a Pod.
@@ -3639,7 +3787,9 @@ import (
 	#PodReady |
 	#PodScheduled |
 	#DisruptionTarget |
-	#PodReadyToStartContainers
+	#PodReadyToStartContainers |
+	#PodResizePending |
+	#PodResizeInProgress
 
 // ContainersReady indicates whether all containers in the pod are ready.
 #ContainersReady: #PodConditionType & "ContainersReady"
@@ -3662,6 +3812,19 @@ import (
 // the pod is ready to launch containers.
 #PodReadyToStartContainers: #PodConditionType & "PodReadyToStartContainers"
 
+// PodResizePending indicates that the pod has been resized, but kubelet has not
+// yet allocated the resources. If both PodResizePending and PodResizeInProgress
+// are set, it means that a new resize was requested in the middle of a previous
+// pod resize that is still in progress.
+#PodResizePending: #PodConditionType & "PodResizePending"
+
+// PodResizeInProgress indicates that a resize is in progress, and is present whenever
+// the Kubelet has allocated resources for the resize, but has not yet actuated all of
+// the required changes.
+// If both PodResizePending and PodResizeInProgress are set, it means that a new resize was
+// requested in the middle of a previous pod resize that is still in progress.
+#PodResizeInProgress: #PodConditionType & "PodResizeInProgress"
+
 // PodReasonUnschedulable reason in PodScheduled PodCondition means that the scheduler
 // can't schedule the pod right now, for example due to insufficient resources in the cluster.
 #PodReasonUnschedulable: "Unschedulable"
@@ -3682,11 +3845,29 @@ import (
 // disruption was initiated by scheduler's preemption.
 #PodReasonPreemptionByScheduler: "PreemptionByScheduler"
 
+// PodReasonDeferred reason in PodResizePending pod condition indicates the proposed resize is feasible in
+// theory (it fits on this node) but is not possible right now.
+#PodReasonDeferred: "Deferred"
+
+// PodReasonInfeasible reason in PodResizePending pod condition indicates the proposed resize is not
+// feasible and is rejected; it may not be re-evaluated
+#PodReasonInfeasible: "Infeasible"
+
+// PodReasonError reason in PodResizeInProgress pod condition indicates that an error occurred while
+// actuating the resize.
+#PodReasonError: "Error"
+
 // PodCondition contains details for the current condition of this pod.
 #PodCondition: {
 	// Type is the type of the condition.
 	// More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#pod-conditions
 	type: #PodConditionType @go(Type) @protobuf(1,bytes,opt,casttype=PodConditionType)
+
+	// If set, this represents the .metadata.generation that the pod condition was set based upon.
+	// This is an alpha field. Enable PodObservedGenerationTracking to be able to use this field.
+	// +featureGate=PodObservedGenerationTracking
+	// +optional
+	observedGeneration?: int64 @go(ObservedGeneration) @protobuf(7,varint,opt)
 
 	// Status is the status of the condition.
 	// Can be True, False, Unknown.
@@ -3710,17 +3891,13 @@ import (
 	message?: string @go(Message) @protobuf(6,bytes,opt)
 }
 
-// PodResizeStatus shows status of desired resize of a pod's containers.
+// Deprecated: PodResizeStatus shows status of desired resize of a pod's containers.
 #PodResizeStatus: string // #enumPodResizeStatus
 
 #enumPodResizeStatus:
-	#PodResizeStatusProposed |
 	#PodResizeStatusInProgress |
 	#PodResizeStatusDeferred |
 	#PodResizeStatusInfeasible
-
-// Pod resources resize has been requested and will be evaluated by node.
-#PodResizeStatusProposed: #PodResizeStatus & "Proposed"
 
 // Pod resources resize has been accepted by node and is being actuated.
 #PodResizeStatusInProgress: #PodResizeStatus & "InProgress"
@@ -4022,7 +4199,6 @@ import (
 	// pod labels will be ignored. The default value is empty.
 	// The same key is forbidden to exist in both matchLabelKeys and labelSelector.
 	// Also, matchLabelKeys cannot be set when labelSelector isn't set.
-	// This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
 	//
 	// +listType=atomic
 	// +optional
@@ -4036,7 +4212,6 @@ import (
 	// pod labels will be ignored. The default value is empty.
 	// The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
 	// Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-	// This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
 	//
 	// +listType=atomic
 	// +optional
@@ -4190,7 +4365,7 @@ import (
 	// Init containers may not have Lifecycle actions, Readiness probes, Liveness probes, or Startup probes.
 	// The resourceRequirements of an init container are taken into account during scheduling
 	// by finding the highest request/limit for each resource type, and then using the max of
-	// of that value or the sum of the normal containers. Limits are applied to init containers
+	// that value or the sum of the normal containers. Limits are applied to init containers
 	// in a similar fashion.
 	// Init containers cannot currently be added or removed.
 	// Cannot be updated.
@@ -4740,7 +4915,6 @@ import (
 	// - Ignore: nodeAffinity/nodeSelector are ignored. All nodes are included in the calculations.
 	//
 	// If this value is nil, the behavior is equivalent to the Honor policy.
-	// This is a beta-level feature default enabled by the NodeInclusionPolicyInPodTopologySpread feature flag.
 	// +optional
 	nodeAffinityPolicy?: null | #NodeInclusionPolicy @go(NodeAffinityPolicy,*NodeInclusionPolicy) @protobuf(6,bytes,opt)
 
@@ -4751,7 +4925,6 @@ import (
 	// - Ignore: node taints are ignored. All nodes are included.
 	//
 	// If this value is nil, the behavior is equivalent to the Ignore policy.
-	// This is a beta-level feature default enabled by the NodeInclusionPolicyInPodTopologySpread feature flag.
 	// +optional
 	nodeTaintsPolicy?: null | #NodeInclusionPolicy @go(NodeTaintsPolicy,*NodeInclusionPolicy) @protobuf(7,bytes,opt)
 
@@ -5332,6 +5505,12 @@ import (
 // state of a system, especially if the node that hosts the pod cannot contact the control
 // plane.
 #PodStatus: {
+	// If set, this represents the .metadata.generation that the pod status was set based upon.
+	// This is an alpha field. Enable PodObservedGenerationTracking to be able to use this field.
+	// +featureGate=PodObservedGenerationTracking
+	// +optional
+	observedGeneration?: int64 @go(ObservedGeneration) @protobuf(17,varint,opt)
+
 	// The phase of a Pod is a simple, high-level summary of where the Pod is in its lifecycle.
 	// The conditions array, the reason and message fields, and the individual container status
 	// arrays contain more detail about the pod's status.
@@ -5463,6 +5642,9 @@ import (
 	// Status of resources resize desired for pod's containers.
 	// It is empty if no resources resize is pending.
 	// Any changes to container resources will automatically set this to "Proposed"
+	// Deprecated: Resize status is moved to two pod conditions PodResizePending and PodResizeInProgress.
+	// PodResizePending will track states where the spec has been resized, but the Kubelet has not yet allocated the resources.
+	// PodResizeInProgress will track in-progress resizes, and should be present whenever allocated resources != acknowledged resources.
 	// +featureGate=InPlacePodVerticalScaling
 	// +optional
 	resize?: #PodResizeStatus @go(Resize) @protobuf(14,bytes,opt,casttype=PodResizeStatus)
@@ -5581,12 +5763,18 @@ import (
 	// Defaults to 1.
 	// More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicationcontroller#what-is-a-replicationcontroller
 	// +optional
+	// +k8s:optional
+	// +default=1
+	// +k8s:minimum=0
 	replicas?: null | int32 @go(Replicas,*int32) @protobuf(1,varint,opt)
 
 	// Minimum number of seconds for which a newly created pod should be ready
 	// without any of its container crashing, for it to be considered available.
 	// Defaults to 0 (pod will be considered available as soon as it is ready)
 	// +optional
+	// +k8s:optional
+	// +default=0
+	// +k8s:minimum=0
 	minReadySeconds?: int32 @go(MinReadySeconds) @protobuf(4,varint,opt)
 
 	// Selector is a label query over pods that should match the Replicas count.
@@ -5814,14 +6002,27 @@ import (
 #ServiceExternalTrafficPolicyTypeLocal:   #ServiceExternalTrafficPolicy & "Local"
 #ServiceExternalTrafficPolicyTypeCluster: #ServiceExternalTrafficPolicy & "Cluster"
 
-// Indicates a preference for routing traffic to endpoints that are
-// topologically proximate to the client. The interpretation of "topologically
-// proximate" may vary across implementations and could encompass endpoints
-// within the same node, rack, zone, or even region. Setting this value gives
-// implementations permission to make different tradeoffs, e.g. optimizing for
-// proximity rather than equal distribution of load. Users should not set this
-// value if such tradeoffs are not acceptable.
+// Indicates a preference for routing traffic to endpoints that are in the same
+// zone as the client. Users should not set this value unless they have ensured
+// that clients and endpoints are distributed in such a way that the "same zone"
+// preference will not result in endpoints getting overloaded.
 #ServiceTrafficDistributionPreferClose: "PreferClose"
+
+// Indicates a preference for routing traffic to endpoints that are in the same
+// zone as the client. Users should not set this value unless they have ensured
+// that clients and endpoints are distributed in such a way that the "same zone"
+// preference will not result in endpoints getting overloaded.
+// This is an alias for "PreferClose", but it is an Alpha feature and is only
+// recognized if the PreferSameTrafficDistribution feature gate is enabled.
+#ServiceTrafficDistributionPreferSameZone: "PreferSameZone"
+
+// Indicates a preference for routing traffic to endpoints that are on the same
+// node as the client. Users should not set this value unless they have ensured
+// that clients and endpoints are distributed in such a way that the "same node"
+// preference will not result in endpoints getting overloaded.
+// This is an Alpha feature and is only recognized if the
+// PreferSameTrafficDistribution feature gate is enabled.
+#ServiceTrafficDistributionPreferSameNode: "PreferSameNode"
 
 // LoadBalancerPortsError represents the condition of the requested ports
 // on the cloud load balancer instance.
@@ -6171,13 +6372,12 @@ import (
 	// +optional
 	internalTrafficPolicy?: null | #ServiceInternalTrafficPolicy @go(InternalTrafficPolicy,*ServiceInternalTrafficPolicy) @protobuf(22,bytes,opt)
 
-	// TrafficDistribution offers a way to express preferences for how traffic is
-	// distributed to Service endpoints. Implementations can use this field as a
-	// hint, but are not required to guarantee strict adherence. If the field is
-	// not set, the implementation will apply its default routing strategy. If set
-	// to "PreferClose", implementations should prioritize endpoints that are
-	// topologically close (e.g., same zone).
-	// This is a beta field and requires enabling ServiceTrafficDistribution feature.
+	// TrafficDistribution offers a way to express preferences for how traffic
+	// is distributed to Service endpoints. Implementations can use this field
+	// as a hint, but are not required to guarantee strict adherence. If the
+	// field is not set, the implementation will apply its default routing
+	// strategy. If set to "PreferClose", implementations should prioritize
+	// endpoints that are in the same zone.
 	// +featureGate=ServiceTrafficDistribution
 	// +optional
 	trafficDistribution?: null | string @go(TrafficDistribution,*string) @protobuf(23,bytes,opt)
@@ -6352,6 +6552,11 @@ import (
 //	     Ports: [{"name": "a", "port": 93}, {"name": "b", "port": 76}]
 //	   },
 //	]
+//
+// Endpoints is a legacy API and does not contain information about all Service features.
+// Use discoveryv1.EndpointSlice for complete information about Service endpoints.
+//
+// Deprecated: This API is deprecated in v1.33+. Use discoveryv1.EndpointSlice.
 #Endpoints: {
 	metav1.#TypeMeta
 
@@ -6385,6 +6590,8 @@ import (
 //
 //	a: [ 10.10.1.1:8675, 10.10.2.2:8675 ],
 //	b: [ 10.10.1.1:309, 10.10.2.2:309 ]
+//
+// Deprecated: This API is deprecated in v1.33+.
 #EndpointSubset: {
 	// IP addresses which offer the related ports that are marked as ready. These endpoints
 	// should be considered safe for load balancers and clients to utilize.
@@ -6406,6 +6613,7 @@ import (
 }
 
 // EndpointAddress is a tuple that describes single IP address.
+// Deprecated: This API is deprecated in v1.33+.
 // +structType=atomic
 #EndpointAddress: {
 	// The IP of this endpoint.
@@ -6427,6 +6635,7 @@ import (
 }
 
 // EndpointPort is a tuple that describes a single port.
+// Deprecated: This API is deprecated in v1.33+.
 // +structType=atomic
 #EndpointPort: {
 	// The name of this port.  This must match the 'name' field in the
@@ -6465,6 +6674,7 @@ import (
 }
 
 // EndpointsList is a list of endpoints.
+// Deprecated: This API is deprecated in v1.33+.
 #EndpointsList: {
 	metav1.#TypeMeta
 
@@ -6630,6 +6840,16 @@ import (
 
 	// The Architecture reported by the node
 	architecture: string @go(Architecture) @protobuf(10,bytes,opt)
+
+	// Swap Info reported by the node.
+	swap?: null | #NodeSwapStatus @go(Swap,*NodeSwapStatus) @protobuf(11,bytes,opt)
+}
+
+// NodeSwapStatus represents swap memory information.
+#NodeSwapStatus: {
+	// Total amount of swap memory in bytes.
+	// +optional
+	capacity?: null | int64 @go(Capacity,*int64) @protobuf(1,varint,opt)
 }
 
 // NodeConfigStatus describes the status of the config assigned by Node.Spec.ConfigSource.
@@ -7768,7 +7988,8 @@ import (
 	#ResourceQuotaScopeBestEffort |
 	#ResourceQuotaScopeNotBestEffort |
 	#ResourceQuotaScopePriorityClass |
-	#ResourceQuotaScopeCrossNamespacePodAffinity
+	#ResourceQuotaScopeCrossNamespacePodAffinity |
+	#ResourceQuotaScopeVolumeAttributesClass
 
 // Match all pod objects where spec.activeDeadlineSeconds >=0
 #ResourceQuotaScopeTerminating: #ResourceQuotaScope & "Terminating"
@@ -7787,6 +8008,9 @@ import (
 
 // Match all pod objects that have cross-namespace pod (anti)affinity mentioned.
 #ResourceQuotaScopeCrossNamespacePodAffinity: #ResourceQuotaScope & "CrossNamespacePodAffinity"
+
+// Match all pvc objects that have volume attributes class mentioned.
+#ResourceQuotaScopeVolumeAttributesClass: #ResourceQuotaScope & "VolumeAttributesClass"
 
 // ResourceQuotaSpec defines the desired hard limits to enforce for Quota.
 #ResourceQuotaSpec: {
