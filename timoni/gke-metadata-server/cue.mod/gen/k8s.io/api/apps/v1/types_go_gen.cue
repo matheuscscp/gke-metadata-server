@@ -212,7 +212,8 @@ import (
 	// the network identity of the set. Pods get DNS/hostnames that follow the
 	// pattern: pod-specific-string.serviceName.default.svc.cluster.local
 	// where "pod-specific-string" is managed by the StatefulSet controller.
-	serviceName: string @go(ServiceName) @protobuf(5,bytes,opt)
+	// +optional
+	serviceName?: string @go(ServiceName) @protobuf(5,bytes,opt)
 
 	// podManagementPolicy controls how pods are created during initial scale up,
 	// when replacing pods on nodes, or when scaling down. The default policy is
@@ -474,19 +475,19 @@ import (
 	// +optional
 	observedGeneration?: int64 @go(ObservedGeneration) @protobuf(1,varint,opt)
 
-	// Total number of non-terminated pods targeted by this deployment (their labels match the selector).
+	// Total number of non-terminating pods targeted by this deployment (their labels match the selector).
 	// +optional
 	replicas?: int32 @go(Replicas) @protobuf(2,varint,opt)
 
-	// Total number of non-terminated pods targeted by this deployment that have the desired template spec.
+	// Total number of non-terminating pods targeted by this deployment that have the desired template spec.
 	// +optional
 	updatedReplicas?: int32 @go(UpdatedReplicas) @protobuf(3,varint,opt)
 
-	// readyReplicas is the number of pods targeted by this Deployment with a Ready Condition.
+	// Total number of non-terminating pods targeted by this Deployment with a Ready Condition.
 	// +optional
 	readyReplicas?: int32 @go(ReadyReplicas) @protobuf(7,varint,opt)
 
-	// Total number of available pods (ready for at least minReadySeconds) targeted by this deployment.
+	// Total number of available non-terminating pods (ready for at least minReadySeconds) targeted by this deployment.
 	// +optional
 	availableReplicas?: int32 @go(AvailableReplicas) @protobuf(4,varint,opt)
 
@@ -495,6 +496,13 @@ import (
 	// either be pods that are running but not yet available or pods that still have not been created.
 	// +optional
 	unavailableReplicas?: int32 @go(UnavailableReplicas) @protobuf(5,varint,opt)
+
+	// Total number of terminating pods targeted by this deployment. Terminating pods have a non-null
+	// .metadata.deletionTimestamp and have not yet reached the Failed or Succeeded .status.phase.
+	//
+	// This is an alpha field. Enable DeploymentReplicaSetTerminatingReplicas to be able to use this field.
+	// +optional
+	terminatingReplicas?: null | int32 @go(TerminatingReplicas,*int32) @protobuf(9,varint,opt)
 
 	// Represents the latest available observations of a deployment's current state.
 	// +patchMergeKey=type
@@ -822,16 +830,16 @@ import (
 	metadata?: metav1.#ListMeta @go(ListMeta) @protobuf(1,bytes,opt)
 
 	// List of ReplicaSets.
-	// More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicationcontroller
+	// More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset
 	items: [...#ReplicaSet] @go(Items,[]ReplicaSet) @protobuf(2,bytes,rep)
 }
 
 // ReplicaSetSpec is the specification of a ReplicaSet.
 #ReplicaSetSpec: {
-	// Replicas is the number of desired replicas.
+	// Replicas is the number of desired pods.
 	// This is a pointer to distinguish between explicit zero and unspecified.
 	// Defaults to 1.
-	// More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicationcontroller/#what-is-a-replicationcontroller
+	// More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset
 	// +optional
 	replicas?: null | int32 @go(Replicas,*int32) @protobuf(1,varint,opt)
 
@@ -849,28 +857,35 @@ import (
 
 	// Template is the object that describes the pod that will be created if
 	// insufficient replicas are detected.
-	// More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicationcontroller#pod-template
+	// More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/#pod-template
 	// +optional
 	template?: v1.#PodTemplateSpec @go(Template) @protobuf(3,bytes,opt)
 }
 
 // ReplicaSetStatus represents the current status of a ReplicaSet.
 #ReplicaSetStatus: {
-	// Replicas is the most recently observed number of replicas.
-	// More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicationcontroller/#what-is-a-replicationcontroller
+	// Replicas is the most recently observed number of non-terminating pods.
+	// More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset
 	replicas: int32 @go(Replicas) @protobuf(1,varint,opt)
 
-	// The number of pods that have labels matching the labels of the pod template of the replicaset.
+	// The number of non-terminating pods that have labels matching the labels of the pod template of the replicaset.
 	// +optional
 	fullyLabeledReplicas?: int32 @go(FullyLabeledReplicas) @protobuf(2,varint,opt)
 
-	// readyReplicas is the number of pods targeted by this ReplicaSet with a Ready Condition.
+	// The number of non-terminating pods targeted by this ReplicaSet with a Ready Condition.
 	// +optional
 	readyReplicas?: int32 @go(ReadyReplicas) @protobuf(4,varint,opt)
 
-	// The number of available replicas (ready for at least minReadySeconds) for this replica set.
+	// The number of available non-terminating pods (ready for at least minReadySeconds) for this replica set.
 	// +optional
 	availableReplicas?: int32 @go(AvailableReplicas) @protobuf(5,varint,opt)
+
+	// The number of terminating pods for this replica set. Terminating pods have a non-null .metadata.deletionTimestamp
+	// and have not yet reached the Failed or Succeeded .status.phase.
+	//
+	// This is an alpha field. Enable DeploymentReplicaSetTerminatingReplicas to be able to use this field.
+	// +optional
+	terminatingReplicas?: null | int32 @go(TerminatingReplicas,*int32) @protobuf(7,varint,opt)
 
 	// ObservedGeneration reflects the generation of the most recently observed ReplicaSet.
 	// +optional
