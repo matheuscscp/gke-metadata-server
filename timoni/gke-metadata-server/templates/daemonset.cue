@@ -65,8 +65,6 @@ import (
 						privileged: true
 					}
 					args: [
-						"--service-account-name=\(#config.#namespacedMetadata.name)",
-						"--service-account-namespace=\(#config.#namespacedMetadata.namespace)",
 						"--project-id=\(#config.settings.projectID)",
 						"--workload-identity-provider=\(#config.settings.workloadIdentityProvider)",
 						if #config.settings.logLevel != _|_ {

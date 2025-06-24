@@ -35,6 +35,7 @@ import (
 	"github.com/matheuscscp/gke-metadata-server/internal/logging"
 	"github.com/matheuscscp/gke-metadata-server/internal/retry"
 	"github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts"
+	"github.com/matheuscscp/gke-metadata-server/internal/serviceaccounttokens"
 
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
@@ -79,13 +80,13 @@ func (s *Server) getPodGoogleServiceAccountEmail(w http.ResponseWriter, r *http.
 // or the Workload Identity Pool if the pod doesn't have a Google Service Account.
 // If there's an error this function sends the response to the client.
 func (s *Server) getPodGoogleServiceAccountEmailOrWorkloadIdentityPool(w http.ResponseWriter, r *http.Request) (string, *http.Request, error) {
-	podGoogleServiceAccountEmail, r, err := s.getPodGoogleServiceAccountEmail(w, r)
+	googleEmail, r, err := s.getPodGoogleServiceAccountEmail(w, r)
 	if err != nil {
 		return "", nil, err
 	}
 	email := s.opts.WorkloadIdentityPool
-	if podGoogleServiceAccountEmail != nil {
-		email = *podGoogleServiceAccountEmail
+	if googleEmail != nil {
+		email = *googleEmail
 	}
 	return email, r, nil
 }
@@ -117,25 +118,27 @@ func (s *Server) getPodServiceAccountToken(w http.ResponseWriter, r *http.Reques
 	return token, r, nil
 }
 
-// getPodGoogleAccessToken creates a Google Access Token for the
-// given Pod's ServiceAccount.
+// getPodGoogleAccessTokens creates a pair of Google Access Tokens for the
+// given Pod's ServiceAccount, one for direct access and another one for
+// impersonation.
 // If there's an error this function sends the response to the client.
-func (s *Server) getPodGoogleAccessToken(w http.ResponseWriter, r *http.Request) (string, time.Time, *http.Request, error) {
+func (s *Server) getPodGoogleAccessTokens(w http.ResponseWriter, r *http.Request,
+) (*serviceaccounttokens.AccessTokens, time.Time, *http.Request, error) {
 	saToken, r, err := s.getPodServiceAccountToken(w, r)
 	if err != nil {
-		return "", time.Time{}, nil, err
+		return nil, time.Time{}, nil, err
 	}
-	podGoogleServiceAccountEmail, r, err := s.getPodGoogleServiceAccountEmail(w, r)
+	googleEmail, r, err := s.getPodGoogleServiceAccountEmail(w, r)
 	if err != nil {
-		return "", time.Time{}, nil, err
+		return nil, time.Time{}, nil, err
 	}
-	token, expiresAt, err := s.opts.ServiceAccountTokens.GetGoogleAccessToken(
-		r.Context(), saToken, podGoogleServiceAccountEmail)
+	tokens, expiresAt, err := s.opts.ServiceAccountTokens.GetGoogleAccessTokens(
+		r.Context(), saToken, googleEmail)
 	if err != nil {
 		respondGoogleAPIErrorf(w, r, "error getting google access token: %w", err)
-		return "", time.Time{}, nil, err
+		return nil, time.Time{}, nil, err
 	}
-	return token, expiresAt, r, nil
+	return tokens, expiresAt, r, nil
 }
 
 // getPodServiceAccountReference retrieves the ServiceAccount reference

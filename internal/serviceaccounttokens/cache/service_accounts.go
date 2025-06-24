@@ -52,7 +52,7 @@ func (p *Provider) getTokens(ctx context.Context, ref *serviceaccounts.Reference
 	p.serviceAccountsMutex.Unlock()
 
 	tokens := sa.tokens
-	if tokens == nil || tokens.serviceAccountToken.isExpired() || tokens.googleAccessToken.isExpired() {
+	if tokens == nil || tokens.serviceAccountToken.isExpired() || tokens.googleAccessTokens.isExpired() {
 		p.cacheMisses.Inc()
 		tokens, err := sa.requestTokens(ctx, p.ctx)
 		if err != nil {

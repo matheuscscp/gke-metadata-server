@@ -42,7 +42,7 @@ type Provider struct {
 	numTokens             prometheus.Gauge
 	cacheMisses           prometheus.Counter
 	serviceAccounts       map[serviceaccounts.Reference]*serviceAccount
-	googleIDTokens        map[googleIDTokenReference]*tokenAndExpiration
+	googleIDTokens        map[googleIDTokenReference]*tokenAndExpiration[string]
 	nodeServiceAccountRef *serviceaccounts.Reference
 	ctx                   context.Context
 	cancelCtx             context.CancelFunc
@@ -84,7 +84,7 @@ func NewProvider(ctx context.Context, opts ProviderOptions) *Provider {
 		numTokens:       numTokens,
 		cacheMisses:     cacheMisses,
 		serviceAccounts: make(map[serviceaccounts.Reference]*serviceAccount),
-		googleIDTokens:  make(map[googleIDTokenReference]*tokenAndExpiration),
+		googleIDTokens:  make(map[googleIDTokenReference]*tokenAndExpiration[string]),
 		ctx:             backgroundCtx,
 		cancelCtx:       cancel,
 		semaphore:       make(chan struct{}, opts.Concurrency),
@@ -130,13 +130,14 @@ func (p *Provider) GetServiceAccountToken(ctx context.Context, ref *serviceaccou
 	return token.token, token.expiration(), nil
 }
 
-func (p *Provider) GetGoogleAccessToken(ctx context.Context, saToken string, googleEmail *string) (string, time.Time, error) {
+func (p *Provider) GetGoogleAccessTokens(ctx context.Context, saToken string,
+	googleEmail *string) (*serviceaccounttokens.AccessTokens, time.Time, error) {
 	ref := serviceaccounts.ReferenceFromToken(saToken)
 	tokens, err := p.getTokens(ctx, ref)
 	if err != nil {
-		return "", time.Time{}, err
+		return nil, time.Time{}, err
 	}
-	token := tokens.googleAccessToken
+	token := tokens.googleAccessTokens
 	return token.token, token.expiration(), nil
 }
 
