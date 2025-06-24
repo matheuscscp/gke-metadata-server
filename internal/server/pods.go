@@ -106,7 +106,7 @@ func (s *Server) listPodGoogleServiceAccounts(w http.ResponseWriter, r *http.Req
 // impersonation.
 // If there's an error this function sends the response to the client.
 func (s *Server) getPodGoogleAccessTokens(w http.ResponseWriter, r *http.Request,
-) (*serviceaccounttokens.AccessTokens, time.Time, *http.Request, error) {
+	scopes []string) (*serviceaccounttokens.AccessTokens, time.Time, *http.Request, error) {
 	saRef, r, err := s.getPodServiceAccountReference(w, r)
 	if err != nil {
 		return nil, time.Time{}, nil, err
@@ -122,7 +122,7 @@ func (s *Server) getPodGoogleAccessTokens(w http.ResponseWriter, r *http.Request
 		return nil, time.Time{}, nil, err
 	}
 	tokens, expiresAt, err := s.opts.ServiceAccountTokens.GetGoogleAccessTokens(
-		r.Context(), saToken, googleEmail)
+		r.Context(), saToken, googleEmail, scopes)
 	if err != nil {
 		respondGoogleAPIErrorf(w, r, "error getting google access token: %w", err)
 		return nil, time.Time{}, nil, err

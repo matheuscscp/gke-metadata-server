@@ -57,6 +57,13 @@ metadata:
   namespace: default
 spec:
   serviceAccountName: <SERVICE_ACCOUNT> # Use the ServiceAccount created above.
+  # This DNS record is required because the Google libraries hardcode the metadata server
+  # address as the hostname "metadata.google.internal". Sometimes they also hardcode the
+  # IP address. Sometimes they only hardcode the IP address, in which case this setting
+  # would not be needed. It all depends on what library your Pod is using. Test it!
+  hostAliases:
+  - hostnames: [metadata.google.internal]
+    ip: 169.254.169.254
 
   ################################################################################
   # Note: All the configuration below is test-only and not needed in production. #
@@ -64,6 +71,7 @@ spec:
 
   restartPolicy: Never
   hostNetwork: <HOST_NETWORK>
+  dnsPolicy: ClusterFirstWithHostNet
   containers:
   - name: test
     image: ghcr.io/matheuscscp/gke-metadata-server/test@<GO_TEST_DIGEST>

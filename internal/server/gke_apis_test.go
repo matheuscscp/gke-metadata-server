@@ -43,6 +43,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/googleapi"
+	oauth2 "google.golang.org/api/oauth2/v2"
 )
 
 const (
@@ -53,6 +54,12 @@ const (
 
 var gkeHeaders = http.Header{
 	"Metadata-Flavor": []string{gkeMetadataFlavor},
+}
+
+func TestOnGCE(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	assert.True(t, metadata.OnGCEWithContext(ctx))
 }
 
 func TestGKEServiceAccountTokenAPI(t *testing.T) {
@@ -131,8 +138,6 @@ func TestGKEServiceAccountTokenAPI_Implicitly(t *testing.T) {
 	// GKE Service Account Token API. The Go library will internally
 	// call this API to get an Access Token for GCS operations.
 
-	require.True(t, metadata.OnGCE())
-
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -170,16 +175,25 @@ func TestGKEServiceAccountTokenAPI_Implicitly(t *testing.T) {
 }
 
 func TestGKEServiceAccountTokenAPI_DefaultTokenSource(t *testing.T) {
-	require.True(t, metadata.OnGCE())
-
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	ts, err := google.DefaultTokenSource(ctx)
+	const scope = "https://www.googleapis.com/auth/bigtable.admin.table"
+	ts, err := google.DefaultTokenSource(ctx, scope)
 	require.NoError(t, err)
+
 	token, err := ts.Token()
 	require.NoError(t, err)
-	assert.NotEmpty(t, token.AccessToken)
+	require.NotEmpty(t, token.AccessToken)
+
+	if os.Getenv("HOSTNAME") != "test-direct-access" {
+		svc, err := oauth2.NewService(ctx)
+		require.NoError(t, err)
+
+		tokenInfo, err := svc.Tokeninfo().AccessToken(token.AccessToken).Context(ctx).Do()
+		require.NoError(t, err)
+		assert.Equal(t, scope, tokenInfo.Scope)
+	}
 }
 
 func TestGKEServiceAccountIdentityAPI(t *testing.T) {

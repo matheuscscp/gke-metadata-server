@@ -105,7 +105,7 @@ Refer to https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identit
 		if err != nil {
 			return nil, err
 		}
-		accessTokens, _, r, err := s.getPodGoogleAccessTokens(w, r)
+		accessTokens, _, r, err := s.getPodGoogleAccessTokens(w, r, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -130,7 +130,13 @@ func (s *Server) gkeServiceAccountScopesAPI() pkghttp.MetadataHandlerFunc {
 
 func (s *Server) gkeServiceAccountTokenAPI() pkghttp.MetadataHandler {
 	mh := func(w http.ResponseWriter, r *http.Request) (any, error) {
-		tokens, expiresAt, _, err := s.getPodGoogleAccessTokens(w, r)
+		var scopes []string
+		for scope := range strings.SplitSeq(r.URL.Query().Get("scopes"), ",") {
+			if s := strings.TrimSpace(scope); s != "" {
+				scopes = append(scopes, s)
+			}
+		}
+		tokens, expiresAt, _, err := s.getPodGoogleAccessTokens(w, r, scopes)
 		if err != nil {
 			return nil, err
 		}
