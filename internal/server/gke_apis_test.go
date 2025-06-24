@@ -41,6 +41,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/oauth2/google"
 	"google.golang.org/api/googleapi"
 )
 
@@ -125,7 +126,7 @@ func TestGKEServiceAccountTokenAPI(t *testing.T) {
 	}
 }
 
-func TestGKEServiceAccountTokenAPIImplicitly(t *testing.T) {
+func TestGKEServiceAccountTokenAPI_Implicitly(t *testing.T) {
 	// Here we do a GCS roundtrip using the Go library to test the
 	// GKE Service Account Token API. The Go library will internally
 	// call this API to get an Access Token for GCS operations.
@@ -166,6 +167,19 @@ func TestGKEServiceAccountTokenAPIImplicitly(t *testing.T) {
 	b, err := io.ReadAll(r)
 	require.NoError(t, err)
 	assert.Equal(t, value, string(b))
+}
+
+func TestGKEServiceAccountTokenAPI_DefaultTokenSource(t *testing.T) {
+	require.True(t, metadata.OnGCE())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	ts, err := google.DefaultTokenSource(ctx)
+	require.NoError(t, err)
+	token, err := ts.Token()
+	require.NoError(t, err)
+	assert.NotEmpty(t, token.AccessToken)
 }
 
 func TestGKEServiceAccountIdentityAPI(t *testing.T) {
