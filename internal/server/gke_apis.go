@@ -64,7 +64,7 @@ func (s *Server) gkeServiceAccountAliasesAPI() pkghttp.MetadataHandlerFunc {
 
 func (s *Server) gkeServiceAccountEmailAPI() pkghttp.MetadataHandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) (any, error) {
-		email, r, err := s.getPodGoogleServiceAccountEmailOrWorkloadIdentityPool(w, r)
+		email, _, err := s.getPodGoogleServiceAccountEmailOrWorkloadIdentityPool(w, r)
 		if err != nil {
 			return nil, err
 		}
@@ -140,7 +140,7 @@ func (s *Server) gkeServiceAccountScopesAPI() pkghttp.MetadataHandlerFunc {
 
 func (s *Server) gkeServiceAccountTokenAPI() pkghttp.MetadataHandler {
 	mh := func(w http.ResponseWriter, r *http.Request) (any, error) {
-		token, expiresAt, r, err := s.getPodGoogleAccessToken(w, r)
+		token, expiresAt, _, err := s.getPodGoogleAccessToken(w, r)
 		if err != nil {
 			return nil, err
 		}
