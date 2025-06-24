@@ -53,6 +53,12 @@ type googleIDTokenReference struct {
 	audience               string
 }
 
+type googleScopedAccessTokenReference struct {
+	serviceAccountRefernce serviceaccounts.Reference
+	email                  string
+	scopes                 string
+}
+
 func (p *Provider) createTokens(ctx context.Context, saRef *serviceaccounts.Reference) (*tokens, *string, error) {
 	sa, err := p.opts.ServiceAccounts.Get(ctx, saRef)
 	if err != nil {
@@ -69,7 +75,7 @@ func (p *Provider) createTokens(ctx context.Context, saRef *serviceaccounts.Refe
 		return nil, nil, fmt.Errorf("error creating token for kubernetes service account: %w", err)
 	}
 
-	accessTokens, accessTokenExpiration, err := p.opts.Source.GetGoogleAccessTokens(ctx, saToken, email)
+	accessTokens, accessTokenExpiration, err := p.opts.Source.GetGoogleAccessTokens(ctx, saToken, email, nil)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error creating google access token: %w", err)
 	}

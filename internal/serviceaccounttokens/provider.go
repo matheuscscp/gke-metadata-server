@@ -36,7 +36,8 @@ type AccessTokens struct {
 
 type Provider interface {
 	GetServiceAccountToken(ctx context.Context, ref *serviceaccounts.Reference) (string, time.Time, error)
-	GetGoogleAccessTokens(ctx context.Context, saToken string, googleEmail *string) (*AccessTokens, time.Time, error)
+	GetGoogleAccessTokens(ctx context.Context, saToken string, googleEmail *string,
+		scopes []string) (*AccessTokens, time.Time, error)
 	GetGoogleIdentityToken(ctx context.Context, saRef *serviceaccounts.Reference,
 		accessToken, googleEmail, audience string) (string, time.Time, error)
 }

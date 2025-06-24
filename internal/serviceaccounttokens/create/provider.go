@@ -71,30 +71,40 @@ func (p *Provider) GetServiceAccountToken(ctx context.Context, ref *serviceaccou
 }
 
 func (p *Provider) GetGoogleAccessTokens(ctx context.Context, saToken string,
-	googleEmail *string) (*serviceaccounttokens.AccessTokens, time.Time, error) {
+	googleEmail *string, scopes []string) (*serviceaccounttokens.AccessTokens, time.Time, error) {
 
-	directAccess, err := p.opts.GoogleCredentialsConfig.NewToken(ctx, saToken, nil)
-	if err != nil {
-		return nil, time.Time{}, err
+	expiration := time.Now().Add(365 * 24 * time.Hour)
+
+	// Optimization: No need for a direct access token if the token was requested with custom
+	// scopes and a google service account email is configured for impersonation. Tokens with
+	// custom scopes are not used for fetching google identity tokens, so we only need to
+	// cache the token that was requested by a client pod.
+	var directAccess string
+	if !(googleEmail != nil && len(scopes) > 0) {
+		token, err := p.opts.GoogleCredentialsConfig.NewToken(ctx, saToken, nil, scopes)
+		if err != nil {
+			return nil, time.Time{}, err
+		}
+		directAccess = token.AccessToken
+		expiration = token.Expiry
 	}
-	expiry := directAccess.Expiry
 
 	var impersonated string
 	if googleEmail != nil {
-		token, err := p.opts.GoogleCredentialsConfig.NewToken(ctx, saToken, googleEmail)
+		token, err := p.opts.GoogleCredentialsConfig.NewToken(ctx, saToken, googleEmail, scopes)
 		if err != nil {
 			return nil, time.Time{}, err
 		}
 		impersonated = token.AccessToken
-		if token.Expiry.Before(expiry) {
-			expiry = token.Expiry
+		if token.Expiry.Before(expiration) {
+			expiration = token.Expiry
 		}
 	}
 
 	return &serviceaccounttokens.AccessTokens{
-		DirectAccess: directAccess.AccessToken,
+		DirectAccess: directAccess,
 		Impersonated: impersonated,
-	}, expiry, nil
+	}, expiration, nil
 }
 
 func (p *Provider) GetGoogleIdentityToken(ctx context.Context, _ *serviceaccounts.Reference,

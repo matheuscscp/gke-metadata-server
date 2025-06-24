@@ -66,13 +66,19 @@ func (c *Config) WorkloadIdentityProviderAudience() string {
 	return fmt.Sprintf("//iam.googleapis.com/%s", c.opts.WorkloadIdentityProvider)
 }
 
-func (c *Config) NewToken(ctx context.Context, subjectToken string, googleServiceAccountEmail *string) (*oauth2.Token, error) {
+func (c *Config) NewToken(ctx context.Context, subjectToken string,
+	googleServiceAccountEmail *string, scopes []string) (*oauth2.Token, error) {
+
+	if len(scopes) == 0 {
+		scopes = AccessScopes()
+	}
+
 	conf := externalaccount.Config{
 		UniverseDomain:       "googleapis.com",
 		Audience:             c.WorkloadIdentityProviderAudience(),
 		SubjectTokenType:     "urn:ietf:params:oauth:token-type:jwt",
 		TokenURL:             "https://sts.googleapis.com/v1/token",
-		Scopes:               AccessScopes(),
+		Scopes:               scopes,
 		SubjectTokenSupplier: tokenSupplier(subjectToken),
 	}
 

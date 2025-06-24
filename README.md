@@ -260,9 +260,10 @@ occupy port 80 in the network namespace of the Node.
 ### The `metadata.google.internal` DNS record
 
 Google has documented the `http://metadata.google.internal` endpoint as where to fetch
-metadata from. Some Google libraries may use this endpoint to fetch metadata from the
-emulator. If that's the case, you can configure your Pods with the following DNS
-configuration:
+metadata from, and that it should resolve to `http://169.254.169.254`. While some Google
+libraries hard-code the IP address and hit it directly without DNS resolution, others
+may use the DNS hostname to fetch metadata from the emulator. If that's your case, you
+can add to your Pods the following DNS configuration:
 
 ```yaml
 spec:
@@ -270,12 +271,6 @@ spec:
   - hostnames: [metadata.google.internal]
     ip: 169.254.169.254
 ```
-
-This IP address is also documented by Google as the address `metadata.google.internal`
-should resolve to. Not all Google libraries use the DNS hostname, some use this IP
-address directly in their code, so this configuration may not be necessary for all
-libraries (example: [Go](https://github.com/googleapis/google-cloud-go/blob/a961cb5e85ed07e2eaf088faa29ed9b60882212b/compute/metadata/metadata.go#L472-L485)).
-Pods running the `gcloud` CLI will require this configuration to work properly.
 
 ### Limitations and Security Risks
 

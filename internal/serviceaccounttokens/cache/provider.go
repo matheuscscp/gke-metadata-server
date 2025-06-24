@@ -26,6 +26,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -38,18 +39,20 @@ import (
 )
 
 type Provider struct {
-	opts                  ProviderOptions
-	numTokens             prometheus.Gauge
-	cacheMisses           prometheus.Counter
-	serviceAccounts       map[serviceaccounts.Reference]*serviceAccount
-	googleIDTokens        map[googleIDTokenReference]*tokenAndExpiration[string]
-	nodeServiceAccountRef *serviceaccounts.Reference
-	ctx                   context.Context
-	cancelCtx             context.CancelFunc
-	serviceAccountsMutex  sync.Mutex
-	googleIDTokensMutex   sync.RWMutex
-	wg                    sync.WaitGroup
-	semaphore             chan struct{}
+	opts                          ProviderOptions
+	numTokens                     prometheus.Gauge
+	cacheMisses                   prometheus.Counter
+	serviceAccounts               map[serviceaccounts.Reference]*serviceAccount
+	googleIDTokens                map[googleIDTokenReference]*tokenAndExpiration[string]
+	googleScopedAccessTokens      map[googleScopedAccessTokenReference]*tokenAndExpiration[string]
+	nodeServiceAccountRef         *serviceaccounts.Reference
+	ctx                           context.Context
+	cancelCtx                     context.CancelFunc
+	serviceAccountsMutex          sync.Mutex
+	googleIDTokensMutex           sync.RWMutex
+	googleScopedAccessTokensMutex sync.RWMutex
+	wg                            sync.WaitGroup
+	semaphore                     chan struct{}
 }
 
 type ProviderOptions struct {
@@ -80,17 +83,18 @@ func NewProvider(ctx context.Context, opts ProviderOptions) *Provider {
 	backgroundCtx, cancel := context.WithCancel(backgroundCtx)
 
 	p := &Provider{
-		opts:            opts,
-		numTokens:       numTokens,
-		cacheMisses:     cacheMisses,
-		serviceAccounts: make(map[serviceaccounts.Reference]*serviceAccount),
-		googleIDTokens:  make(map[googleIDTokenReference]*tokenAndExpiration[string]),
-		ctx:             backgroundCtx,
-		cancelCtx:       cancel,
-		semaphore:       make(chan struct{}, opts.Concurrency),
+		opts:                     opts,
+		numTokens:                numTokens,
+		cacheMisses:              cacheMisses,
+		serviceAccounts:          make(map[serviceaccounts.Reference]*serviceAccount),
+		googleIDTokens:           make(map[googleIDTokenReference]*tokenAndExpiration[string]),
+		googleScopedAccessTokens: make(map[googleScopedAccessTokenReference]*tokenAndExpiration[string]),
+		ctx:                      backgroundCtx,
+		cancelCtx:                cancel,
+		semaphore:                make(chan struct{}, opts.Concurrency),
 	}
 
-	// start garbage collector for google ID tokens
+	// start garbage collector for input-dependant tokens
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
@@ -108,6 +112,14 @@ func NewProvider(ctx context.Context, opts ProviderOptions) *Provider {
 					}
 				}
 				p.googleIDTokensMutex.Unlock()
+
+				p.googleScopedAccessTokensMutex.Lock()
+				for ref, token := range p.googleScopedAccessTokens {
+					if token.isExpired() {
+						delete(p.googleScopedAccessTokens, ref)
+					}
+				}
+				p.googleScopedAccessTokensMutex.Unlock()
 			}
 		}
 	}()
@@ -131,14 +143,65 @@ func (p *Provider) GetServiceAccountToken(ctx context.Context, ref *serviceaccou
 }
 
 func (p *Provider) GetGoogleAccessTokens(ctx context.Context, saToken string,
-	googleEmail *string) (*serviceaccounttokens.AccessTokens, time.Time, error) {
-	ref := serviceaccounts.ReferenceFromToken(saToken)
-	tokens, err := p.getTokens(ctx, ref)
+	googleEmail *string, scopes []string) (*serviceaccounttokens.AccessTokens, time.Time, error) {
+
+	saRef := serviceaccounts.ReferenceFromToken(saToken)
+
+	// easy case: no scopes
+	if len(scopes) == 0 {
+		tokens, err := p.getTokens(ctx, saRef)
+		if err != nil {
+			return nil, time.Time{}, err
+		}
+		token := tokens.googleAccessTokens
+		return token.token, token.expiration(), nil
+	}
+
+	// handle case with custom scopes
+
+	var email string
+	if googleEmail != nil {
+		email = *googleEmail
+	}
+	ref := googleScopedAccessTokenReference{*saRef, email, strings.Join(scopes, ",")}
+
+	// check cache first
+	p.googleScopedAccessTokensMutex.RLock()
+	token, ok := p.googleScopedAccessTokens[ref]
+	p.googleScopedAccessTokensMutex.RUnlock()
+	if ok && !token.isExpired() {
+		return &serviceaccounttokens.AccessTokens{DirectAccess: token.token}, token.expiration(), nil
+	}
+
+	// cache miss or token expired. need to cache a new token, so acquire semaphore to limit concurrency
+	select {
+	case p.semaphore <- struct{}{}:
+	case <-ctx.Done():
+		return nil, time.Time{}, fmt.Errorf("request context done while acquiring semaphore: %w", ctx.Err())
+	case <-p.ctx.Done():
+		return nil, time.Time{}, fmt.Errorf("process terminated while acquiring semaphore: %w", p.ctx.Err())
+	}
+
+	tokens, expiration, err := p.opts.Source.GetGoogleAccessTokens(ctx, saToken, googleEmail, scopes)
+
+	// release concurrency semaphore
+	<-p.semaphore
+
+	// check error
 	if err != nil {
 		return nil, time.Time{}, err
 	}
-	token := tokens.googleAccessTokens
-	return token.token, token.expiration(), nil
+
+	// token issued successfully. cache it and return
+	tokenString := tokens.DirectAccess
+	if tokenString == "" {
+		tokenString = tokens.Impersonated
+	}
+	token = newToken(tokenString, expiration)
+	p.googleScopedAccessTokensMutex.Lock()
+	p.googleScopedAccessTokens[ref] = token
+	p.googleScopedAccessTokensMutex.Unlock()
+	return &serviceaccounttokens.AccessTokens{DirectAccess: token.token}, token.expiration(), nil
 }
 
 func (p *Provider) GetGoogleIdentityToken(ctx context.Context, saRef *serviceaccounts.Reference,
