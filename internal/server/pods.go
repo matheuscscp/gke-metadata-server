@@ -101,32 +101,21 @@ func (s *Server) listPodGoogleServiceAccounts(w http.ResponseWriter, r *http.Req
 	return []string{"default", email}, r, nil
 }
 
-// getPodServiceAccountToken creates a ServiceAccount Token for the
-// given Pod's ServiceAccount.
-// If there's an error this function sends the response to the client.
-func (s *Server) getPodServiceAccountToken(w http.ResponseWriter, r *http.Request) (string, *http.Request, error) {
-	saRef, r, err := s.getPodServiceAccountReference(w, r)
-	if err != nil {
-		return "", nil, err
-	}
-	token, _, err := s.opts.ServiceAccountTokens.GetServiceAccountToken(r.Context(), saRef)
-	if err != nil {
-		const format = "error getting token for pod service account: %w"
-		pkghttp.RespondErrorf(w, r, http.StatusInternalServerError, format, err)
-		return "", nil, fmt.Errorf(format, err)
-	}
-	return token, r, nil
-}
-
 // getPodGoogleAccessTokens creates a pair of Google Access Tokens for the
 // given Pod's ServiceAccount, one for direct access and another one for
 // impersonation.
 // If there's an error this function sends the response to the client.
 func (s *Server) getPodGoogleAccessTokens(w http.ResponseWriter, r *http.Request,
 ) (*serviceaccounttokens.AccessTokens, time.Time, *http.Request, error) {
-	saToken, r, err := s.getPodServiceAccountToken(w, r)
+	saRef, r, err := s.getPodServiceAccountReference(w, r)
 	if err != nil {
 		return nil, time.Time{}, nil, err
+	}
+	saToken, _, err := s.opts.ServiceAccountTokens.GetServiceAccountToken(r.Context(), saRef)
+	if err != nil {
+		const format = "error getting token for pod service account: %w"
+		pkghttp.RespondErrorf(w, r, http.StatusInternalServerError, format, err)
+		return nil, time.Time{}, nil, fmt.Errorf(format, err)
 	}
 	googleEmail, r, err := s.getPodGoogleServiceAccountEmail(w, r)
 	if err != nil {
