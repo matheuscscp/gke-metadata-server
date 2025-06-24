@@ -74,6 +74,7 @@ func (s *Server) gkeServiceAccountEmailAPI() pkghttp.MetadataHandlerFunc {
 
 func (s *Server) gkeServiceAccountIdentityAPI() pkghttp.MetadataHandler {
 	mh := func(w http.ResponseWriter, r *http.Request) (any, error) {
+
 		// validate audience
 		audience := strings.TrimSpace(r.URL.Query().Get("audience"))
 		if audience == "" {
@@ -83,12 +84,13 @@ func (s *Server) gkeServiceAccountIdentityAPI() pkghttp.MetadataHandler {
 			}
 			return nil, fmt.Errorf("non-empty audience parameter required")
 		}
+
 		// ensure the pod has a target google service account
-		podGoogleServiceAccountEmail, r, err := s.getPodGoogleServiceAccountEmail(w, r)
+		googleEmail, r, err := s.getPodGoogleServiceAccountEmail(w, r)
 		if err != nil {
 			return nil, err
 		}
-		if podGoogleServiceAccountEmail == nil {
+		if googleEmail == nil {
 			saRef := r.Context().Value(podServiceAccountReferenceContextKey{}).(*serviceaccounts.Reference)
 			msg := fmt.Sprintf(`Your Kubernetes service account (%s/%s) is not annotated with a target Google service account, which is a requirement for retrieving Identity Tokens using Workload Identity.
 Please add the iam.gke.io/gcp-service-account=[GSA_NAME]@[PROJECT_ID] annotation to your Kubernetes service account.
@@ -97,36 +99,24 @@ Refer to https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identit
 			pkghttp.RespondText(w, r, http.StatusNotFound, msg)
 			return nil, fmt.Errorf("pod service account not annotated with target Google service account")
 		}
-		// test if the pod has permission to impersonate the google service account
-		_, _, r, err = s.getPodGoogleAccessToken(w, r)
-		if err != nil {
-			return nil, err
-		}
-		// get emulator access token
-		saToken, _, err := s.opts.ServiceAccountTokens.GetServiceAccountToken(r.Context(), &s.opts.ServiceAccount)
-		if err != nil {
-			const format = "error getting token for the emulator service account: %w"
-			pkghttp.RespondErrorf(w, r, http.StatusInternalServerError, format, err)
-			return nil, fmt.Errorf(format, err)
-		}
-		accessToken, _, err := s.opts.ServiceAccountTokens.GetGoogleAccessToken(r.Context(), saToken, nil)
-		if err != nil {
-			const format = "error getting google access token for the emulator service account: %w"
-			pkghttp.RespondErrorf(w, r, http.StatusInternalServerError, format, err)
-			return nil, fmt.Errorf(format, err)
-		}
-		// get the identity token using the emulator access token
+
+		// get the identity token
 		saRef, r, err := s.getPodServiceAccountReference(w, r)
 		if err != nil {
 			return nil, err
 		}
-		token, _, err := s.opts.ServiceAccountTokens.GetGoogleIdentityToken(
-			r.Context(), saRef, accessToken, *podGoogleServiceAccountEmail, audience)
+		accessTokens, _, r, err := s.getPodGoogleAccessTokens(w, r)
+		if err != nil {
+			return nil, err
+		}
+		identityToken, _, err := s.opts.ServiceAccountTokens.GetGoogleIdentityToken(
+			r.Context(), saRef, accessTokens.DirectAccess, *googleEmail, audience)
 		if err != nil {
 			respondGoogleAPIErrorf(w, r, "error getting google id token: %w", err)
 			return nil, err
 		}
-		return token, nil
+
+		return identityToken, nil
 	}
 
 	return pkghttp.TokenHandler{MetadataHandler: pkghttp.MetadataHandlerFunc(mh)}
@@ -140,9 +130,13 @@ func (s *Server) gkeServiceAccountScopesAPI() pkghttp.MetadataHandlerFunc {
 
 func (s *Server) gkeServiceAccountTokenAPI() pkghttp.MetadataHandler {
 	mh := func(w http.ResponseWriter, r *http.Request) (any, error) {
-		token, expiresAt, _, err := s.getPodGoogleAccessToken(w, r)
+		tokens, expiresAt, _, err := s.getPodGoogleAccessTokens(w, r)
 		if err != nil {
 			return nil, err
+		}
+		token := tokens.DirectAccess
+		if t := tokens.Impersonated; t != "" {
+			token = t
 		}
 		return map[string]any{
 			"access_token": token,

@@ -28,17 +28,18 @@ import (
 	"time"
 
 	"github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts"
+	"github.com/matheuscscp/gke-metadata-server/internal/serviceaccounttokens"
 )
 
-type tokenAndExpiration struct {
-	token               string
+type tokenAndExpiration[T any] struct {
+	token               T
 	monotonicExpiration time.Time
 	wallClockExpiration time.Time
 }
 
 type tokens struct {
-	serviceAccountToken *tokenAndExpiration
-	googleAccessToken   *tokenAndExpiration
+	serviceAccountToken *tokenAndExpiration[string]
+	googleAccessTokens  *tokenAndExpiration[*serviceaccounttokens.AccessTokens]
 }
 
 type tokensAndError struct {
@@ -68,43 +69,43 @@ func (p *Provider) createTokens(ctx context.Context, saRef *serviceaccounts.Refe
 		return nil, nil, fmt.Errorf("error creating token for kubernetes service account: %w", err)
 	}
 
-	accessToken, accessTokenExpiration, err := p.opts.Source.GetGoogleAccessToken(ctx, saToken, email)
+	accessTokens, accessTokenExpiration, err := p.opts.Source.GetGoogleAccessTokens(ctx, saToken, email)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error creating google access token: %w", err)
 	}
 
 	return &tokens{
 		serviceAccountToken: newToken(saToken, saTokenExpiration),
-		googleAccessToken:   newToken(accessToken, accessTokenExpiration),
+		googleAccessTokens:  newToken(accessTokens, accessTokenExpiration),
 	}, email, nil
 }
 
-func newToken(token string, monotonicExpiration time.Time) *tokenAndExpiration {
-	return &tokenAndExpiration{
+func newToken[T any](token T, monotonicExpiration time.Time) *tokenAndExpiration[T] {
+	return &tokenAndExpiration[T]{
 		token:               token,
 		monotonicExpiration: monotonicExpiration,
 		wallClockExpiration: time.Unix(monotonicExpiration.Unix(), 0),
 	}
 }
 
-func (t *tokenAndExpiration) expiration() time.Time {
+func (t *tokenAndExpiration[T]) expiration() time.Time {
 	if time.Until(t.monotonicExpiration) < time.Until(t.wallClockExpiration) {
 		return t.monotonicExpiration
 	}
 	return t.wallClockExpiration
 }
 
-func (t *tokenAndExpiration) timeUntilExpiration() time.Duration {
+func (t *tokenAndExpiration[T]) timeUntilExpiration() time.Duration {
 	return time.Until(t.expiration())
 }
 
-func (t *tokenAndExpiration) isExpired() bool {
+func (t *tokenAndExpiration[T]) isExpired() bool {
 	return t.timeUntilExpiration() <= 0
 }
 
 func (t *tokens) timeUntilExpiration() time.Duration {
 	d := t.serviceAccountToken.timeUntilExpiration()
-	if google := t.googleAccessToken.timeUntilExpiration(); google < d {
+	if google := t.googleAccessTokens.timeUntilExpiration(); google < d {
 		d = google
 	}
 	return d

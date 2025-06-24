@@ -36,19 +36,10 @@ resource "google_service_account" "test" {
   account_id = "test-sa"
 }
 
-resource "google_service_account_iam_binding" "test_workload_identity_users" {
+resource "google_service_account_iam_member" "test_workload_identity_users" {
   service_account_id = google_service_account.test.name
   role               = local.wi_user_role
-  members = [
-    "${local.k8s_principal_prefix}:default:test-impersonated",
-  ]
-}
-
-# this allows the emulator to issue Google Identity Tokens
-resource "google_project_iam_member" "openid_token_creator" {
-  project = data.google_project.gke_metadata_server.name
-  role    = "roles/iam.serviceAccountOpenIdTokenCreator"
-  member  = "${local.k8s_principal_prefix}:kube-system:gke-metadata-server"
+  member             = "${local.k8s_principal_prefix}:default:test-impersonated"
 }
 
 resource "google_storage_bucket" "test" {

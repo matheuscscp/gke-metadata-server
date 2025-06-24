@@ -70,12 +70,31 @@ func (p *Provider) GetServiceAccountToken(ctx context.Context, ref *serviceaccou
 	return status.Token, status.ExpirationTimestamp.Time, nil
 }
 
-func (p *Provider) GetGoogleAccessToken(ctx context.Context, saToken string, googleEmail *string) (string, time.Time, error) {
-	token, err := p.opts.GoogleCredentialsConfig.NewToken(ctx, saToken, googleEmail)
+func (p *Provider) GetGoogleAccessTokens(ctx context.Context, saToken string,
+	googleEmail *string) (*serviceaccounttokens.AccessTokens, time.Time, error) {
+
+	directAccess, err := p.opts.GoogleCredentialsConfig.NewToken(ctx, saToken, nil)
 	if err != nil {
-		return "", time.Time{}, err
+		return nil, time.Time{}, err
 	}
-	return token.AccessToken, token.Expiry, nil
+	expiry := directAccess.Expiry
+
+	var impersonated string
+	if googleEmail != nil {
+		token, err := p.opts.GoogleCredentialsConfig.NewToken(ctx, saToken, googleEmail)
+		if err != nil {
+			return nil, time.Time{}, err
+		}
+		impersonated = token.AccessToken
+		if token.Expiry.Before(expiry) {
+			expiry = token.Expiry
+		}
+	}
+
+	return &serviceaccounttokens.AccessTokens{
+		DirectAccess: directAccess.AccessToken,
+		Impersonated: impersonated,
+	}, expiry, nil
 }
 
 func (p *Provider) GetGoogleIdentityToken(ctx context.Context, _ *serviceaccounts.Reference,

@@ -84,35 +84,14 @@ and `{pool_full_name}` has the form:
 
 #### Grant Kubernetes ServiceAccounts permission to impersonate Google Service Accounts
 
-##### For getting access to GCP resources
-
 For allowing the Kubernetes ServiceAccount `{k8s_sa_name}` from the namespace `{k8s_namespace}`
 to impersonate the Google Service Account `{gcp_service_account}@{gcp_project_id}.iam.gserviceaccount.com`,
-grant the IAM Role `roles/iam.workloadIdentityUser` on this Service Account to the following
+grant the IAM Role `roles/iam.workloadIdentityUser` on this Google Service Account to the following
 principal:
 
 `principal://iam.googleapis.com/{pool_full_name}/subject/system:serviceaccount:{k8s_namespace}:{k8s_sa_name}`
 
 This principal will be reflected as a Subject in the Google Cloud Console webpage of the Pool.
-
-##### For issuing Google OpenID Connect Identity Tokens (and getting access on external systems)
-
-If you plan to use the `GET /computeMetadata/v1/instance/service-accounts/default/identity`
-API for issuing Google OpenID Connect Identity Tokens to use in external systems, you must
-also grant the IAM Role `roles/iam.serviceAccountOpenIdTokenCreator` on the target Google
-Service Accounts to the Kubernetes ServiceAccount of the emulator, i.e. the following
-principal:
-
-`principal://iam.googleapis.com/{pool_full_name}/subject/system:serviceaccount:kube-system:gke-metadata-server`
-
-If the target Google Service Accounts are all contained in the same project, you can grant
-this role at the project level. If the target Google Service Accounts are in different
-projects, the recommended way is to grant this role on each target Google Service Account
-individually. Regardless of the approach you choose for granting this role, the principal
-above must be granted the role on the target Google Service Accounts, either at the
-resource level (directly on the target Google Service Accounts), or at the project level,
-or at the folder level, or at the organization level. The lower the level, the better in
-terms of security.
 
 #### Alternatively, grant direct resource access to the Kubernetes ServiceAccount
 

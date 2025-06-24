@@ -197,8 +197,8 @@ func (h *DirectoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	pieces := splitPathPieces(r.URL.Path)
 	if len(pieces) == 0 {
-		h.ServeHTTP(w, r)
 		l.Debug("empty path")
+		h.directoryNode.ServeHTTP(w, r)
 		return
 	}
 
@@ -400,7 +400,7 @@ func serveMetadata(w http.ResponseWriter, r *http.Request, handler MetadataHandl
 }
 
 func splitPathPieces(path string) (pieces []string) {
-	for _, piece := range strings.Split(path, "/") {
+	for piece := range strings.SplitSeq(path, "/") {
 		if s := strings.TrimSpace(piece); s != "" {
 			pieces = append(pieces, s)
 		}
