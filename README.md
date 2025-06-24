@@ -201,54 +201,7 @@ cosign verify ghcr.io/matheuscscp/gke-metadata-server-timoni@$(cat timoni-digest
 If you are using the Timoni CLI to deploy Modules/Bundles you can automate the image verification
 using [Keyless Verification](https://timoni.sh/cue/module/signing/#sign-with-cosign-keyless).
 
-## Limitations and Security Risks
-
-### Pod identification by IP address
-
-The emulator uses the client IP address reported in the HTTP request to uniquely identify
-the requesting Pod in the Kubernetes API (just like in the native GKE implementation).
-
-If an attacker can easily perform IP address impersonation attacks in your cluster, e.g.
-[ARP spoofing](https://cloud.hacktricks.xyz/pentesting-cloud/kubernetes-security/kubernetes-network-attacks),
-then they will most likely exploit this design choice to steal your credentials.
-**Please evaluate the risk of such attacks in your cluster before choosing this tool.**
-
-*(Please also note that the attack explained in the link above requires Pods configured
-with very high privileges, which should normally not be allowed in sensitive/production
-clusters. If the security of your cluster is really important, then you should be
-[enforcing restrictions](https://github.com/open-policy-agent/gatekeeper) for preventing
-Pods from being created with such high privileges in the majority of cases.)*
-
-### Pods running on the host network
-
-In a cluster there may also be Pods running on the *host network*, i.e. Pods with the
-field `spec.hostNetwork` set to `true`. Such Pods share the IP address of the Node
-where they are running on, i.e *their IP is not unique*, and therefore they cannot be
-uniquely identified by the emulator through the client IP address reported in the HTTP
-request (like mentioned in the previous section).
-
-If your use case requires, Pods running on the host network are allowed to use a
-***shared*** Kubernetes ServiceAccount configured through the following pair of
-annotations or labels on the Node:
-
-```yaml
-node.gke-metadata-server.matheuscscp.io/serviceAccountName: <name>
-node.gke-metadata-server.matheuscscp.io/serviceAccountNamespace: <namespace>
-```
-
-Annotations are preferred over labels because they are less impactful to etcd since
-they are not indexed. Labels are also supported because not all Kubernetes providers
-support configuring annotations on Node pools/groups. KinD, for example, does not
-(see [testdata/kind.yaml](./testdata/kind.yaml)).
-
-Remember to add appropriate Node selectors/tolerations to your Pods so they are
-scheduled on the Nodes where the shared ServiceAccount is configured. There are
-many different ways to achieve this depending on your use case, so please refer
-to the Kubernetes documentation for more information.
-
-*Be careful when sharing identities between too many workloads! Please assess
-your security requirements and the risks of sharing identities between workloads
-in your cluster.*
+## Further documentation
 
 ### Routing Modes
 
@@ -304,7 +257,76 @@ has the disadvantage of not being able to bind to any port, only port 80. And fo
 this to work properly the emulator Pods need to run on the host network, so they
 occupy port 80 in the network namespace of the Node.
 
-### Token Cache
+### The `metadata.google.internal` DNS record
+
+Google has documented the `http://metadata.google.internal` endpoint as where to fetch
+metadata from. Some Google libraries may use this endpoint to fetch metadata from the
+emulator. If that's the case, you can configure your Pods with the following DNS
+configuration:
+
+```yaml
+spec:
+  hostAliases:
+  - hostnames: [metadata.google.internal]
+    ip: 169.254.169.254
+```
+
+This IP address is also documented by Google as the address `metadata.google.internal`
+should resolve to. Not all Google libraries use the DNS hostname, some use this IP
+address directly in their code, so this configuration may not be necessary for all
+libraries (example: [Go](https://github.com/googleapis/google-cloud-go/blob/a961cb5e85ed07e2eaf088faa29ed9b60882212b/compute/metadata/metadata.go#L472-L485)).
+Pods running the `gcloud` CLI will require this configuration to work properly.
+
+### Limitations and Security Risks
+
+#### Pod identification by IP address
+
+The emulator uses the client IP address reported in the HTTP request to uniquely identify
+the requesting Pod in the Kubernetes API (just like in the native GKE implementation).
+
+If an attacker can easily perform IP address impersonation attacks in your cluster, e.g.
+[ARP spoofing](https://cloud.hacktricks.xyz/pentesting-cloud/kubernetes-security/kubernetes-network-attacks),
+then they will most likely exploit this design choice to steal your credentials.
+**Please evaluate the risk of such attacks in your cluster before choosing this tool.**
+
+*(Please also note that the attack explained in the link above requires Pods configured
+with very high privileges, which should normally not be allowed in sensitive/production
+clusters. If the security of your cluster is really important, then you should be
+[enforcing restrictions](https://github.com/open-policy-agent/gatekeeper) for preventing
+Pods from being created with such high privileges in the majority of cases.)*
+
+#### Pods running on the host network
+
+In a cluster there may also be Pods running on the *host network*, i.e. Pods with the
+field `spec.hostNetwork` set to `true`. Such Pods share the IP address of the Node
+where they are running on, i.e *their IP is not unique*, and therefore they cannot be
+uniquely identified by the emulator through the client IP address reported in the HTTP
+request (like mentioned in the previous section).
+
+If your use case requires, Pods running on the host network are allowed to use a
+***shared*** Kubernetes ServiceAccount configured through the following pair of
+annotations or labels on the Node:
+
+```yaml
+node.gke-metadata-server.matheuscscp.io/serviceAccountName: <name>
+node.gke-metadata-server.matheuscscp.io/serviceAccountNamespace: <namespace>
+```
+
+Annotations are preferred over labels because they are less impactful to etcd since
+they are not indexed. Labels are also supported because not all Kubernetes providers
+support configuring annotations on Node pools/groups. KinD, for example, does not
+(see [testdata/kind.yaml](./testdata/kind.yaml)).
+
+Remember to add appropriate Node selectors/tolerations to your Pods so they are
+scheduled on the Nodes where the shared ServiceAccount is configured. There are
+many different ways to achieve this depending on your use case, so please refer
+to the Kubernetes documentation for more information.
+
+*Be careful when sharing identities between too many workloads! Please assess
+your security requirements and the risks of sharing identities between workloads
+in your cluster.*
+
+#### Token Cache
 
 When the emulator is configured to cache tokens, the issued Google OAuth 2.0 Access and
 OpenID Connect Identity Tokens are cached and returned to client Pods on every request
@@ -314,9 +336,16 @@ This means that even if you revoke the required permissions for the Kubernetes S
 to issue those tokens, the client Pods will still get those tokens from the emulator until
 they expire. This is a limitation of how the permissions are evaluated: they are evaluated
 only when the tokens are issued, which is what caching tries to avoid. If your use case
-requires immediate revocation of permissions, then you should not use token caching. The
-Helm Chart and Timoni Module distributed here have options to disable token caching, look
-at their respective values APIs.
+requires immediate revocation of permissions, one alternative is to disable token caching.
+The Helm Chart and Timoni Module distributed here have options to disable token caching, look
+at their respective values APIs. Another alternative is manually deleting all the Pods of
+the emulator DaemonSet:
+
+```bash
+kubectl delete pods -l app=gke-metadata-server -n kube-system
+```
+
+New Pods will be created by the DaemonSet and they will not have the cached tokens.
 
 Tokens usually expire in at most one hour.
 

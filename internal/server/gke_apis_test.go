@@ -56,7 +56,7 @@ var gkeHeaders = http.Header{
 }
 
 func TestGKEServiceAccountTokenAPI(t *testing.T) {
-	const url = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token"
+	const url = "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token"
 
 	var respBody struct {
 		AccessToken string `json:"access_token"`
@@ -186,7 +186,7 @@ func TestGKEServiceAccountIdentityAPI(t *testing.T) {
 	const expectedAudience = "test.com"
 	const expectedIssuer = "https://accounts.google.com"
 	const expectedSubject = `^\d{20,30}$`
-	const url = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity?audience=" + expectedAudience
+	const url = "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/identity?audience=" + expectedAudience
 
 	if os.Getenv("HOSTNAME") == "test-direct-access" {
 		const expectedMsg = `Your Kubernetes service account (default/test) is not annotated with a target Google service account, which is a requirement for retrieving Identity Tokens using Workload Identity.
