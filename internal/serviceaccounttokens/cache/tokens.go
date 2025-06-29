@@ -81,16 +81,33 @@ func (p *Provider) createTokens(ctx context.Context, saRef *serviceaccounts.Refe
 	}
 
 	return &tokens{
-		serviceAccountToken: newToken(saToken, saTokenExpiration),
-		googleAccessTokens:  newToken(accessTokens, accessTokenExpiration),
+		serviceAccountToken: newToken(saToken, saTokenExpiration, p.opts.MaxTokenDuration),
+		googleAccessTokens:  newToken(accessTokens, accessTokenExpiration, p.opts.MaxTokenDuration),
 	}, email, nil
 }
 
-func newToken[T any](token T, monotonicExpiration time.Time) *tokenAndExpiration[T] {
+func newToken[T any](token T, monotonicExpiration time.Time, maxTokenDuration time.Duration) *tokenAndExpiration[T] {
+	now := time.Now()
+	duration := monotonicExpiration.Sub(now)
+
+	// Apply 80% rule first (similar to kubelet for ServiceAccount token rotation)
+	effectiveDuration := (duration * 8) / 10
+
+	// Apply maximum token duration if specified (capped at 1 hour)
+	maxDuration := maxTokenDuration
+	if maxDuration > time.Hour {
+		maxDuration = time.Hour
+	}
+	if maxDuration > 0 && effectiveDuration > maxDuration {
+		effectiveDuration = maxDuration
+	}
+
+	effectiveExpiration := now.Add(effectiveDuration)
+
 	return &tokenAndExpiration[T]{
 		token:               token,
-		monotonicExpiration: monotonicExpiration,
-		wallClockExpiration: time.Unix(monotonicExpiration.Unix(), 0),
+		monotonicExpiration: effectiveExpiration,
+		wallClockExpiration: time.Unix(effectiveExpiration.Unix(), 0),
 	}
 }
 

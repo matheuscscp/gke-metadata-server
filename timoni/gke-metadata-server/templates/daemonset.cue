@@ -109,6 +109,9 @@ import (
 						if #config.settings.cacheTokens.enable && #config.settings.cacheTokens.concurrency != _|_ {
 							"--cache-tokens-concurrency=\(#config.settings.cacheTokens.concurrency)"
 						}
+						if #config.settings.cacheTokens.enable && #config.settings.cacheTokens.maxTokenDuration != _|_ {
+							"--cache-max-token-duration=\(#config.settings.cacheTokens.maxTokenDuration)"
+						}
 					]
 					env: [
 						{

@@ -372,7 +372,13 @@ kubectl delete pods -l app=gke-metadata-server -n kube-system
 
 New Pods will be created by the DaemonSet and they will not have the cached tokens.
 
-Tokens usually expire in at most one hour.
+The emulator implements an 80% refresh rule (similar to kubelet for ServiceAccount token
+rotation) and supports configurable maximum token duration limits. The 80% rule means
+tokens are refreshed when they have consumed 80% of their original lifetime. The maximum
+token duration setting allows capping the effective duration of cached tokens (default: 1 hour).
+This can be configured through the Helm Chart and Timoni Module values APIs.
+
+With the default configuration, tokens expire in at most one hour.
 
 ## Disclaimer
 

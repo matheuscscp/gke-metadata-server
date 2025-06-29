@@ -82,6 +82,7 @@ func main() {
 		watchServiceAccountsDisableFallback bool
 		cacheTokens                         bool
 		cacheTokensConcurrency              int
+		cacheMaxTokenDuration               time.Duration
 	)
 
 	flags := pflag.NewFlagSet(os.Args[0], pflag.ContinueOnError)
@@ -118,6 +119,8 @@ func main() {
 		"Whether or not to proactively cache tokens for the service accounts used by the pods running on the same node (default false)")
 	flags.IntVar(&cacheTokensConcurrency, "cache-tokens-concurrency", 10,
 		"When proactively caching service account tokens, what is the maximum amount of caching operations that can happen in parallel")
+	flags.DurationVar(&cacheMaxTokenDuration, "cache-max-token-duration", time.Hour,
+		"Maximum duration for cached service account tokens")
 
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		if errors.Is(err, pflag.ErrHelp) {
@@ -245,10 +248,11 @@ func main() {
 	})
 	if cacheTokens {
 		p := cacheserviceaccounttokens.NewProvider(ctx, cacheserviceaccounttokens.ProviderOptions{
-			Source:          serviceAccountTokens,
-			ServiceAccounts: serviceAccounts,
-			MetricsRegistry: metricsRegistry,
-			Concurrency:     cacheTokensConcurrency,
+			Source:           serviceAccountTokens,
+			ServiceAccounts:  serviceAccounts,
+			MetricsRegistry:  metricsRegistry,
+			Concurrency:      cacheTokensConcurrency,
+			MaxTokenDuration: cacheMaxTokenDuration,
 		})
 		defer p.Close()
 		if wp != nil {

@@ -315,7 +315,7 @@ func requestURL(t *testing.T, headers http.Header, url, expectedContentType,
 
 func assertExpirationSeconds(t *testing.T, secs int) {
 	t.Helper()
-	assert.LessOrEqual(t, 3000, secs)
+	assert.LessOrEqual(t, 2400, secs)
 	assert.LessOrEqual(t, secs, 3700)
 }
 

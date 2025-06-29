@@ -60,6 +60,9 @@ import (
 
 		// concurrency is the number of concurrent workers to cache the GCP tokens.
 		concurrency?: int & >0
+
+		// maxTokenDuration is the maximum duration for cached service account tokens.
+		maxTokenDuration?: time.Duration
 	}
 
 	// Helper definitions.

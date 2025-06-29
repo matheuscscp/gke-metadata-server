@@ -104,6 +104,9 @@ spec:
         {{- if .Values.config.cacheTokens.concurrency }}
         - --cache-tokens-concurrency={{ .Values.config.cacheTokens.concurrency }}
         {{- end }}
+        {{- if .Values.config.cacheTokens.maxTokenDuration }}
+        - --cache-max-token-duration={{ .Values.config.cacheTokens.maxTokenDuration }}
+        {{- end }}
         {{- end }}
         env:
         - name: NODE_NAME
