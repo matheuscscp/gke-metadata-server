@@ -20,7 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-FROM golang:1.24.4-alpine3.21
+# Build stage
+FROM golang:1.24.4-alpine3.21 AS builder
 
 RUN apk add --no-cache clang llvm bpftool libbpf-dev
 
@@ -36,5 +37,13 @@ COPY ./ebpf/ ./ebpf/
 
 RUN go generate ./internal/redirect
 RUN go test -c github.com/matheuscscp/gke-metadata-server/internal/server
+
+# Runtime stage
+FROM alpine:3.22
+
+WORKDIR /app
+
+# Copy only the compiled test binary
+COPY --from=builder /app/server.test ./
 
 CMD [ "sh", "-c", "sleep 2 && ./server.test -test.v" ]

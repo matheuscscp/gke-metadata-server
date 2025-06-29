@@ -293,6 +293,11 @@ func main() {
 		serverAddr = loopback.GKEMetadataServerAddr
 	}
 
+	l.WithFields(map[string]interface{}{
+		"routing":    routingMode,
+		"serverAddr": serverAddr,
+	}).Info("routing mode loaded and attached")
+
 	// start server
 	s := server.New(ctx, server.ServerOptions{
 		NodeName:             nodeName,

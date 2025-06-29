@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"sigs.k8s.io/yaml"
 )
 
 type pod struct {
@@ -75,6 +76,9 @@ func TestEndToEnd(t *testing.T) {
 			pods: []pod{{
 				name:               "test-impersonation",
 				serviceAccountName: "test-impersonated",
+				nodeSelector: map[string]string{
+					"hasRoutingMode": "true",
+				},
 			}},
 		},
 		{
@@ -83,6 +87,9 @@ func TestEndToEnd(t *testing.T) {
 			pods: []pod{{
 				name:               "test-impersonation",
 				serviceAccountName: "test-impersonated",
+				nodeSelector: map[string]string{
+					"hasRoutingMode": "true",
+				},
 			}},
 		},
 		{
@@ -92,15 +99,24 @@ func TestEndToEnd(t *testing.T) {
 				{
 					name:               "test-impersonation",
 					serviceAccountName: "test-impersonated",
+					nodeSelector: map[string]string{
+						"hasRoutingMode": "true",
+					},
 				},
 				{
 					name:               "test-direct-access",
 					serviceAccountName: "test",
+					nodeSelector: map[string]string{
+						"hasRoutingMode": "true",
+					},
 				},
 				{
 					name:               "test-gcloud",
 					file:               "pod-gcloud.yaml",
 					serviceAccountName: "test",
+					nodeSelector: map[string]string{
+						"hasRoutingMode": "true",
+					},
 				},
 				{
 					name:               "test-loopback-routing",
@@ -109,25 +125,42 @@ func TestEndToEnd(t *testing.T) {
 						"node.gke-metadata-server.matheuscscp.io/routingMode": "Loopback",
 					},
 				},
+				{
+					name:               "test-none-routing",
+					serviceAccountName: "test-impersonated",
+					nodeSelector: map[string]string{
+						"node.gke-metadata-server.matheuscscp.io/routingMode": "None",
+					},
+				},
 				// for host network pods the service account is retrieved from the node
 				{
 					name:               "test-host-network",
 					serviceAccountName: "",
 					hostNetwork:        true,
-					nodeSelector:       map[string]string{"hasServiceAccount": "true"},
+					nodeSelector: map[string]string{
+						"hasRoutingMode":    "true",
+						"hasServiceAccount": "true",
+					},
 				},
 				{
 					name:               "test-host-network-on-node-without-service-account",
 					serviceAccountName: "",
 					hostNetwork:        true,
-					nodeSelector:       map[string]string{"hasServiceAccount": "false"},
 					expectedExitCode:   1,
+					nodeSelector: map[string]string{
+						"hasRoutingMode":    "true",
+						"hasServiceAccount": "false",
+					},
 				},
 			},
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			applyEmulator(t, tt.emulatorValues)
+			if !applyEmulator(t, tt.emulatorValues) {
+				// Emulator failed to start, skip to debug logging
+				printDebugInfo(t, nil, nil)
+				t.FailNow()
+			}
 			applyPods(t, tt.pods)
 			exitCodes := waitForPods(t, tt.pods)
 			checkExitCodes(t, tt.pods, exitCodes)
@@ -135,8 +168,40 @@ func TestEndToEnd(t *testing.T) {
 	}
 }
 
-func applyEmulator(t *testing.T, valuesFile string) {
+func countEnabledWorkerNodes(t *testing.T) int {
 	t.Helper()
+
+	type kindNode struct {
+		Role   string            `yaml:"role"`
+		Labels map[string]string `yaml:"labels"`
+	}
+
+	type kindCluster struct {
+		Nodes []kindNode `yaml:"nodes"`
+	}
+
+	b, err := os.ReadFile("testdata/kind.yaml")
+	require.NoError(t, err)
+
+	var cluster kindCluster
+	err = yaml.Unmarshal(b, &cluster)
+	require.NoError(t, err)
+
+	count := 0
+	for _, node := range cluster.Nodes {
+		if node.Role == "worker" && node.Labels["iam.gke.io/gke-metadata-server-enabled"] == "true" {
+			count++
+		}
+	}
+
+	return count
+}
+
+func applyEmulator(t *testing.T, valuesFile string) bool {
+	t.Helper()
+
+	// count expected worker nodes from kind.yaml
+	expectedNodes := countEnabledWorkerNodes(t)
 
 	// delete previous instances
 	_ = exec.Command(
@@ -217,8 +282,12 @@ func applyEmulator(t *testing.T, valuesFile string) {
 		t.Fatalf("error applying emulator from %s: %v: %s", valuesFile, err, string(b))
 	}
 
-	// wait
-	for {
+	// wait with timeout
+	const emulatorTimeout = time.Minute
+	const sleepSecs = 10
+	timeout := time.Now().Add(emulatorTimeout)
+
+	for time.Now().Before(timeout) {
 		cmd := exec.Command(
 			"sh",
 			"-c",
@@ -228,15 +297,18 @@ func applyEmulator(t *testing.T, valuesFile string) {
 			t.Fatalf("error getting emulator state: %v: %s", err, string(b))
 		}
 
-		if strings.TrimSpace(string(b)) == "2" {
+		if strings.TrimSpace(string(b)) == fmt.Sprint(expectedNodes) {
 			t.Log("Emulator is ready")
-			break
+			return true
 		}
 
-		const sleepSecs = 10
 		t.Logf("Sleeping for %d secs and checking emulator status...", sleepSecs)
 		time.Sleep(sleepSecs * time.Second)
 	}
+
+	// If we get here, we timed out
+	t.Logf("timed out after %v waiting for emulator to be ready", emulatorTimeout)
+	return false
 }
 
 func applyPods(t *testing.T, pods []pod) {
@@ -262,6 +334,18 @@ func applyPods(t *testing.T, pods []pod) {
 		if sa := p.serviceAccountName; sa != "" {
 			serviceAccountName = sa
 		}
+		var noneRoutingEnv string
+		if p.nodeSelector["node.gke-metadata-server.matheuscscp.io/routingMode"] == "None" {
+			noneRoutingEnv = `
+    env:
+    - name: HOST_IP
+      valueFrom:
+        fieldRef:
+          fieldPath: status.hostIP
+    - name: GKE_METADATA_SERVER_PORT
+      value: "8080"
+`
+		}
 		var nodeSelector string
 		if len(p.nodeSelector) > 0 {
 			var b strings.Builder
@@ -276,6 +360,7 @@ func applyPods(t *testing.T, pods []pod) {
 		pod = strings.ReplaceAll(pod, "<SERVICE_ACCOUNT>", serviceAccountName)
 		pod = strings.ReplaceAll(pod, "<HOST_NETWORK>", fmt.Sprint(p.hostNetwork))
 		pod = strings.ReplaceAll(pod, "<GO_TEST_DIGEST>", fmt.Sprint(goTestDigest))
+		pod = strings.ReplaceAll(pod, "<NONE_ROUTING_ENV>", noneRoutingEnv)
 		pod = strings.ReplaceAll(pod, "<NODE_SELECTOR>", nodeSelector)
 
 		// apply
@@ -295,8 +380,12 @@ func waitForPods(t *testing.T, pods []pod) []int {
 	t.Helper()
 
 	var exitCodes []int
-	for _, p := range pods {
-		for {
+	for i, p := range pods {
+		const podTimeout = 2 * time.Minute
+		const sleepSecs = 10
+		timeout := time.Now().Add(podTimeout)
+
+		for time.Now().Before(timeout) {
 			cmd := exec.Command(
 				"kubectl",
 				"--context", "kind-gke-metadata-server",
@@ -317,9 +406,14 @@ func waitForPods(t *testing.T, pods []pod) []int {
 				break
 			}
 
-			const sleepSecs = 10
 			t.Logf("Sleeping for %d secs and checking pod %s status...", sleepSecs, p.name)
 			time.Sleep(sleepSecs * time.Second)
+		}
+
+		// If we get here and don't have an exit code for this pod, we timed out
+		if len(exitCodes) <= i {
+			t.Logf("timed out after %v waiting for pod %s to complete", podTimeout, p.name)
+			exitCodes = append(exitCodes, -100) // bogus exit code to indicate timeout
 		}
 	}
 
@@ -361,7 +455,7 @@ func printDebugInfo(t *testing.T, pods []pod, exitCodes []int) {
 		"--output", "name",
 		"get", "po").CombinedOutput()
 	if err != nil {
-		t.Errorf("error listing pods: %v: %s", err, string(b))
+		t.Logf("error listing emulator pods: %v: %s", err, string(b))
 	} else {
 		for _, line := range strings.Split(string(b), "\n") {
 			if !strings.Contains(line, "pod/gke-metadata-server") {
@@ -411,7 +505,17 @@ func runDebugCommand(t *testing.T, cmdName string, cmdArgs ...string) {
 
 	b, err := exec.Command(cmdName, cmdArgs...).CombinedOutput()
 	if err != nil {
-		t.Fatalf("error running command %s %v: %v: %s", cmdName, cmdArgs, err, string(b))
+		t.Logf("error running debug command %s %v: %v: %s", cmdName, cmdArgs, err, string(b))
+		return
 	}
-	t.Log(string(b))
+	output := string(b)
+	t.Log(output)
+	if strings.Contains(output, "no space left on device") {
+		b, err := exec.Command("df", "-h").CombinedOutput()
+		if err != nil {
+			t.Logf("error running df -h: %v: %s", err, string(b))
+			return
+		}
+		t.Logf("Disk space usage:\n%s", string(b))
+	}
 }
