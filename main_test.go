@@ -381,7 +381,7 @@ func waitForPods(t *testing.T, pods []pod) []int {
 
 	var exitCodes []int
 	for i, p := range pods {
-		const podTimeout = 2 * time.Minute
+		const podTimeout = time.Minute
 		const sleepSecs = 10
 		timeout := time.Now().Add(podTimeout)
 
