@@ -75,4 +75,4 @@ spec:
   containers:
   - name: test
     image: ghcr.io/matheuscscp/gke-metadata-server/test@<GO_TEST_DIGEST>
-<NODE_SELECTOR>
+<NONE_ROUTING_ENV><NODE_SELECTOR>

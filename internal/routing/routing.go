@@ -44,6 +44,10 @@ func LoadAndAttach(node *corev1.Node, emulatorIP netip.Addr, emulatorPort int) (
 		loadAndAttach = redirect.LoadAndAttach(emulatorIP, emulatorPort)
 	case api.RoutingModeLoopback:
 		loadAndAttach = loopback.LoadAndAttach
+	case api.RoutingModeNone:
+		loadAndAttach = func() (func() error, error) {
+			return func() error { return nil }, nil
+		}
 	default:
 		return "", nil, fmt.Errorf("invalid routing mode: %s", mode)
 	}

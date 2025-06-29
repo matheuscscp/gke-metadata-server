@@ -27,6 +27,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -46,6 +47,14 @@ import (
 	oauth2 "google.golang.org/api/oauth2/v2"
 )
 
+func init() {
+	host := os.Getenv("HOST_IP")
+	port := os.Getenv("GKE_METADATA_SERVER_PORT")
+	if host != "" && port != "" {
+		os.Setenv("GCE_METADATA_HOST", fmt.Sprintf("%s:%s", host, port))
+	}
+}
+
 const (
 	gkeMetadataFlavor = "Google"
 
@@ -63,6 +72,12 @@ func TestOnGCE(t *testing.T) {
 }
 
 func TestGKEServiceAccountTokenAPI(t *testing.T) {
+	// Skip this test when using None routing mode since it makes direct HTTP calls
+	// to the hardcoded IP address instead of using Google libraries that respect GCE_METADATA_HOST
+	if os.Getenv("HOST_IP") != "" && os.Getenv("GKE_METADATA_SERVER_PORT") != "" {
+		t.Skip("Skipping direct IP test when using None routing mode with GCE_METADATA_HOST")
+	}
+
 	const url = "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token"
 
 	var respBody struct {
@@ -197,6 +212,12 @@ func TestGKEServiceAccountTokenAPI_DefaultTokenSource(t *testing.T) {
 }
 
 func TestGKEServiceAccountIdentityAPI(t *testing.T) {
+	// Skip this test when using None routing mode since it makes direct HTTP calls
+	// to the hardcoded IP address instead of using Google libraries that respect GCE_METADATA_HOST
+	if os.Getenv("HOST_IP") != "" && os.Getenv("GKE_METADATA_SERVER_PORT") != "" {
+		t.Skip("Skipping direct IP test when using None routing mode with GCE_METADATA_HOST")
+	}
+
 	const expectedAudience = "test.com"
 	const expectedIssuer = "https://accounts.google.com"
 	const expectedSubject = `^\d{20,30}$`

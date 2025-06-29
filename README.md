@@ -208,8 +208,8 @@ using [Keyless Verification](https://timoni.sh/cue/module/signing/#sign-with-cos
 The Google libraries attempt to retrieve tokens from the hard-coded endpoint
 `169.254.169.254:80`. In order to make this work, the emulator must intercept
 the traffic from the client Pods to this endpoint. To solve this problem, the
-emulator supports two routing modes: `eBPF` and `Loopback`. See details of
-each mode below. In both modes the *unencrypted* communication between the
+emulator supports three routing modes: `eBPF`, `Loopback`, and `None`. See details of
+each mode below. In all modes the *unencrypted* communication between the
 emulator Pod and a client Pod never leaves the Node where they are both
 running on. This is exactly how the native GKE implementation works.
 
@@ -256,6 +256,36 @@ This mode does not clash with other eBPF-based tools running in the cluster, but
 has the disadvantage of not being able to bind to any port, only port 80. And for
 this to work properly the emulator Pods need to run on the host network, so they
 occupy port 80 in the network namespace of the Node.
+
+#### `None`
+
+In this routing mode the emulator does not perform any network routing or traffic
+interception. Instead, it relies on the `GCE_METADATA_HOST` environment variable
+to redirect metadata requests to the emulator. Note that not all Google libraries
+support this environment variable - the Google Go libraries do support it, but
+support may vary for other language libraries.
+
+This mode requires client Pods to be configured with environment variables and
+application-level setup. The Pod configuration should include:
+
+```yaml
+spec:
+  containers:
+  - name: your-app
+    env:
+    - name: HOST_IP
+      valueFrom:
+        fieldRef:
+          fieldPath: status.hostIP
+    - name: GKE_METADATA_SERVER_PORT
+      value: "8080"
+```
+
+The port value must match the port configured on the emulator DaemonSet (default: 8080).
+The application must then set `GCE_METADATA_HOST="${HOST_IP}:${GKE_METADATA_SERVER_PORT}"`
+before making any metadata requests. This approach avoids kernel-level routing
+and potential conflicts with other networking tools, but requires application-level
+configuration and library support to work properly.
 
 ### The `metadata.google.internal` DNS record
 

@@ -80,6 +80,7 @@ cluster:
 	@if [ "${TEST_ID}" == "" ]; then echo "TEST_ID variable is required."; exit -1; fi
 	@if [ "${PROVIDER_COMMAND}" == "" ]; then echo "PROVIDER_COMMAND variable is required."; exit -1; fi
 	kind create cluster --name gke-metadata-server --config testdata/kind.yaml
+	kubectl --context kind-gke-metadata-server get nodes -o custom-columns="NODE:.metadata.name,ROUTING MODE:.metadata.labels['node\.gke-metadata-server\.matheuscscp\.io/routingMode']"
 	make create-or-update-provider TEST_ID=${TEST_ID} PROVIDER_COMMAND=${PROVIDER_COMMAND}
 	make install-cilium
 

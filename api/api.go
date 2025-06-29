@@ -35,6 +35,7 @@ const (
 	RoutingModeDefault  = RoutingModeBPF
 	RoutingModeBPF      = "eBPF"
 	RoutingModeLoopback = "Loopback"
+	RoutingModeNone     = "None"
 
 	GKEAnnotationServiceAccount = GroupGKE + "/gcp-service-account"
 	GKELabelNodeEnabled         = GroupGKE + "/gke-metadata-server-enabled"
