@@ -56,10 +56,11 @@ type Provider struct {
 }
 
 type ProviderOptions struct {
-	Source          serviceaccounttokens.Provider
-	ServiceAccounts serviceaccounts.Provider
-	MetricsRegistry *prometheus.Registry
-	Concurrency     int
+	Source           serviceaccounttokens.Provider
+	ServiceAccounts  serviceaccounts.Provider
+	MetricsRegistry  *prometheus.Registry
+	Concurrency      int
+	MaxTokenDuration time.Duration
 }
 
 var errServiceAccountDeleted = errors.New("service account was deleted")
@@ -197,7 +198,7 @@ func (p *Provider) GetGoogleAccessTokens(ctx context.Context, saToken string,
 	if tokenString == "" {
 		tokenString = tokens.Impersonated
 	}
-	token = newToken(tokenString, expiration)
+	token = newToken(tokenString, expiration, p.opts.MaxTokenDuration)
 	p.googleScopedAccessTokensMutex.Lock()
 	p.googleScopedAccessTokens[ref] = token
 	p.googleScopedAccessTokensMutex.Unlock()
@@ -237,7 +238,7 @@ func (p *Provider) GetGoogleIdentityToken(ctx context.Context, saRef *serviceacc
 	}
 
 	// token issued successfully. cache it and return
-	token = newToken(tokenString, expiration)
+	token = newToken(tokenString, expiration, p.opts.MaxTokenDuration)
 	p.googleIDTokensMutex.Lock()
 	p.googleIDTokens[ref] = token
 	p.googleIDTokensMutex.Unlock()

@@ -49,6 +49,7 @@ config:
   cacheTokens:
     enable: true # Whether or not to proactively cache tokens for the Service Accounts used by the Pods running in the same Node.
     concurrency: 10 # Maximum parallel caching operations.
+    maxTokenDuration: 1h # Maximum duration for cached service account tokens.
 
 podAnnotations: {}
   # Optionally, configure Prometheus to scrape the server:
