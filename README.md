@@ -5,9 +5,10 @@
 
 A GKE Metadata Server *emulator* for making it easier to use GCP Workload Identity Federation
 inside *non-GKE* Kubernetes clusters, e.g. KinD, on-prem, managed Kubernetes from other
-clouds, etc. This implementation tries to mimic the `gke-metadata-server` `DaemonSet` deployed
-automatically by Google in the `kube-system` namespace of GKE clusters that have the feature
-*Workload Identity Federation for GKE* enabled. See how the GKE Metadata Server
+clouds, or even self-managed clusters deployed in GCE VMs. This implementation tries to mimic the
+`gke-metadata-server` `DaemonSet` deployed automatically by Google in the `kube-system` namespace
+of GKE clusters that have the feature *Workload Identity Federation for GKE* enabled. See how the
+GKE Metadata Server
 [works](https://cloud.google.com/kubernetes-engine/docs/concepts/workload-identity#metadata_server).
 
 ## Usage
