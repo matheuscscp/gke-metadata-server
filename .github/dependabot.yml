@@ -22,35 +22,25 @@
 
 # Docs:
 # https://docs.github.com/github/administering-a-repository/configuration-options-for-dependency-updates
+# https://docs.github.com/en/code-security/dependabot/working-with-dependabot/configuring-multi-ecosystem-updates
 
 version: 2
+multi-ecosystem-groups:
+  project:
+    schedule:
+      interval: weekly
 updates:
 - package-ecosystem: gomod
   directory: /
-  open-pull-requests-limit: 1
-  schedule:
-    interval: weekly
-  groups:
-    go:
-      patterns:
-      - "*"
+  patterns: ["*"]
+  multi-ecosystem-group: project
 - package-ecosystem: docker
   directory: /
-  open-pull-requests-limit: 1
-  schedule:
-    interval: weekly
-  groups:
-    docker:
-      patterns:
-      - "*"
+  patterns: ["*"]
+  multi-ecosystem-group: project
 - package-ecosystem: github-actions
   directories:
   - .github/workflows
   - .github/actions/*
-  open-pull-requests-limit: 1
-  schedule:
-    interval: weekly
-  groups:
-    actions:
-      patterns:
-      - "*"
+  patterns: ["*"]
+  multi-ecosystem-group: project
