@@ -84,13 +84,12 @@ import (
 
 	// iscsi represents an ISCSI Disk resource that is attached to a
 	// kubelet's host machine and then exposed to the pod.
-	// More info: https://examples.k8s.io/volumes/iscsi/README.md
+	// More info: https://kubernetes.io/docs/concepts/storage/volumes/#iscsi
 	// +optional
 	iscsi?: null | #ISCSIVolumeSource @go(ISCSI,*ISCSIVolumeSource) @protobuf(8,bytes,opt)
 
 	// glusterfs represents a Glusterfs mount on the host that shares a pod's lifetime.
 	// Deprecated: Glusterfs is deprecated and the in-tree glusterfs type is no longer supported.
-	// More info: https://examples.k8s.io/volumes/glusterfs/README.md
 	// +optional
 	glusterfs?: null | #GlusterfsVolumeSource @go(Glusterfs,*GlusterfsVolumeSource) @protobuf(9,bytes,opt)
 
@@ -102,7 +101,6 @@ import (
 
 	// rbd represents a Rados Block Device mount on the host that shares a pod's lifetime.
 	// Deprecated: RBD is deprecated and the in-tree rbd type is no longer supported.
-	// More info: https://examples.k8s.io/volumes/rbd/README.md
 	// +optional
 	rbd?: null | #RBDVolumeSource @go(RBD,*RBDVolumeSource) @protobuf(11,bytes,opt)
 
@@ -476,7 +474,6 @@ import (
 	// after a volume has been updated successfully to a new class.
 	// For an unbound PersistentVolume, the volumeAttributesClassName will be matched with unbound
 	// PersistentVolumeClaims during the binding process.
-	// This is a beta field and requires enabling VolumeAttributesClass feature (off by default).
 	// +featureGate=VolumeAttributesClass
 	// +optional
 	volumeAttributesClassName?: null | string @go(VolumeAttributesClassName,*string) @protobuf(10,bytes,opt)
@@ -669,15 +666,13 @@ import (
 	// volumeAttributesClassName may be used to set the VolumeAttributesClass used by this claim.
 	// If specified, the CSI driver will create or update the volume with the attributes defined
 	// in the corresponding VolumeAttributesClass. This has a different purpose than storageClassName,
-	// it can be changed after the claim is created. An empty string value means that no VolumeAttributesClass
-	// will be applied to the claim but it's not allowed to reset this field to empty string once it is set.
-	// If unspecified and the PersistentVolumeClaim is unbound, the default VolumeAttributesClass
-	// will be set by the persistentvolume controller if it exists.
+	// it can be changed after the claim is created. An empty string or nil value indicates that no
+	// VolumeAttributesClass will be applied to the claim. If the claim enters an Infeasible error state,
+	// this field can be reset to its previous value (including nil) to cancel the modification.
 	// If the resource referred to by volumeAttributesClass does not exist, this PersistentVolumeClaim will be
 	// set to a Pending state, as reflected by the modifyVolumeStatus field, until such as a resource
 	// exists.
 	// More info: https://kubernetes.io/docs/concepts/storage/volume-attributes-classes/
-	// (Beta) Using this field requires the VolumeAttributesClass feature gate to be enabled (off by default).
 	// +featureGate=VolumeAttributesClass
 	// +optional
 	volumeAttributesClassName?: null | string @go(VolumeAttributesClassName,*string) @protobuf(9,bytes,opt)
@@ -935,14 +930,12 @@ import (
 
 	// currentVolumeAttributesClassName is the current name of the VolumeAttributesClass the PVC is using.
 	// When unset, there is no VolumeAttributeClass applied to this PersistentVolumeClaim
-	// This is a beta field and requires enabling VolumeAttributesClass feature (off by default).
 	// +featureGate=VolumeAttributesClass
 	// +optional
 	currentVolumeAttributesClassName?: null | string @go(CurrentVolumeAttributesClassName,*string) @protobuf(8,bytes,opt)
 
 	// ModifyVolumeStatus represents the status object of ControllerModifyVolume operation.
 	// When this is unset, there is no ModifyVolume operation being attempted.
-	// This is a beta field and requires enabling VolumeAttributesClass feature (off by default).
 	// +featureGate=VolumeAttributesClass
 	// +optional
 	modifyVolumeStatus?: null | #ModifyVolumeStatus @go(ModifyVolumeStatus,*ModifyVolumeStatus) @protobuf(9,bytes,opt)
@@ -1095,7 +1088,6 @@ import (
 // Glusterfs volumes do not support ownership management or SELinux relabeling.
 #GlusterfsVolumeSource: {
 	// endpoints is the endpoint name that details Glusterfs topology.
-	// More info: https://examples.k8s.io/volumes/glusterfs/README.md#create-a-pod
 	endpoints: string @go(EndpointsName) @protobuf(1,bytes,opt)
 
 	// path is the Glusterfs volume path.
@@ -2254,6 +2246,79 @@ import (
 	path: string @go(Path) @protobuf(4,bytes,rep)
 }
 
+// PodCertificateProjection provides a private key and X.509 certificate in the
+// pod filesystem.
+#PodCertificateProjection: {
+	// Kubelet's generated CSRs will be addressed to this signer.
+	//
+	// +required
+	signerName?: string @go(SignerName) @protobuf(1,bytes,rep)
+
+	// The type of keypair Kubelet will generate for the pod.
+	//
+	// Valid values are "RSA3072", "RSA4096", "ECDSAP256", "ECDSAP384",
+	// "ECDSAP521", and "ED25519".
+	//
+	// +required
+	keyType?: string @go(KeyType) @protobuf(2,bytes,rep)
+
+	// maxExpirationSeconds is the maximum lifetime permitted for the
+	// certificate.
+	//
+	// Kubelet copies this value verbatim into the PodCertificateRequests it
+	// generates for this projection.
+	//
+	// If omitted, kube-apiserver will set it to 86400(24 hours). kube-apiserver
+	// will reject values shorter than 3600 (1 hour).  The maximum allowable
+	// value is 7862400 (91 days).
+	//
+	// The signer implementation is then free to issue a certificate with any
+	// lifetime *shorter* than MaxExpirationSeconds, but no shorter than 3600
+	// seconds (1 hour).  This constraint is enforced by kube-apiserver.
+	// `kubernetes.io` signers will never issue certificates with a lifetime
+	// longer than 24 hours.
+	//
+	// +optional
+	maxExpirationSeconds?: null | int32 @go(MaxExpirationSeconds,*int32) @protobuf(3,varint,opt)
+
+	// Write the credential bundle at this path in the projected volume.
+	//
+	// The credential bundle is a single file that contains multiple PEM blocks.
+	// The first PEM block is a PRIVATE KEY block, containing a PKCS#8 private
+	// key.
+	//
+	// The remaining blocks are CERTIFICATE blocks, containing the issued
+	// certificate chain from the signer (leaf and any intermediates).
+	//
+	// Using credentialBundlePath lets your Pod's application code make a single
+	// atomic read that retrieves a consistent key and certificate chain.  If you
+	// project them to separate files, your application code will need to
+	// additionally check that the leaf certificate was issued to the key.
+	//
+	// +optional
+	credentialBundlePath?: string @go(CredentialBundlePath) @protobuf(4,bytes,rep)
+
+	// Write the key at this path in the projected volume.
+	//
+	// Most applications should use credentialBundlePath.  When using keyPath
+	// and certificateChainPath, your application needs to check that the key
+	// and leaf certificate are consistent, because it is possible to read the
+	// files mid-rotation.
+	//
+	// +optional
+	keyPath?: string @go(KeyPath) @protobuf(5,bytes,rep)
+
+	// Write the certificate chain at this path in the projected volume.
+	//
+	// Most applications should use credentialBundlePath.  When using keyPath
+	// and certificateChainPath, your application needs to check that the key
+	// and leaf certificate are consistent, because it is possible to read the
+	// files mid-rotation.
+	//
+	// +optional
+	certificateChainPath?: string @go(CertificateChainPath) @protobuf(6,bytes,rep)
+}
+
 // Represents a projected volume source
 #ProjectedVolumeSource: {
 	// sources is the list of volume projections. Each entry in this list
@@ -2308,6 +2373,44 @@ import (
 	// +featureGate=ClusterTrustBundleProjection
 	// +optional
 	clusterTrustBundle?: null | #ClusterTrustBundleProjection @go(ClusterTrustBundle,*ClusterTrustBundleProjection) @protobuf(5,bytes,opt)
+
+	// Projects an auto-rotating credential bundle (private key and certificate
+	// chain) that the pod can use either as a TLS client or server.
+	//
+	// Kubelet generates a private key and uses it to send a
+	// PodCertificateRequest to the named signer.  Once the signer approves the
+	// request and issues a certificate chain, Kubelet writes the key and
+	// certificate chain to the pod filesystem.  The pod does not start until
+	// certificates have been issued for each podCertificate projected volume
+	// source in its spec.
+	//
+	// Kubelet will begin trying to rotate the certificate at the time indicated
+	// by the signer using the PodCertificateRequest.Status.BeginRefreshAt
+	// timestamp.
+	//
+	// Kubelet can write a single file, indicated by the credentialBundlePath
+	// field, or separate files, indicated by the keyPath and
+	// certificateChainPath fields.
+	//
+	// The credential bundle is a single file in PEM format.  The first PEM
+	// entry is the private key (in PKCS#8 format), and the remaining PEM
+	// entries are the certificate chain issued by the signer (typically,
+	// signers will return their certificate chain in leaf-to-root order).
+	//
+	// Prefer using the credential bundle format, since your application code
+	// can read it atomically.  If you use keyPath and certificateChainPath,
+	// your application must make two separate file reads. If these coincide
+	// with a certificate rotation, it is possible that the private key and leaf
+	// certificate you read may not correspond to each other.  Your application
+	// will need to check for this condition, and re-read until they are
+	// consistent.
+	//
+	// The named signer controls chooses the format of the certificate it
+	// issues; consult the signer implementation's documentation to learn how to
+	// use the certificates it issues.
+	//
+	// +featureGate=PodCertificateProjection +optional
+	podCertificate?: null | #PodCertificateProjection @go(PodCertificate,*PodCertificateProjection) @protobuf(6,bytes,opt)
 }
 
 #ProjectedVolumeSourceDefaultMode: int32 & 0o644
@@ -2633,7 +2736,8 @@ import (
 
 // EnvVar represents an environment variable present in a Container.
 #EnvVar: {
-	// Name of the environment variable. Must be a C_IDENTIFIER.
+	// Name of the environment variable.
+	// May consist of any printable ASCII characters except '='.
 	name: string @go(Name) @protobuf(1,bytes,opt)
 
 	// Variable references $(VAR_NAME) are expanded
@@ -2672,6 +2776,43 @@ import (
 	// Selects a key of a secret in the pod's namespace
 	// +optional
 	secretKeyRef?: null | #SecretKeySelector @go(SecretKeyRef,*SecretKeySelector) @protobuf(4,bytes,opt)
+
+	// FileKeyRef selects a key of the env file.
+	// Requires the EnvFiles feature gate to be enabled.
+	//
+	// +featureGate=EnvFiles
+	// +optional
+	fileKeyRef?: null | #FileKeySelector @go(FileKeyRef,*FileKeySelector) @protobuf(5,bytes,opt)
+}
+
+// FileKeySelector selects a key of the env file.
+// +structType=atomic
+#FileKeySelector: {
+	// The name of the volume mount containing the env file.
+	// +required
+	volumeName: string @go(VolumeName) @protobuf(1,bytes,opt)
+
+	// The path within the volume from which to select the file.
+	// Must be relative and may not contain the '..' path or start with '..'.
+	// +required
+	path: string @go(Path) @protobuf(2,bytes,opt)
+
+	// The key within the env file. An invalid key will prevent the pod from starting.
+	// The keys defined within a source may consist of any printable ASCII characters except '='.
+	// During Alpha stage of the EnvFiles feature gate, the key size is limited to 128 characters.
+	// +required
+	key: string @go(Key) @protobuf(3,bytes,opt)
+
+	// Specify whether the file or its key must be defined. If the file or key
+	// does not exist, then the env var is not published.
+	// If optional is set to true and the specified key does not exist,
+	// the environment variable will not be set in the Pod's containers.
+	//
+	// If optional is set to false and the specified key does not exist,
+	// an error will be returned during Pod creation.
+	// +optional
+	// +default=false
+	optional?: null | bool @go(Optional,*bool) @protobuf(4,varint,opt)
 }
 
 // ObjectFieldSelector selects an APIVersioned field of an object.
@@ -2728,7 +2869,8 @@ import (
 
 // EnvFromSource represents the source of a set of ConfigMaps or Secrets
 #EnvFromSource: {
-	// Optional text to prepend to the name of each environment variable. Must be a C_IDENTIFIER.
+	// Optional text to prepend to the name of each environment variable.
+	// May consist of any printable ASCII characters except '='.
 	// +optional
 	prefix?: string @go(Prefix) @protobuf(1,bytes,opt)
 
@@ -3019,7 +3161,7 @@ import (
 	// Claims lists the names of resources, defined in spec.resourceClaims,
 	// that are used by this container.
 	//
-	// This is an alpha field and requires enabling the
+	// This field depends on the
 	// DynamicResourceAllocation feature gate.
 	//
 	// This field is immutable. It can only be set for containers.
@@ -3125,8 +3267,8 @@ import (
 	ports?: [...#ContainerPort] @go(Ports,[]ContainerPort) @protobuf(6,bytes,rep)
 
 	// List of sources to populate environment variables in the container.
-	// The keys defined within a source must be a C_IDENTIFIER. All invalid keys
-	// will be reported as an event when the container is starting. When a key exists in multiple
+	// The keys defined within a source may consist of any printable ASCII characters except '='.
+	// When a key exists in multiple
 	// sources, the value associated with the last source will take precedence.
 	// Values defined by an Env with a duplicate key will take precedence.
 	// Cannot be updated.
@@ -3156,10 +3298,10 @@ import (
 	resizePolicy?: [...#ContainerResizePolicy] @go(ResizePolicy,[]ContainerResizePolicy) @protobuf(23,bytes,rep)
 
 	// RestartPolicy defines the restart behavior of individual containers in a pod.
-	// This field may only be set for init containers, and the only allowed value is "Always".
-	// For non-init containers or when this field is not specified,
+	// This overrides the pod-level restart policy. When this field is not specified,
 	// the restart behavior is defined by the Pod's restart policy and the container type.
-	// Setting the RestartPolicy as "Always" for the init container will have the following effect:
+	// Additionally, setting the RestartPolicy as "Always" for the init container will
+	// have the following effect:
 	// this init container will be continually restarted on
 	// exit until all regular containers have terminated. Once all regular
 	// containers have completed, all init containers with restartPolicy "Always"
@@ -3173,6 +3315,22 @@ import (
 	// +featureGate=SidecarContainers
 	// +optional
 	restartPolicy?: null | #ContainerRestartPolicy @go(RestartPolicy,*ContainerRestartPolicy) @protobuf(24,bytes,opt,casttype=ContainerRestartPolicy)
+
+	// Represents a list of rules to be checked to determine if the
+	// container should be restarted on exit. The rules are evaluated in
+	// order. Once a rule matches a container exit condition, the remaining
+	// rules are ignored. If no rule matches the container exit condition,
+	// the Container-level restart policy determines the whether the container
+	// is restarted or not. Constraints on the rules:
+	// - At most 20 rules are allowed.
+	// - Rules can have the same action.
+	// - Identical rules are not forbidden in validations.
+	// When rules are specified, container MUST set RestartPolicy explicitly
+	// even it if matches the Pod's RestartPolicy.
+	// +featureGate=ContainerRestartRules
+	// +optional
+	// +listType=atomic
+	restartPolicyRules?: [...#ContainerRestartRule] @go(RestartPolicyRules,[]ContainerRestartRule) @protobuf(25,bytes,rep)
 
 	// Pod volumes to mount into the container's filesystem.
 	// Cannot be updated.
@@ -3945,13 +4103,70 @@ import (
 #RestartPolicyNever:     #RestartPolicy & "Never"
 
 // ContainerRestartPolicy is the restart policy for a single container.
-// This may only be set for init containers and only allowed value is "Always".
+// The only allowed values are "Always", "Never", and "OnFailure".
 #ContainerRestartPolicy: string // #enumContainerRestartPolicy
 
 #enumContainerRestartPolicy:
-	#ContainerRestartPolicyAlways
+	#ContainerRestartPolicyAlways |
+	#ContainerRestartPolicyNever |
+	#ContainerRestartPolicyOnFailure
 
-#ContainerRestartPolicyAlways: #ContainerRestartPolicy & "Always"
+#ContainerRestartPolicyAlways:    #ContainerRestartPolicy & "Always"
+#ContainerRestartPolicyNever:     #ContainerRestartPolicy & "Never"
+#ContainerRestartPolicyOnFailure: #ContainerRestartPolicy & "OnFailure"
+
+// ContainerRestartRule describes how a container exit is handled.
+#ContainerRestartRule: {
+	// Specifies the action taken on a container exit if the requirements
+	// are satisfied. The only possible value is "Restart" to restart the
+	// container.
+	// +required
+	action?: #ContainerRestartRuleAction @go(Action) @protobuf(1,bytes,opt,casttype=ContainerRestartRuleAction)
+
+	// Represents the exit codes to check on container exits.
+	// +optional
+	// +oneOf=when
+	exitCodes?: null | #ContainerRestartRuleOnExitCodes @go(ExitCodes,*ContainerRestartRuleOnExitCodes) @protobuf(2,bytes,opt)
+}
+
+// ContainerRestartRuleAction describes the action to take when the
+// container exits.
+#ContainerRestartRuleAction: string // #enumContainerRestartRuleAction
+
+#enumContainerRestartRuleAction:
+	#ContainerRestartRuleActionRestart
+
+#ContainerRestartRuleActionRestart: #ContainerRestartRuleAction & "Restart"
+
+// ContainerRestartRuleOnExitCodes describes the condition
+// for handling an exited container based on its exit codes.
+#ContainerRestartRuleOnExitCodes: {
+	// Represents the relationship between the container exit code(s) and the
+	// specified values. Possible values are:
+	// - In: the requirement is satisfied if the container exit code is in the
+	//   set of specified values.
+	// - NotIn: the requirement is satisfied if the container exit code is
+	//   not in the set of specified values.
+	// +required
+	operator?: #ContainerRestartRuleOnExitCodesOperator @go(Operator) @protobuf(1,bytes,opt,casttype=ContainerRestartRuleOnExitCodesOperator)
+
+	// Specifies the set of values to check for container exit codes.
+	// At most 255 elements are allowed.
+	// +optional
+	// +listType=set
+	values?: [...int32] @go(Values,[]int32) @protobuf(2,varint,rep)
+}
+
+// ContainerRestartRuleOnExitCodesOperator describes the operator
+// to take for the exit codes.
+#ContainerRestartRuleOnExitCodesOperator: string // #enumContainerRestartRuleOnExitCodesOperator
+
+#enumContainerRestartRuleOnExitCodesOperator:
+	#ContainerRestartRuleOnExitCodesOpIn |
+	#ContainerRestartRuleOnExitCodesOpNotIn
+
+#ContainerRestartRuleOnExitCodesOpIn:    #ContainerRestartRuleOnExitCodesOperator & "In"
+#ContainerRestartRuleOnExitCodesOpNotIn: #ContainerRestartRuleOnExitCodesOperator & "NotIn"
 
 // DNSPolicy defines how a pod's DNS will be configured.
 // +enum
@@ -4138,8 +4353,8 @@ import (
 	// most preferred is the one with the greatest sum of weights, i.e.
 	// for each node that meets all of the scheduling requirements (resource
 	// request, requiredDuringScheduling anti-affinity expressions, etc.),
-	// compute a sum by iterating through the elements of this field and adding
-	// "weight" to the sum if the node has pods which matches the corresponding podAffinityTerm; the
+	// compute a sum by iterating through the elements of this field and subtracting
+	// "weight" from the sum if the node has pods which matches the corresponding podAffinityTerm; the
 	// node(s) with the highest sum are the most preferred.
 	// +optional
 	// +listType=atomic
@@ -4268,7 +4483,6 @@ import (
 	effect: #TaintEffect @go(Effect) @protobuf(3,bytes,opt,casttype=TaintEffect)
 
 	// TimeAdded represents the time at which the taint was added.
-	// It is only written for NoExecute taints.
 	// +optional
 	timeAdded?: null | metav1.#Time @go(TimeAdded,*metav1.Time) @protobuf(4,bytes,opt)
 }
@@ -4461,7 +4675,9 @@ import (
 	nodeName?: string @go(NodeName) @protobuf(10,bytes,opt)
 
 	// Host networking requested for this pod. Use the host's network namespace.
-	// If this option is set, the ports that will be used must be specified.
+	// When using HostNetwork you should specify ports so the scheduler is aware.
+	// When `hostNetwork` is true, specified `hostPort` fields in port definitions must match `containerPort`,
+	// and unspecified `hostPort` fields in port definitions are defaulted to match `containerPort`.
 	// Default to false.
 	// +k8s:conversion-gen=false
 	// +optional
@@ -4626,6 +4842,7 @@ import (
 	// - spec.hostPID
 	// - spec.hostIPC
 	// - spec.hostUsers
+	// - spec.resources
 	// - spec.securityContext.appArmorProfile
 	// - spec.securityContext.seLinuxOptions
 	// - spec.securityContext.seccompProfile
@@ -4696,7 +4913,7 @@ import (
 
 	// Resources is the total amount of CPU and Memory resources required by all
 	// containers in the pod. It supports specifying Requests and Limits for
-	// "cpu" and "memory" resource names only. ResourceClaims are not supported.
+	// "cpu", "memory" and "hugepages-" resource names only. ResourceClaims are not supported.
 	//
 	// This field enables fine-grained control over resource allocation for the
 	// entire pod, allowing resource sharing among containers in a pod.
@@ -4708,6 +4925,21 @@ import (
 	// +featureGate=PodLevelResources
 	// +optional
 	resources?: null | #ResourceRequirements @go(Resources,*ResourceRequirements) @protobuf(40,bytes,opt)
+
+	// HostnameOverride specifies an explicit override for the pod's hostname as perceived by the pod.
+	// This field only specifies the pod's hostname and does not affect its DNS records.
+	// When this field is set to a non-empty string:
+	// - It takes precedence over the values set in `hostname` and `subdomain`.
+	// - The Pod's hostname will be set to this value.
+	// - `setHostnameAsFQDN` must be nil or set to false.
+	// - `hostNetwork` must be set to false.
+	//
+	// This field must be a valid DNS subdomain as defined in RFC 1123 and contain at most 64 characters.
+	// Requires the HostnameOverride feature gate to be enabled.
+	//
+	// +featureGate=HostnameOverride
+	// +optional
+	hostnameOverride?: null | string @go(HostnameOverride,*string) @protobuf(41,bytes,opt)
 }
 
 // PodResourceClaim references exactly one ResourceClaim, either directly
@@ -4762,6 +4994,33 @@ import (
 	//
 	// +optional
 	resourceClaimName?: null | string @go(ResourceClaimName,*string) @protobuf(2,bytes,opt)
+}
+
+// PodExtendedResourceClaimStatus is stored in the PodStatus for the extended
+// resource requests backed by DRA. It stores the generated name for
+// the corresponding special ResourceClaim created by the scheduler.
+#PodExtendedResourceClaimStatus: {
+	// RequestMappings identifies the mapping of <container, extended resource backed by DRA> to  device request
+	// in the generated ResourceClaim.
+	// +listType=atomic
+	requestMappings: [...#ContainerExtendedResourceRequest] @go(RequestMappings,[]ContainerExtendedResourceRequest) @protobuf(1,bytes,rep)
+
+	// ResourceClaimName is the name of the ResourceClaim that was
+	// generated for the Pod in the namespace of the Pod.
+	resourceClaimName: string @go(ResourceClaimName) @protobuf(2,bytes)
+}
+
+// ContainerExtendedResourceRequest has the mapping of container name,
+// extended resource name to the device request name.
+#ContainerExtendedResourceRequest: {
+	// The name of the container requesting resources.
+	containerName: string @go(ContainerName) @protobuf(1,bytes)
+
+	// The name of the extended resource in that container which gets backed by DRA.
+	resourceName: string @go(ResourceName) @protobuf(2,bytes)
+
+	// The name of the request in the special ResourceClaim which corresponds to the extended resource.
+	requestName: string @go(RequestName) @protobuf(3,bytes)
 }
 
 // OSName is the set of OS'es that can be used in OS.
@@ -5355,8 +5614,8 @@ import (
 	ports?: [...#ContainerPort] @go(Ports,[]ContainerPort) @protobuf(6,bytes,rep)
 
 	// List of sources to populate environment variables in the container.
-	// The keys defined within a source must be a C_IDENTIFIER. All invalid keys
-	// will be reported as an event when the container is starting. When a key exists in multiple
+	// The keys defined within a source may consist of any printable ASCII characters except '='.
+	// When a key exists in multiple
 	// sources, the value associated with the last source will take precedence.
 	// Values defined by an Env with a duplicate key will take precedence.
 	// Cannot be updated.
@@ -5386,11 +5645,18 @@ import (
 
 	// Restart policy for the container to manage the restart behavior of each
 	// container within a pod.
-	// This may only be set for init containers. You cannot set this field on
-	// ephemeral containers.
+	// You cannot set this field on ephemeral containers.
 	// +featureGate=SidecarContainers
 	// +optional
 	restartPolicy?: null | #ContainerRestartPolicy @go(RestartPolicy,*ContainerRestartPolicy) @protobuf(24,bytes,opt,casttype=ContainerRestartPolicy)
+
+	// Represents a list of rules to be checked to determine if the
+	// container should be restarted on exit. You cannot set this field on
+	// ephemeral containers.
+	// +featureGate=ContainerRestartRules
+	// +optional
+	// +listType=atomic
+	restartPolicyRules?: [...#ContainerRestartRule] @go(RestartPolicyRules,[]ContainerRestartRule) @protobuf(25,bytes,rep)
 
 	// Pod volumes to mount into the container's filesystem. Subpath mounts are not allowed for ephemeral containers.
 	// Cannot be updated.
@@ -5657,6 +5923,11 @@ import (
 	// +featureGate=DynamicResourceAllocation
 	// +optional
 	resourceClaimStatuses?: [...#PodResourceClaimStatus] @go(ResourceClaimStatuses,[]PodResourceClaimStatus) @protobuf(15,bytes,rep)
+
+	// Status of extended resource claim backed by DRA.
+	// +featureGate=DRAExtendedResource
+	// +optional
+	extendedResourceClaimStatus?: null | #PodExtendedResourceClaimStatus @go(ExtendedResourceClaimStatus,*PodExtendedResourceClaimStatus) @protobuf(18,bytes,opt)
 }
 
 // PodStatusResult is a wrapper for PodStatus returned by kubelet that can be encode/decoded

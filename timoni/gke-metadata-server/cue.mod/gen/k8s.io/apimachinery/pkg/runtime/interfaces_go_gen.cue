@@ -167,3 +167,6 @@ package runtime
 // Unstructured objects store values as map[string]interface{}, with only values that can be serialized
 // to JSON allowed.
 #Unstructured: _
+
+// ApplyConfiguration is an interface that root apply configuration types implement.
+#ApplyConfiguration: _
