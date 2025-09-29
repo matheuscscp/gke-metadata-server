@@ -56,7 +56,7 @@ jobs:
     - uses: ./.github/actions/ci-checks/
       if: steps.check-new-releases.outputs.new-releases == 'yes'
 
-    - uses: sigstore/cosign-installer@v3.9.2
+    - uses: sigstore/cosign-installer@v3.10.0
       if: steps.check-new-releases.outputs.new-releases == 'yes'
 
     - name: Release Container in GitHub Container Registry
