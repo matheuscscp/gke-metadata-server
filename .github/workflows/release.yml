@@ -58,6 +58,8 @@ jobs:
 
     - uses: sigstore/cosign-installer@v4.0.0
       if: steps.check-new-releases.outputs.new-releases == 'yes'
+      with:
+        cosign-release: v2.6.1 # TODO: remove after Flux 2.8 with support for cosign v3
 
     - name: Release Container in GitHub Container Registry
       id: release-container-ghcr
