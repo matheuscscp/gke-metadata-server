@@ -44,4 +44,4 @@ runs:
   - name: Install dependencies
     shell: bash
     run: |
-      sudo apt-get update && sudo apt-get install -y clang llvm bpfcc-tools libbpf-dev
+      sudo apt-get update && sudo apt-get install -y clang llvm bpfcc-tools libbpf-dev linux-tools-azure
