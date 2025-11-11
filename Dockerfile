@@ -41,8 +41,9 @@ RUN go generate ./internal/redirect
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o gke-metadata-server \
     github.com/matheuscscp/gke-metadata-server
 
-FROM alpine:3.22
+FROM gcr.io/distroless/static:latest
 
 COPY --from=builder /app/gke-metadata-server .
+COPY LICENSE .
 
 ENTRYPOINT ["./gke-metadata-server"]
