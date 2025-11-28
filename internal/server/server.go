@@ -30,11 +30,13 @@ import (
 	"net"
 	"net/http"
 
+	"github.com/matheuscscp/gke-metadata-server/api"
 	pkghttp "github.com/matheuscscp/gke-metadata-server/internal/http"
 	"github.com/matheuscscp/gke-metadata-server/internal/logging"
 	"github.com/matheuscscp/gke-metadata-server/internal/metrics"
 	"github.com/matheuscscp/gke-metadata-server/internal/node"
 	"github.com/matheuscscp/gke-metadata-server/internal/pods"
+	"github.com/matheuscscp/gke-metadata-server/internal/proxy"
 	"github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts"
 	"github.com/matheuscscp/gke-metadata-server/internal/serviceaccounttokens"
 
@@ -63,6 +65,7 @@ type (
 		ProjectID            string
 		NumericProjectID     string
 		WorkloadIdentityPool string
+		RoutingMode          string
 	}
 
 	serverMetrics struct {
@@ -95,30 +98,25 @@ func New(ctx context.Context, opts ServerOptions) *Server {
 
 	// prepare metrics
 
-	const metricsSubsystem = "" // "server" would stutter with the "gke_metadata_server" namespace
-
-	latencyLabelNames := []string{"method", "path", "status"}
-	latencyMillis := metrics.NewLatencyMillis(metricsSubsystem, latencyLabelNames...)
-	opts.MetricsRegistry.MustRegister(latencyMillis)
+	reqLatencyMillis := metrics.NewRequestLatencyMillis()
+	opts.MetricsRegistry.MustRegister(reqLatencyMillis)
 	observeLatencyMillis := func(r *http.Request, statusCode int, latencyMs float64) {
-		latencyMillis.
+		reqLatencyMillis.
 			WithLabelValues(r.Method, r.URL.Path, fmt.Sprint(statusCode)).
 			Observe(latencyMs)
 	}
 
-	lookupPodFailures := prometheus.NewCounterVec(prometheus.CounterOpts{
-		Namespace: metrics.Namespace,
-		Name:      "lookup_pod_failures_total",
-		Help:      "Total failures when looking up Pod objects by IP to serve requests.",
-	}, []string{"client_ip"})
+	lookupPodFailures := metrics.NewLookupPodFailuresCounter()
 	opts.MetricsRegistry.MustRegister(lookupPodFailures)
 
-	getNodeFailures := prometheus.NewCounter(prometheus.CounterOpts{
-		Namespace: metrics.Namespace,
-		Name:      "get_node_failures_total",
-		Help:      "Total failures when getting the current Node object to serve requests.",
-	})
+	getNodeFailures := metrics.NewGetNodeFailuresCounter()
 	opts.MetricsRegistry.MustRegister(getNodeFailures)
+
+	proxyDialLatencyMillis := metrics.NewProxyDialLantencyMillis()
+	opts.MetricsRegistry.MustRegister(proxyDialLatencyMillis)
+
+	proxyActiveConnections := metrics.NewProxyActiveConnectionsGauge()
+	opts.MetricsRegistry.MustRegister(proxyActiveConnections)
 
 	observabilityMiddleware := func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -215,8 +213,19 @@ func New(ctx context.Context, opts ServerOptions) *Server {
 	// start metadata server
 	l.Info("starting metadata server...")
 	go func() {
-		if err := s.metadataServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			l.WithError(err).Fatal("error listening and serving metadata server")
+		var lis net.Listener
+		var err error
+		if opts.RoutingMode != api.RoutingModeBPF {
+			lis, err = net.Listen("tcp", s.metadataServer.Addr)
+		} else {
+			lis, err = proxy.Listen(s.metadataServer.Addr, proxyDialLatencyMillis, proxyActiveConnections)
+		}
+		if err != nil {
+			l.WithError(err).Fatal("error listening on metadata server address")
+		}
+
+		if err := s.metadataServer.Serve(lis); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			l.WithError(err).Fatal("error serving metadata server")
 		}
 	}()
 

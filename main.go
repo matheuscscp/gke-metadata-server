@@ -89,9 +89,9 @@ func main() {
 
 	flags.StringVar(&stringLogLevel, "log-level", logrus.InfoLevel.String(),
 		"Log level. Accepted values: "+acceptedLogLevels)
-	flags.IntVar(&serverPort, "server-port", 8080,
+	flags.IntVar(&serverPort, "server-port", 16321,
 		"Network address where the metadata server must listen on. Ignored on nodes annotated/labeled with loopback routing")
-	flags.IntVar(&healthPort, "health-port", 8081,
+	flags.IntVar(&healthPort, "health-port", 16322,
 		"Network address where the health server must listen on")
 	flags.StringVar(&projectID, "project-id", "",
 		"Project ID of the GCP project where the GCP Workload Identity Provider is configured")
@@ -297,7 +297,7 @@ func main() {
 		serverAddr = loopback.GKEMetadataServerAddr
 	}
 
-	l.WithFields(map[string]interface{}{
+	l.WithFields(logrus.Fields{
 		"routing":    routingMode,
 		"serverAddr": serverAddr,
 	}).Info("routing mode loaded and attached")
@@ -316,6 +316,7 @@ func main() {
 		ProjectID:            projectID,
 		NumericProjectID:     numericProjectID,
 		WorkloadIdentityPool: workloadIdentityPool,
+		RoutingMode:          routingMode,
 	})
 
 	<-ctx.Done()

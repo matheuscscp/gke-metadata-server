@@ -69,17 +69,9 @@ type (
 const ipIndex = "ip"
 
 func NewProvider(opts ProviderOptions) *Provider {
-	numPods := prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: metrics.Namespace,
-		Name:      "pods",
-		Help:      "Amount of Pod objects currently cached.",
-	})
+	numPods := metrics.NewCachedPodsGauge()
 	opts.MetricsRegistry.MustRegister(numPods)
-	cacheMisses := prometheus.NewCounter(prometheus.CounterOpts{
-		Namespace: metrics.Namespace,
-		Name:      "pod_cache_misses_total",
-		Help:      "Total amount cache misses when looking up Pod objects.",
-	})
+	cacheMisses := metrics.NewPodCacheMissesCounter()
 	opts.MetricsRegistry.MustRegister(cacheMisses)
 
 	informer := informersv1.NewFilteredPodInformer(

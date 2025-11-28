@@ -343,7 +343,13 @@ func applyPods(t *testing.T, pods []pod) {
         fieldRef:
           fieldPath: status.hostIP
     - name: GKE_METADATA_SERVER_PORT
-      value: "8080"
+      value: "16321"
+    - name: GCE_METADATA_HOST
+      value: "$(HOST_IP):$(GKE_METADATA_SERVER_PORT)"
+    - name: GCE_METADATA_ROOT
+      value: "$(HOST_IP):$(GKE_METADATA_SERVER_PORT)"
+    - name: GCE_METADATA_IP
+      value: "$(HOST_IP):$(GKE_METADATA_SERVER_PORT)"
 `
 		}
 		var nodeSelector string

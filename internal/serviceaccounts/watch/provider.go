@@ -63,17 +63,9 @@ type (
 )
 
 func NewProvider(ctx context.Context, opts ProviderOptions) *Provider {
-	numServiceAccounts := prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: metrics.Namespace,
-		Name:      "service_accounts",
-		Help:      "Amount of ServiceAccount objects currently cached.",
-	})
+	numServiceAccounts := metrics.NewCachedServiceAccountsGauge()
 	opts.MetricsRegistry.MustRegister(numServiceAccounts)
-	cacheMisses := prometheus.NewCounter(prometheus.CounterOpts{
-		Namespace: metrics.Namespace,
-		Name:      "service_account_cache_misses_total",
-		Help:      "Total amount cache misses when looking up ServiceAccount objects.",
-	})
+	cacheMisses := metrics.NewServiceAccountCacheMissesCounter()
 	opts.MetricsRegistry.MustRegister(cacheMisses)
 
 	informer := informersv1.NewServiceAccountInformer(
