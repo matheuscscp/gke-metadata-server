@@ -39,6 +39,19 @@ jobs:
     steps:
     - uses: actions/checkout@v6
 
+    - name: Free disk space
+      run: |
+        set -eux
+        df -h
+        sudo rm -rf /usr/share/dotnet || true
+        sudo rm -rf /opt/ghc || true
+        sudo rm -rf /usr/local/share/boost || true
+        sudo rm -rf "$AGENT_TOOLSDIRECTORY" || true
+        sudo rm -rf /usr/local/lib/android || true
+        docker system prune -af || true
+        sudo apt-get clean || true
+        df -h
+
     - uses: ./.github/actions/ci-setup/
       with:
         google-service-account-name: pull-request
