@@ -29,6 +29,19 @@ inputs:
 runs:
   using: composite
   steps:
+  - name: Free disk space
+    shell: bash
+    run: |
+      set -eux
+      df -h
+      sudo rm -rf /usr/share/dotnet || true
+      sudo rm -rf /opt/ghc || true
+      sudo rm -rf /usr/local/share/boost || true
+      sudo rm -rf "$AGENT_TOOLSDIRECTORY" || true
+      sudo rm -rf /usr/local/lib/android || true
+      docker system prune -af || true
+      sudo apt-get clean || true
+      df -h
   - uses: cue-lang/setup-cue@v1.0.1
   - uses: stefanprodan/timoni/actions/setup@main
   - uses: google-github-actions/auth@v3
