@@ -66,17 +66,9 @@ type ProviderOptions struct {
 var errServiceAccountDeleted = errors.New("service account was deleted")
 
 func NewProvider(ctx context.Context, opts ProviderOptions) *Provider {
-	numTokens := prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: metrics.Namespace,
-		Name:      "service_account_tokens",
-		Help:      "Amount of ServiceAccount tokens currently cached.",
-	})
+	numTokens := metrics.NewCachedServiceAccountTokensGauge()
 	opts.MetricsRegistry.MustRegister(numTokens)
-	cacheMisses := prometheus.NewCounter(prometheus.CounterOpts{
-		Namespace: metrics.Namespace,
-		Name:      "service_account_token_cache_misses_total",
-		Help:      "Total amount cache misses when fetching ServiceAccount tokens.",
-	})
+	cacheMisses := metrics.NewServiceAccountTokenCacheMissesCounter()
 	opts.MetricsRegistry.MustRegister(cacheMisses)
 
 	// create a new background context for the goroutines with logging from the parent context

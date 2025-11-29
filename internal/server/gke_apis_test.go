@@ -27,7 +27,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -46,14 +45,6 @@ import (
 	"google.golang.org/api/googleapi"
 	oauth2 "google.golang.org/api/oauth2/v2"
 )
-
-func init() {
-	host := os.Getenv("HOST_IP")
-	port := os.Getenv("GKE_METADATA_SERVER_PORT")
-	if host != "" && port != "" {
-		os.Setenv("GCE_METADATA_HOST", fmt.Sprintf("%s:%s", host, port))
-	}
-}
 
 const (
 	gkeMetadataFlavor = "Google"

@@ -109,6 +109,10 @@ install-cilium:
 		--set image.pullPolicy=IfNotPresent \
 		--set ipam.mode=kubernetes
 
+.PHONY: build-dev
+build-dev:
+	docker build . -t ${TEST_IMAGE}:${TAG} --push
+
 .PHONY: build
 build:
 	docker build . -t ${TEST_IMAGE}:container

@@ -32,8 +32,8 @@ config:
   # Must match the pattern: projects/<gcp_project_number>/locations/global/workloadIdentityPools/<pool_name>/providers/<provider_name>
   workloadIdentityProvider: ""
   logLevel: info # Log level. Accepted values: panic, fatal, error, warning, info, debug, trace
-  serverPort: 8080 # TCP port where the metadata HTTP server will listen on.
-  healthPort: 8081 # TCP port where the health HTTP server will listern on.
+  serverPort: 16321 # TCP port where the metadata HTTP server will listen on.
+  healthPort: 16322 # TCP port where the health HTTP server will listern on.
   watchPods:
     enable: true # Whether or not to watch and cache the Pods running on the same Node.
     disableFallback: false # Whether or not to disable the simple fallback method for looking up Pods upon cache misses.
@@ -54,7 +54,7 @@ config:
 podAnnotations: {}
   # Optionally, configure Prometheus to scrape the server:
   # prometheus.io/scrape: "true"
-  # prometheus.io/port: "8080"
+  # prometheus.io/port: "16321"
   # prometheus.io/path: /metrics
 
 resources: {}

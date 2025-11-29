@@ -26,6 +26,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"net"
 	"net/netip"
 
 	"github.com/matheuscscp/gke-metadata-server/internal/logging"
@@ -44,8 +45,10 @@ func LoadAndAttach(emulatorIP netip.Addr, emulatorPort int) func() (func() error
 			return nil, fmt.Errorf("error loading redirect eBPF redirect objects: %w", err)
 		}
 
+		// Configure the eBPF program with the emulator's IP and port.
 		emulatorIPv4 := emulatorIP.As4()
 		config := redirectConfig{
+			EmulatorPid:  0, // Will be discovered later.
 			EmulatorIp:   binary.BigEndian.Uint32(emulatorIPv4[:]),
 			EmulatorPort: uint16(emulatorPort),
 		}
@@ -57,6 +60,7 @@ func LoadAndAttach(emulatorIP netip.Addr, emulatorPort int) func() (func() error
 			return nil, fmt.Errorf("error updating redirect eBPF config map: %w", err)
 		}
 
+		// Attach the eBPF program to the cgroup.
 		link, err := link.AttachCgroup(link.CgroupOptions{
 			Path:    "/sys/fs/cgroup",
 			Attach:  ebpf.AttachCGroupInet4Connect,
@@ -64,6 +68,13 @@ func LoadAndAttach(emulatorIP netip.Addr, emulatorPort int) func() (func() error
 		})
 		if err != nil {
 			return nil, fmt.Errorf("error attaching redirect eBPF program to cgroup: %w", err)
+		}
+
+		// Create a connection to the discovery endpoint to trigger PID discovery.
+		discoveryConn, err := net.Dial("tcp", "169.254.196.245:12345")
+		if err == nil {
+			discoveryConn.Close()
+			return nil, errors.New("pid discovery connection was supposed to return an error")
 		}
 
 		return func() (err error) {

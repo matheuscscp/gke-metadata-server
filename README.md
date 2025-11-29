@@ -246,6 +246,19 @@ The advantage of this mode is that the emulator can bind to any port, not just p
 This is because we modify the destination address of connections targeting our endpoint
 of interest, so we have the freedom to choose any port.
 
+Note that in this mode the emulator will proxy connections that are not targeting
+Google metadata to the `169.254.169.254:80` endpoint, i.e. any connections whose
+first few bytes do not match `GET /computeMetadata/v1`. This is to allow other
+environments that expose services on this endpoint to continue working properly.
+For example, AWS EKS clusters expose the AWS Instance Metadata Service on this
+endpoint. The emulator works fine in such environments without disrupting the
+native metadata service due to this proxying feature. The emulator will not work
+with environments exposing a service in this endpoint that *also identify Pods
+by their IP address*. This is because the source IP address the service will see
+will be the Node IP address, and not the IP address of the client Pod. This is
+not the case for AWS EKS, since the AWS Instance Metadata Service does not
+identify Pods by their IP addresses.
+
 #### `Loopback`
 
 In this routing mode the emulator adds the hard-coded address mentioned above to the
@@ -261,13 +274,10 @@ occupy port 80 in the network namespace of the Node.
 #### `None`
 
 In this routing mode the emulator does not perform any network routing or traffic
-interception. Instead, it relies on the `GCE_METADATA_HOST` environment variable
-to redirect metadata requests to the emulator. Note that not all Google libraries
-support this environment variable - the Google Go libraries do support it, but
-support may vary for other language libraries.
-
-This mode requires client Pods to be configured with environment variables and
-application-level setup. The Pod configuration should include:
+interception. Instead, it relies on the environment variables defined inside the
+Google libraries to redirect metadata requests to the emulator. Note that support
+for the environment variables below may vary between different Google libraries.
+The configuration of your Pods should include:
 
 ```yaml
 spec:
@@ -279,14 +289,19 @@ spec:
         fieldRef:
           fieldPath: status.hostIP
     - name: GKE_METADATA_SERVER_PORT
-      value: "8080"
+      value: "16321"
+    - name: GCE_METADATA_HOST
+      value: "$(HOST_IP):$(GKE_METADATA_SERVER_PORT)"
+    - name: GCE_METADATA_ROOT
+      value: "$(HOST_IP):$(GKE_METADATA_SERVER_PORT)"
+    - name: GCE_METADATA_IP
+      value: "$(HOST_IP):$(GKE_METADATA_SERVER_PORT)"
 ```
 
-The port value must match the port configured on the emulator DaemonSet (default: 8080).
-The application must then set `GCE_METADATA_HOST="${HOST_IP}:${GKE_METADATA_SERVER_PORT}"`
-before making any metadata requests. This approach avoids kernel-level routing
-and potential conflicts with other networking tools, but requires application-level
-configuration and library support to work properly.
+The port value must match the port configured on the emulator DaemonSet (default: 16321).
+This approach avoids conflicts with other tools that could be attaching eBPF programs
+to the `connect()` syscall or using the well-known IP address and port hard-coded in
+the Google libraries, but requires a bit of per-Pod configuration.
 
 ### The `metadata.google.internal` DNS record
 
