@@ -55,6 +55,7 @@ jobs:
     - uses: ./.github/actions/sign-and-verify-image/
       with:
         image: ${{ steps.release-container-ghcr.outputs.image-with-digest }}
+        version: ${{ steps.version.outputs.value }}
 
     - name: Release Helm Chart in GitHub Container Registry
       id: release-helm-ghcr
@@ -68,6 +69,7 @@ jobs:
     - uses: ./.github/actions/sign-and-verify-image/
       with:
         image: ${{ steps.release-helm-ghcr.outputs.image-with-digest }}
+        version: ${{ steps.version.outputs.value }}
 
     - name: Release Timoni Module in GitHub Container Registry
       id: release-timoni-ghcr
@@ -80,6 +82,7 @@ jobs:
     - uses: ./.github/actions/sign-and-verify-image/
       with:
         image: ${{ steps.release-timoni-ghcr.outputs.image-with-digest }}
+        version: ${{ steps.version.outputs.value }}
 
     - name: Create GitHub Release
       env:
