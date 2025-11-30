@@ -20,6 +20,10 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+inputs:
+  version:
+    required: false
+
 runs:
   using: composite
 
@@ -44,5 +48,14 @@ runs:
         exit 1
       fi
 
+  - name: Set version
+    shell: bash
+    env:
+      VERSION: ${{ inputs.version }}
+    run: |
+      if [ "${VERSION}" = "" ]; then
+        VERSION="100.0.0-ci"
+      fi
+      echo $VERSION > version.txt
   - run: make gen-ebpf ci-cluster build ci-test
     shell: bash

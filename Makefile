@@ -127,21 +127,21 @@ build:
 	docker push ${TEST_IMAGE}:go-test | tee docker-push.logs
 	cat docker-push.logs | grep digest: | awk '{print $$3}' > go-test-digest.txt
 
-	sed "s|<HELM_VERSION>|$$(yq .helm versions.yaml)|g" helm/gke-metadata-server/Chart.tpl.yaml | \
-		sed "s|<CONTAINER_VERSION>|$$(yq .container versions.yaml)|g" > helm/gke-metadata-server/Chart.yaml
+	sed "s|<HELM_VERSION>|$$(cat version.txt)|g" helm/gke-metadata-server/Chart.tpl.yaml | \
+		sed "s|<CONTAINER_VERSION>|$$(cat version.txt)|g" > helm/gke-metadata-server/Chart.yaml
 	helm lint helm/gke-metadata-server
 	helm package helm/gke-metadata-server
-	helm push gke-metadata-server-helm-$$(yq .helm versions.yaml).tgz oci://${TEST_IMAGE} 2>&1 | tee helm-push.logs
+	helm push gke-metadata-server-helm-$$(cat version.txt).tgz oci://${TEST_IMAGE} 2>&1 | tee helm-push.logs
 	cat helm-push.logs | grep Digest: | awk '{print $$NF}' > helm-digest.txt
 
-	sed "s|<CONTAINER_VERSION>|$$(yq .container versions.yaml)|g" \
+	sed "s|<CONTAINER_VERSION>|$$(cat version.txt)|g" \
 		timoni/gke-metadata-server/templates/config.tpl.cue > timoni/gke-metadata-server/templates/config.cue
 	timoni mod vet timoni/gke-metadata-server/ \
 		--name gke-metadata-server \
 		--namespace kube-system \
 		--values timoni/gke-metadata-server/debug_values.cue
 	timoni mod push timoni/gke-metadata-server/ oci://${TEST_IMAGE}/timoni \
-		--version $$(yq .timoni versions.yaml) \
+		--version $$(cat version.txt) \
 		--output yaml | yq .digest > timoni-digest.txt
 
 .PHONY: test-unit
@@ -152,7 +152,7 @@ test-unit:
 .PHONY: test
 test:
 	@if [ "${TEST_ID}" == "" ]; then echo "TEST_ID variable is required."; exit -1; fi
-	TEST_ID=${TEST_ID} TEST_IMAGE=${TEST_IMAGE} HELM_VERSION=$$(yq .helm versions.yaml) go test -v ${TEST_ARGS}
+	TEST_ID=${TEST_ID} TEST_IMAGE=${TEST_IMAGE} HELM_VERSION=$$(cat version.txt) go test -v ${TEST_ARGS}
 
 .PHONY: update-branch
 update-branch:

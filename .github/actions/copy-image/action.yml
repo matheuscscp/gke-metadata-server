@@ -27,6 +27,8 @@ inputs:
     required: true
   target-repository:
     required: true
+  version:
+    required: true
   latest:
     required: false
 
@@ -43,13 +45,14 @@ runs:
       COMPONENT: ${{ inputs.component }}
       SOURCE_REPOSITORY: ${{ inputs.source-repository }}
       TARGET_REPOSITORY: ${{ inputs.target-repository }}
+      VERSION: ${{ inputs.version }}
       LATEST: ${{ inputs.latest }}
     run: |
       digest=$(cat ${COMPONENT}-digest.txt)
       src=ghcr.io/matheuscscp/gke-metadata-server/${SOURCE_REPOSITORY}@${digest}
       dst=ghcr.io/matheuscscp/${TARGET_REPOSITORY}@${digest}
       skopeo copy docker://$src docker://$dst
-      skopeo copy docker://$dst docker://ghcr.io/matheuscscp/${TARGET_REPOSITORY}:$(yq .${COMPONENT} versions.yaml)
+      skopeo copy docker://$dst docker://ghcr.io/matheuscscp/${TARGET_REPOSITORY}:${VERSION}
       if [ "$LATEST" != "skip" ]; then
         skopeo copy docker://$dst docker://ghcr.io/matheuscscp/${TARGET_REPOSITORY}:latest
       fi
