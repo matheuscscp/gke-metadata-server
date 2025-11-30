@@ -146,9 +146,10 @@ digest file `container-digest.txt` attached to the Github Release
 and use it with `cosign`:
 
 ```bash
+VERSION=x.y.z # replace with the desired version
 cosign verify ghcr.io/matheuscscp/gke-metadata-server@$(cat container-digest.txt) \
   --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
-  --certificate-identity=https://github.com/matheuscscp/gke-metadata-server/.github/workflows/release.yml@refs/heads/main
+  --certificate-identity=https://github.com/matheuscscp/gke-metadata-server/.github/workflows/release.yml@refs/tags/v${VERSION}
 ```
 
 ##### Automatic verification
@@ -166,9 +167,10 @@ digest file `helm-digest.txt` attached to the Github Release
 and use it with `cosign`:
 
 ```bash
+VERSION=x.y.z # replace with the desired version
 cosign verify ghcr.io/matheuscscp/gke-metadata-server-helm@$(cat helm-digest.txt) \
   --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
-  --certificate-identity=https://github.com/matheuscscp/gke-metadata-server/.github/workflows/release.yml@refs/heads/main
+  --certificate-identity=https://github.com/matheuscscp/gke-metadata-server/.github/workflows/release.yml@refs/tags/v${VERSION}
 ```
 
 ##### Automatic verification
@@ -183,9 +185,10 @@ digest file `timoni-digest.txt` attached to the Github Release
 and use it with `cosign`:
 
 ```bash
+VERSION=x.y.z # replace with the desired version
 cosign verify ghcr.io/matheuscscp/gke-metadata-server-timoni@$(cat timoni-digest.txt) \
   --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
-  --certificate-identity=https://github.com/matheuscscp/gke-metadata-server/.github/workflows/release.yml@refs/heads/main
+  --certificate-identity=https://github.com/matheuscscp/gke-metadata-server/.github/workflows/release.yml@refs/tags/v${VERSION}
 ```
 
 ##### Automatic verification

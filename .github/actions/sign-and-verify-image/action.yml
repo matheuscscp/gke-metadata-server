@@ -4,6 +4,8 @@
 inputs:
   image:
     required: true
+  version:
+    required: true
 
 runs:
   using: composite
@@ -11,7 +13,8 @@ runs:
   - run: |
       cosign sign --yes $image && cosign verify $image \
         --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
-        --certificate-identity=https://github.com/matheuscscp/gke-metadata-server/.github/workflows/release.yml@refs/heads/main
+        --certificate-identity=https://github.com/matheuscscp/gke-metadata-server/.github/workflows/release.yml@refs/tags/v${version}
     shell: bash
     env:
       image: ${{ inputs.image }}
+      version: ${{ inputs.version }}
