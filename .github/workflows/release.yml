@@ -24,8 +24,7 @@ name: release
 
 on:
   push:
-    branches: [main]
-  workflow_dispatch: # for manual trigger in the UI
+    tags: [v*]
 
 concurrency:
   group: continuous-integration # lock for shared CI resources
@@ -48,85 +47,68 @@ jobs:
         google-service-account-name: release
         github-token: ${{ secrets.GITHUB_TOKEN }}
 
-    - id: check-new-releases
-      uses: ./.github/actions/check-new-releases/
-      with:
-        registry: ghcr.io
+    - name: Version
+      id: version
+      env:
+        TAG: ${{ github.ref_name }}
+      run: |
+        value=$(echo "${TAG#v}" | tr -d '\n')
+        echo "value=$value" >> $GITHUB_OUTPUT
 
     - uses: ./.github/actions/ci-checks/
-      if: steps.check-new-releases.outputs.new-releases == 'yes'
+      with:
+        version: ${{ steps.version.outputs.value }}
 
     - uses: sigstore/cosign-installer@v4.0.0
-      if: steps.check-new-releases.outputs.new-releases == 'yes'
       with:
         cosign-release: v2.6.1 # TODO: remove after Flux 2.8 with support for cosign v3
 
     - name: Release Container in GitHub Container Registry
       id: release-container-ghcr
-      if: steps.check-new-releases.outputs.release-container == 'yes'
       uses: ./.github/actions/copy-image/
       with:
         component: container
         source-repository: test
         target-repository: gke-metadata-server
+        version: ${{ steps.version.outputs.value }}
     - uses: ./.github/actions/sign-and-verify-image/
-      if: steps.check-new-releases.outputs.release-container == 'yes'
       with:
         image: ${{ steps.release-container-ghcr.outputs.image-with-digest }}
-    - name: Release Container in GitHub
-      if: steps.check-new-releases.outputs.release-container == 'yes'
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        gh release create v$(yq .container versions.yaml) \
-          container-digest.txt \
-          --repo="$GITHUB_REPOSITORY" \
-          --generate-notes \
-          --latest
 
     - name: Release Helm Chart in GitHub Container Registry
       id: release-helm-ghcr
-      if: steps.check-new-releases.outputs.release-helm == 'yes'
       uses: ./.github/actions/copy-image/
       with:
         component: helm
         source-repository: test/gke-metadata-server-helm
         target-repository: gke-metadata-server-helm
+        version: ${{ steps.version.outputs.value }}
         latest: skip
     - uses: ./.github/actions/sign-and-verify-image/
-      if: steps.check-new-releases.outputs.release-helm == 'yes'
       with:
         image: ${{ steps.release-helm-ghcr.outputs.image-with-digest }}
-    - name: Release Helm Chart in GitHub
-      if: steps.check-new-releases.outputs.release-helm == 'yes'
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        gh release create helm-v$(yq .helm versions.yaml) \
-          helm-digest.txt \
-          --repo="$GITHUB_REPOSITORY" \
-          --generate-notes \
-          --latest=false
 
     - name: Release Timoni Module in GitHub Container Registry
       id: release-timoni-ghcr
-      if: steps.check-new-releases.outputs.release-timoni == 'yes'
       uses: ./.github/actions/copy-image/
       with:
         component: timoni
         source-repository: test/timoni
         target-repository: gke-metadata-server-timoni
+        version: ${{ steps.version.outputs.value }}
     - uses: ./.github/actions/sign-and-verify-image/
-      if: steps.check-new-releases.outputs.release-timoni == 'yes'
       with:
         image: ${{ steps.release-timoni-ghcr.outputs.image-with-digest }}
-    - name: Release Timoni Module in GitHub
-      if: steps.check-new-releases.outputs.release-timoni == 'yes'
+
+    - name: Create GitHub Release
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        TAG: ${{ github.ref_name }}
       run: |
-        gh release create timoni-v$(yq .timoni versions.yaml) \
+        gh release create $TAG \
+          container-digest.txt \
+          helm-digest.txt \
           timoni-digest.txt \
           --repo="$GITHUB_REPOSITORY" \
           --generate-notes \
-          --latest=false
+          --latest

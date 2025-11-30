@@ -113,11 +113,7 @@ method described above.
 
 A Helm Chart is available in the following [Helm OCI Repository](https://helm.sh/docs/topics/registries/):
 
-`ghcr.io/matheuscscp/gke-metadata-server-helm:{helm_version}` (GitHub Container Registry)
-
-Here `{helm_version}` is a Helm Chart version, i.e. the field `.helm` in the file
-[`./versions.yaml`](./versions.yaml). Check available releases
-in the [GitHub Releases Page](https://github.com/matheuscscp/gke-metadata-server/releases).
+`ghcr.io/matheuscscp/gke-metadata-server-helm:{version}` (GitHub Container Registry)
 
 See the Helm Values API in the file [`./helm/gke-metadata-server/values.yaml`](./helm/gke-metadata-server/values.yaml).
 Make sure to specify at least the full name of the Workload Identity Provider.
@@ -127,11 +123,7 @@ Make sure to specify at least the full name of the Workload Identity Provider.
 If you prefer something newer and strongly typed, a Timoni Module is available in the following
 [Timoni OCI Repository](https://timoni.sh/concepts/#artifact):
 
-`ghcr.io/matheuscscp/gke-metadata-server-timoni:{timoni_version}` (GitHub Container Registry)
-
-Here `{timoni_version}` is a Timoni Module version, i.e. the field `.timoni` in the file
-[`./versions.yaml`](./versions.yaml). Check available releases
-in the [GitHub Releases Page](https://github.com/matheuscscp/gke-metadata-server/releases).
+`ghcr.io/matheuscscp/gke-metadata-server-timoni:{version}` (GitHub Container Registry)
 
 See the Timoni Values API in the files [`./timoni/gke-metadata-server/templates/config.tpl.cue`](./timoni/gke-metadata-server/templates/config.tpl.cue)
 and [`./timoni/gke-metadata-server/templates/settings.cue`](./timoni/gke-metadata-server/templates/settings.cue).
@@ -141,11 +133,7 @@ Make sure to specify at least the full name of the Workload Identity Provider.
 
 Alternatively, you can write your own Kubernetes manifests and consume only the container image:
 
-`ghcr.io/matheuscscp/gke-metadata-server:{container_version}` (GitHub Container Registry)
-
-Here `{container_version}` is an app container version, i.e. the field `.container` in the file
-[`./versions.yaml`](./versions.yaml). Check available releases
-in the [GitHub Releases Page](https://github.com/matheuscscp/gke-metadata-server/releases).
+`ghcr.io/matheuscscp/gke-metadata-server:{version}` (GitHub Container Registry)
 
 ### Verify the image signatures
 
@@ -153,8 +141,9 @@ For verifying the images above use the [`cosign`](https://github.com/sigstore/co
 
 #### Verify the container image
 
-For verifying the image of a given Container GitHub Release (tags `v{container_version}`), download the
-digest file `container-digest.txt` attached to the Github Release and use it with `cosign`:
+For verifying the container image of a given release, download the
+digest file `container-digest.txt` attached to the Github Release
+and use it with `cosign`:
 
 ```bash
 cosign verify ghcr.io/matheuscscp/gke-metadata-server@$(cat container-digest.txt) \
@@ -172,8 +161,9 @@ If you are using *Kyverno* for enforcing policies you can automate the image ver
 
 #### Verify the Helm Chart image
 
-For verifying the image of a given Helm Chart GitHub Release (tags `helm-v{helm_version}`), download the
-digest file `helm-digest.txt` attached to the Github Release and use it with `cosign`:
+For verifying the OCI Helm Chart of a given release, download the
+digest file `helm-digest.txt` attached to the Github Release
+and use it with `cosign`:
 
 ```bash
 cosign verify ghcr.io/matheuscscp/gke-metadata-server-helm@$(cat helm-digest.txt) \
@@ -188,8 +178,9 @@ If you are using *Flux* for deploying Helm Charts you can automate the image ver
 
 #### Verify the Timoni Module image
 
-For verifying the image of a given Timoni Module GitHub Release (tags `timoni-v{timoni_version}`), download the
-digest file `timoni-digest.txt` attached to the Github Release and use it with `cosign`:
+For verifying the OCI Timoni Module of a given release, download the
+digest file `timoni-digest.txt` attached to the Github Release
+and use it with `cosign`:
 
 ```bash
 cosign verify ghcr.io/matheuscscp/gke-metadata-server-timoni@$(cat timoni-digest.txt) \
