@@ -135,9 +135,9 @@ Alternatively, you can write your own Kubernetes manifests and consume only the 
 
 `ghcr.io/matheuscscp/gke-metadata-server:{version}` (GitHub Container Registry)
 
-### Verify the image signatures
+### Verify the OCI artifacts
 
-For verifying the images above use the [`cosign`](https://github.com/sigstore/cosign) CLI tool.
+For verifying the OCI artifacts above, use the [`cosign`](https://github.com/sigstore/cosign) CLI tool.
 
 #### Verify the container image
 
@@ -146,7 +146,7 @@ digest file `container-digest.txt` attached to the Github Release
 and use it with `cosign`:
 
 ```bash
-VERSION=x.y.z # replace with the desired version
+VERSION="x.y.z" # replace with the release version
 cosign verify ghcr.io/matheuscscp/gke-metadata-server@$(cat container-digest.txt) \
   --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
   --certificate-identity=https://github.com/matheuscscp/gke-metadata-server/.github/workflows/release.yml@refs/tags/v${VERSION}
@@ -160,14 +160,14 @@ verification using [Keyless Authorities](https://docs.sigstore.dev/policy-contro
 If you are using *Kyverno* for enforcing policies you can automate the image verification using
 [Keyless Verification](https://kyverno.io/docs/writing-policies/verify-images/sigstore/#keyless-signing-and-verification).
 
-#### Verify the Helm Chart image
+#### Verify the Helm Chart
 
 For verifying the OCI Helm Chart of a given release, download the
 digest file `helm-digest.txt` attached to the Github Release
 and use it with `cosign`:
 
 ```bash
-VERSION=x.y.z # replace with the desired version
+VERSION="x.y.z" # replace with the release version
 cosign verify ghcr.io/matheuscscp/gke-metadata-server-helm@$(cat helm-digest.txt) \
   --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
   --certificate-identity=https://github.com/matheuscscp/gke-metadata-server/.github/workflows/release.yml@refs/tags/v${VERSION}
@@ -175,17 +175,17 @@ cosign verify ghcr.io/matheuscscp/gke-metadata-server-helm@$(cat helm-digest.txt
 
 ##### Automatic verification
 
-If you are using *Flux* for deploying Helm Charts you can automate the image verification using
-[Keyless Verification](https://fluxcd.io/flux/components/source/helmcharts/#keyless-verification).
+If you are using a *Flux* `OCIRepository` for deploying Helm Charts you can automate the verification using
+[Keyless Verification](https://fluxcd.io/flux/components/source/ocirepositories/#verification).
 
-#### Verify the Timoni Module image
+#### Verify the Timoni Module
 
 For verifying the OCI Timoni Module of a given release, download the
 digest file `timoni-digest.txt` attached to the Github Release
 and use it with `cosign`:
 
 ```bash
-VERSION=x.y.z # replace with the desired version
+VERSION="x.y.z" # replace with the release version
 cosign verify ghcr.io/matheuscscp/gke-metadata-server-timoni@$(cat timoni-digest.txt) \
   --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
   --certificate-identity=https://github.com/matheuscscp/gke-metadata-server/.github/workflows/release.yml@refs/tags/v${VERSION}
@@ -193,8 +193,8 @@ cosign verify ghcr.io/matheuscscp/gke-metadata-server-timoni@$(cat timoni-digest
 
 ##### Automatic verification
 
-If you are using the Timoni CLI to deploy Modules/Bundles you can automate the image verification
-using [Keyless Verification](https://timoni.sh/cue/module/signing/#sign-with-cosign-keyless).
+If you are using the Timoni CLI to deploy Modules/Bundles you can automate the verification using
+[Keyless Verification](https://timoni.sh/cue/module/signing/#sign-with-cosign-keyless).
 
 ## Further documentation
 
@@ -314,11 +314,15 @@ spec:
 
 ### Node initialization
 
-After successfully initializing, the emulator will remove any taints with the prefix
-`node.gke-metadata-server.matheuscscp.io` from the Node it runs on. This allows you to
-configure such taints on your Nodes to prevent client Pods from being scheduled on them
-until the emulator is running properly.
-See [docs](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/).
+The emulator Pods have toleration for any taints, so they will get scheduled earlier
+on the Nodes. This may be enough for ensuring the emulator is running before client
+Pods attempt to get credentials from them. But if you observe issues on your Pods
+due to this race condition, you can configure your Nodes to start with a taint that
+will prevent your Pods from being scheduled on them until the emulator has fully
+initialized. You can choose any key you want for the taint, as long as it has the
+prefix `node.gke-metadata-server.matheuscscp.io`. The emulator will remove any such
+taints from the Node after successfully initializing. See the taints and tolerations
+docs [here](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/).
 
 ### Limitations and Security Risks
 
