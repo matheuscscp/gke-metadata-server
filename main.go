@@ -83,6 +83,9 @@ func main() {
 		cacheTokens                         bool
 		cacheTokensConcurrency              int
 		cacheMaxTokenDuration               time.Duration
+		podLookupMaxAttempts                int
+		podLookupRetryInitialDelay          time.Duration
+		podLookupRetryMaxDelay              time.Duration
 	)
 
 	flags := pflag.NewFlagSet(os.Args[0], pflag.ContinueOnError)
@@ -121,6 +124,12 @@ func main() {
 		"When proactively caching service account tokens, what is the maximum amount of caching operations that can happen in parallel")
 	flags.DurationVar(&cacheMaxTokenDuration, "cache-max-token-duration", time.Hour,
 		"Maximum duration for cached service account tokens")
+	flags.IntVar(&podLookupMaxAttempts, "pod-lookup-max-attempts", 3,
+		"Maximum number of attempts to try looking up a pod by the client connection IP address")
+	flags.DurationVar(&podLookupRetryInitialDelay, "pod-lookup-retry-initial-delay", time.Second,
+		"Initial delay for retrying pod lookups upon failures")
+	flags.DurationVar(&podLookupRetryMaxDelay, "pod-lookup-retry-max-delay", 30*time.Second,
+		"Maximum delay for retrying pod lookups upon failures")
 
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		if errors.Is(err, pflag.ErrHelp) {
@@ -317,6 +326,11 @@ func main() {
 		NumericProjectID:     numericProjectID,
 		WorkloadIdentityPool: workloadIdentityPool,
 		RoutingMode:          routingMode,
+		PodLookup: server.PodLookupOptions{
+			MaxAttempts:       podLookupMaxAttempts,
+			RetryInitialDelay: podLookupRetryInitialDelay,
+			RetryMaxDelay:     podLookupRetryMaxDelay,
+		},
 	})
 
 	<-ctx.Done()

@@ -50,6 +50,10 @@ config:
     enable: true # Whether or not to proactively cache tokens for the Service Accounts used by the Pods running in the same Node.
     concurrency: 10 # Maximum parallel caching operations.
     maxTokenDuration: 1h # Maximum duration for cached service account tokens.
+  podLookup:
+    maxAttempts: 3 # Maximum number of attempts to try looking up a pod by the client connection IP address.
+    retryInitialDelay: 1s # Initial delay for retrying pod lookups upon failures.
+    retryMaxDelay: 30s # Maximum delay for retrying pod lookups upon failures.
 
 podAnnotations: {}
   # Optionally, configure Prometheus to scrape the server:

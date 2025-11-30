@@ -108,6 +108,15 @@ spec:
         - --cache-max-token-duration={{ .Values.config.cacheTokens.maxTokenDuration }}
         {{- end }}
         {{- end }}
+        {{- if .Values.config.podLookup.maxAttempts }}
+        - --pod-lookup-max-attempts={{ .Values.config.podLookup.maxAttempts }}
+        {{- end }}
+        {{- if .Values.config.podLookup.retryInitialDelay }}
+        - --pod-lookup-retry-initial-delay={{ .Values.config.podLookup.retryInitialDelay }}
+        {{- end }}
+        {{- if .Values.config.podLookup.retryMaxDelay }}
+        - --pod-lookup-retry-max-delay={{ .Values.config.podLookup.retryMaxDelay }}
+        {{- end }}
         env:
         - name: NODE_NAME
           valueFrom:

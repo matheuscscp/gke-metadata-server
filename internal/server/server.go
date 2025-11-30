@@ -29,6 +29,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"time"
 
 	"github.com/matheuscscp/gke-metadata-server/api"
 	pkghttp "github.com/matheuscscp/gke-metadata-server/internal/http"
@@ -66,6 +67,13 @@ type (
 		NumericProjectID     string
 		WorkloadIdentityPool string
 		RoutingMode          string
+		PodLookup            PodLookupOptions
+	}
+
+	PodLookupOptions struct {
+		MaxAttempts       int           // default: 3
+		RetryInitialDelay time.Duration // default: time.Second
+		RetryMaxDelay     time.Duration // default: 30 * time.Second
 	}
 
 	serverMetrics struct {

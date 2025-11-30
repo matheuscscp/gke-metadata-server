@@ -253,11 +253,11 @@ environments that expose services on this endpoint to continue working properly.
 For example, AWS EKS clusters expose the AWS Instance Metadata Service on this
 endpoint. The emulator works fine in such environments without disrupting the
 native metadata service due to this proxying feature. The emulator will not work
-with environments exposing a service in this endpoint that *also identify Pods
-by their IP address*. This is because the source IP address the service will see
+with environments exposing a service in this endpoint that *also identifies Pods
+by their IP addresses*. This is because the source IP address the service will see
 will be the Node IP address, and not the IP address of the client Pod. This is
-not the case for AWS EKS, since the AWS Instance Metadata Service does not
-identify Pods by their IP addresses.
+not the case for AWS EKS, since the AWS Instance Metadata Service does not identify
+Pods by their IP addresses, so the emulator works fine in AWS EKS clusters.
 
 #### `Loopback`
 

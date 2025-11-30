@@ -65,6 +65,18 @@ import (
 		maxTokenDuration?: time.Duration
 	}
 
+	// podLookup is the settings for looking up Pods by client connection IP address.
+	podLookup: {
+		// maxAttempts is the maximum number of attempts to try looking up a pod by the client connection IP address.
+		maxAttempts?: int & >0
+
+		// retryInitialDelay is the initial delay for retrying pod lookups upon failures.
+		retryInitialDelay?: time.Duration
+
+		// retryMaxDelay is the maximum delay for retrying pod lookups upon failures.
+		retryMaxDelay?: time.Duration
+	}
+
 	// Helper definitions.
 	#watchSettings: {
 		// enable is a flag to enable the watch feature.

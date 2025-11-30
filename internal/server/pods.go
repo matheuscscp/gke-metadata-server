@@ -253,6 +253,11 @@ func (s *Server) lookupPodByIP(ctx context.Context, clientIP string) (*corev1.Po
 			s := err.Error()
 			return !strings.Contains(s, "no pods found") && !strings.Contains(s, "multiple pods found")
 		},
+
+		// options
+		MaxAttempts:  s.opts.PodLookup.MaxAttempts,
+		InitialDelay: s.opts.PodLookup.RetryInitialDelay,
+		MaxDelay:     s.opts.PodLookup.RetryMaxDelay,
 	})
 
 	return pod, err

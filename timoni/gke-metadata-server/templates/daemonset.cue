@@ -112,6 +112,15 @@ import (
 						if #config.settings.cacheTokens.enable && #config.settings.cacheTokens.maxTokenDuration != _|_ {
 							"--cache-max-token-duration=\(#config.settings.cacheTokens.maxTokenDuration)"
 						}
+						if #config.settings.podLookup.maxAttempts != _|_ {
+							"--pod-lookup-max-attempts=\(#config.settings.podLookup.maxAttempts)"
+						}
+						if #config.settings.podLookup.retryInitialDelay != _|_ {
+							"--pod-lookup-retry-initial-delay=\(#config.settings.podLookup.retryInitialDelay)"
+						}
+						if #config.settings.podLookup.retryMaxDelay != _|_ {
+							"--pod-lookup-retry-max-delay=\(#config.settings.podLookup.retryMaxDelay)"
+						}
 					]
 					env: [
 						{
