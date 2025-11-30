@@ -275,9 +275,7 @@ func (s *Server) getCurrentNode(ctx context.Context) (*corev1.Node, error) {
 			node, err = s.opts.Node.Get(ctx)
 			return err
 		},
-		IsRetryable: func(err error) bool {
-			return true
-		},
+		IsRetryable: func(error) bool { return true },
 	})
 
 	return node, err

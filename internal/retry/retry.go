@@ -38,7 +38,7 @@ import (
 
 type (
 	Operation struct {
-		MaxAttempts    int           // default: 3
+		MaxAttempts    int           // default: 3. use negative for infinity
 		InitialDelay   time.Duration // default: time.Second
 		MaxDelay       time.Duration // default: 30 * time.Second
 		Description    string
@@ -73,7 +73,7 @@ func Do(ctx context.Context, op Operation) error {
 		return fmt.Errorf("a retryable operation must have a function to check if an error is retryable")
 	}
 
-	if op.MaxAttempts <= 0 {
+	if op.MaxAttempts == 0 {
 		op.MaxAttempts = 3
 	}
 	if op.InitialDelay <= 0 {
@@ -87,7 +87,7 @@ func Do(ctx context.Context, op Operation) error {
 	}
 
 	l := logging.FromContext(ctx)
-	for i := 1; i <= op.MaxAttempts; i++ {
+	for i := 1; op.MaxAttempts < 0 || i <= op.MaxAttempts; i++ {
 		err := op.Func()
 		if err == nil || !op.IsRetryable(err) {
 			return err

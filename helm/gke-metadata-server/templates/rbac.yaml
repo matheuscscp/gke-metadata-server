@@ -35,6 +35,9 @@ rules:
   resources: [pods, nodes, serviceaccounts]
   verbs: [get, list, watch]
 - apiGroups: [""]
+  resources: [nodes]
+  verbs: [update]
+- apiGroups: [""]
   resources: [serviceaccounts/token]
   verbs: [create]
 ---
