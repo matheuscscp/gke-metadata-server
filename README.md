@@ -318,6 +318,14 @@ spec:
     ip: 169.254.169.254
 ```
 
+### Node initialization
+
+After successfully initializing, the emulator will remove any taints with the prefix
+`node.gke-metadata-server.matheuscscp.io` from the Node it runs on. This allows you to
+configure such taints on your Nodes to prevent client Pods from being scheduled on them
+until the emulator is running properly.
+See [docs](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/).
+
 ### Limitations and Security Risks
 
 #### Pod identification by IP address

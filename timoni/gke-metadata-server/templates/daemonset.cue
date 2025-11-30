@@ -52,9 +52,10 @@ import (
 					"kubernetes.io/arch":                     "amd64"
 				}
 				tolerations: [{
-					key:      "iam.gke.io/gke-metadata-server-enabled"
-					operator: "Equal"
-					value:    "true"
+					operator: "Exists"
+					effect:   "NoSchedule"
+				}, {
+					operator: "Exists"
 					effect:   "NoExecute"
 				}]
 				containers: [{

@@ -37,6 +37,7 @@ import (
 	"github.com/matheuscscp/gke-metadata-server/internal/loopback"
 	"github.com/matheuscscp/gke-metadata-server/internal/metrics"
 	getnode "github.com/matheuscscp/gke-metadata-server/internal/node/get"
+	"github.com/matheuscscp/gke-metadata-server/internal/node/taints"
 	watchnode "github.com/matheuscscp/gke-metadata-server/internal/node/watch"
 	listpods "github.com/matheuscscp/gke-metadata-server/internal/pods/list"
 	watchpods "github.com/matheuscscp/gke-metadata-server/internal/pods/watch"
@@ -172,6 +173,9 @@ func main() {
 	})
 	if err != nil {
 		l.WithError(err).Fatal("error creating google credentials config")
+	}
+	if podLookupMaxAttempts < 0 {
+		podLookupMaxAttempts = 0
 	}
 
 	// create kube client
@@ -332,6 +336,11 @@ func main() {
 			RetryMaxDelay:     podLookupRetryMaxDelay,
 		},
 	})
+
+	// remove taints from node
+	removeTaintsFailures := metrics.NewRemoveTaintsFailuresCounter()
+	metricsRegistry.MustRegister(removeTaintsFailures)
+	taints.Remove(ctx, kubeClient, nodeName, removeTaintsFailures.WithLabelValues(nodeName))
 
 	<-ctx.Done()
 	l.Info("signal received, shutting down server")

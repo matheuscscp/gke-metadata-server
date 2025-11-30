@@ -218,6 +218,8 @@ func New(ctx context.Context, opts ServerOptions) *Server {
 		w.WriteHeader(http.StatusOK)
 	})
 
+	done := make(chan struct{}, 2)
+
 	// start metadata server
 	l.Info("starting metadata server...")
 	go func() {
@@ -232,6 +234,7 @@ func New(ctx context.Context, opts ServerOptions) *Server {
 			l.WithError(err).Fatal("error listening on metadata server address")
 		}
 
+		done <- struct{}{}
 		if err := s.metadataServer.Serve(lis); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			l.WithError(err).Fatal("error serving metadata server")
 		}
@@ -240,10 +243,16 @@ func New(ctx context.Context, opts ServerOptions) *Server {
 	// start health server
 	l.Info("starting health server...")
 	go func() {
+		done <- struct{}{}
 		if err := s.healthServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			l.WithError(err).Fatal("error listening and serving health server")
 		}
 	}()
+
+	// wait for servers to start
+	<-done
+	<-done
+	l.Info("servers started successfully")
 
 	return s
 }

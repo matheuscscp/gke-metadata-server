@@ -39,18 +39,20 @@ import (
 	apiVersion: "rbac.authorization.k8s.io/v1"
 	kind:       "ClusterRole"
 	metadata:   #config.#clusterScopedMetadata
-	rules: [
-		{
-			apiGroups: [""]
-			resources: ["pods", "nodes", "serviceaccounts"]
-			verbs:     ["get", "list", "watch"]
-		},
-		{
-			apiGroups: [""]
-			resources: ["serviceaccounts/token"]
-			verbs:     ["create"]
-		},
-	]
+	rules: [{
+		apiGroups: [""]
+		resources: ["pods", "nodes", "serviceaccounts"]
+		verbs:     ["get", "list", "watch"]
+	},{
+		apiGroups: [""]
+		resources: ["nodes"]
+		verbs:     ["update"]
+	},
+	{
+		apiGroups: [""]
+		resources: ["serviceaccounts/token"]
+		verbs:     ["create"]
+	}]
 }
 
 #ClusterRoleBinding: rbacv1.#ClusterRoleBinding & {

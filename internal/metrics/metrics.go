@@ -74,6 +74,14 @@ func NewGetNodeFailuresCounter() prometheus.Counter {
 	})
 }
 
+func NewRemoveTaintsFailuresCounter() *prometheus.CounterVec {
+	return prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "remove_taints_failures_total",
+		Help:      "Total failures when removing taints from the Node object.",
+	}, []string{"node_name"})
+}
+
 func NewProxyDialLantencyMillis() *prometheus.HistogramVec {
 	return prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: namespace,
