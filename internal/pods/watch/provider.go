@@ -151,12 +151,13 @@ func (p *Provider) getByIP(ipAddr string) (*corev1.Pod, error) {
 		Status: corev1.PodStatus{PodIP: ipAddr},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("error listing pods in the node cache matching cluster ip %s: %w", ipAddr, err)
+		return nil, fmt.Errorf("cache: error listing pods in the node matching cluster ip %s: %w", ipAddr, err)
 	}
+	list = pods.FilterPods(list)
 
 	if n := len(list); n != 1 {
 		if n == 0 {
-			return nil, fmt.Errorf("no pods found in the node cache matching cluster ip %s", ipAddr)
+			return nil, fmt.Errorf("cache: no pods found in the node matching cluster ip %s", ipAddr)
 		}
 
 		refs := make([]string, n)
@@ -164,7 +165,7 @@ func (p *Provider) getByIP(ipAddr string) (*corev1.Pod, error) {
 			pod := v.(*corev1.Pod)
 			refs[i] = fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
 		}
-		return nil, fmt.Errorf("multiple pods found in the node cache matching cluster ip %s (%v pods): %s",
+		return nil, fmt.Errorf("cache: multiple pods found in the node matching cluster ip %s (%v pods): %s",
 			ipAddr, n, strings.Join(refs, ", "))
 	}
 

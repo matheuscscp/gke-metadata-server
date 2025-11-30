@@ -62,6 +62,7 @@ func (p *Provider) GetByIP(ctx context.Context, ipAddr string) (*corev1.Pod, err
 	if err != nil {
 		return nil, fmt.Errorf("error listing pods in the node matching cluster ip %s: %w", ipAddr, err)
 	}
+	podList.Items = pods.FilterPods(podList.Items)
 
 	if n := len(podList.Items); n != 1 {
 		if n == 0 {

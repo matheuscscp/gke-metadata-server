@@ -31,3 +31,32 @@ import (
 type Provider interface {
 	GetByIP(ctx context.Context, ipAddr string) (*corev1.Pod, error)
 }
+
+// FilterPods removes pods that are not running.
+func FilterPods[T any](pods []T) []T {
+	var filtered []T
+	for _, v := range pods {
+		switch pod := any(v).(type) {
+		case corev1.Pod:
+			if isPodRunning(&pod) {
+				filtered = append(filtered, v)
+			}
+		case *corev1.Pod:
+			if isPodRunning(pod) {
+				filtered = append(filtered, v)
+			}
+		}
+	}
+	return filtered
+}
+
+func isPodRunning(pod *corev1.Pod) bool {
+	switch {
+	case pod.DeletionTimestamp != nil,
+		pod.Status.Phase == corev1.PodSucceeded,
+		pod.Status.Phase == corev1.PodFailed:
+		return false
+	default:
+		return true
+	}
+}
