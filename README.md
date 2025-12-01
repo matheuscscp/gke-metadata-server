@@ -299,11 +299,8 @@ the Google libraries, but requires a bit of per-Pod configuration.
 
 ### The `metadata.google.internal` DNS record
 
-Google has documented the `http://metadata.google.internal` endpoint as where to fetch
-metadata from, and that it should resolve to `http://169.254.169.254`. While some Google
-libraries hard-code the IP address and hit it directly without DNS resolution, others
-may use the DNS hostname to fetch metadata from the emulator. If that's your case, you
-can add to your Pods the following DNS configuration:
+If you observe DNS lookup errors for `metadata.google.internal` in your Pods,
+you can add to them the following DNS configuration:
 
 ```yaml
 spec:
@@ -311,6 +308,10 @@ spec:
   - hostnames: [metadata.google.internal]
     ip: 169.254.169.254
 ```
+
+Not all Google libraries hit `metadata.google.internal`, some just hit
+`169.254.169.254` directly. The `gcloud` CLI, for example, needs this
+DNS configuration to work properly. See this [example](./testdata/pod-gcloud.yaml).
 
 ### Node initialization
 
