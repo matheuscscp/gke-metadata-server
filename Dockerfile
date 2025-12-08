@@ -1,7 +1,7 @@
 # Copyright 2025 Matheus Pimenta.
 # SPDX-License-Identifier: AGPL-3.0
 
-FROM golang:1.25.4-alpine3.21 AS builder
+FROM golang:1.25.5-alpine3.21 AS builder
 
 RUN apk add --no-cache clang llvm bpftool libbpf-dev
 
