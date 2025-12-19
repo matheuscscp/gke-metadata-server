@@ -65,13 +65,11 @@ func Listen(address string, dialLatencyMillis *prometheus.HistogramVec,
 		for {
 			c, err := l.Accept()
 			if err != nil {
-				select {
-				case <-ctx.Done():
-					return
-				default:
+				if !errors.Is(err, net.ErrClosed) {
+					logger().WithError(err).Error("error accepting connection")
 				}
-				logger().WithError(err).Error("error accepting connection")
-				continue
+				p.Close()
+				return
 			}
 
 			go p.handle(c)
