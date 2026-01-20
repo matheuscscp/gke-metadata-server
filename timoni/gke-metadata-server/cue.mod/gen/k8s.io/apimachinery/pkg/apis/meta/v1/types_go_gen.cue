@@ -751,7 +751,6 @@ import (
 	// is not guaranteed to conform to any schema except that defined by
 	// the reason type.
 	// +optional
-	// +listType=atomic
 	details?: null | #StatusDetails @go(Details,*StatusDetails) @protobuf(5,bytes,opt)
 
 	// Suggested HTTP return code for this status, 0 if not set.

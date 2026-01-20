@@ -466,6 +466,7 @@ import (
 
 	// nodeAffinity defines constraints that limit what nodes this volume can be accessed from.
 	// This field influences the scheduling of pods that use this volume.
+	// This field is mutable if MutablePVNodeAffinity feature gate is enabled.
 	// +optional
 	nodeAffinity?: null | #VolumeNodeAffinity @go(NodeAffinity,*VolumeNodeAffinity) @protobuf(9,bytes,opt)
 
@@ -606,7 +607,7 @@ import (
 	selector?: null | metav1.#LabelSelector @go(Selector,*metav1.LabelSelector) @protobuf(4,bytes,opt)
 
 	// resources represents the minimum resources the volume should have.
-	// If RecoverVolumeExpansionFailure feature is enabled users are allowed to specify resource requirements
+	// Users are allowed to specify resource requirements
 	// that are lower than previous value but must still be higher than capacity recorded in the
 	// status field of the claim.
 	// More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#resources
@@ -705,7 +706,7 @@ import (
 // Valid values are:
 //   - "Resizing", "FileSystemResizePending"
 //
-// If RecoverVolumeExpansionFailure feature gate is enabled, then following additional values can be expected:
+// The following additional values can be expected:
 //   - "ControllerResizeError", "NodeResizeError"
 //
 // If VolumeAttributesClass feature gate is enabled, then following additional values can be expected:
@@ -883,9 +884,6 @@ import (
 	// should ignore the update for the purpose it was designed. For example - a controller that
 	// only is responsible for resizing capacity of the volume, should ignore PVC updates that change other valid
 	// resources associated with PVC.
-	//
-	// This is an alpha field and requires enabling RecoverVolumeExpansionFailure feature.
-	// +featureGate=RecoverVolumeExpansionFailure
 	// +optional
 	allocatedResources?: #ResourceList @go(AllocatedResources) @protobuf(5,bytes,rep,casttype=ResourceList,castkey=ResourceName)
 
@@ -922,9 +920,6 @@ import (
 	// should ignore the update for the purpose it was designed. For example - a controller that
 	// only is responsible for resizing capacity of the volume, should ignore PVC updates that change other valid
 	// resources associated with PVC.
-	//
-	// This is an alpha field and requires enabling RecoverVolumeExpansionFailure feature.
-	// +featureGate=RecoverVolumeExpansionFailure
 	// +mapType=granular
 	// +optional
 	allocatedResourceStatuses?: {[string]: #ClaimResourceStatus} @go(AllocatedResourceStatuses,map[ResourceName]ClaimResourceStatus) @protobuf(7,bytes,rep)
@@ -2318,6 +2313,21 @@ import (
 	//
 	// +optional
 	certificateChainPath?: string @go(CertificateChainPath) @protobuf(6,bytes,rep)
+
+	// userAnnotations allow pod authors to pass additional information to
+	// the signer implementation.  Kubernetes does not restrict or validate this
+	// metadata in any way.
+	//
+	// These values are copied verbatim into the `spec.unverifiedUserAnnotations` field of
+	// the PodCertificateRequest objects that Kubelet creates.
+	//
+	// Entries are subject to the same validation as object metadata annotations,
+	// with the addition that all keys must be domain-prefixed. No restrictions
+	// are placed on values, except an overall size limitation on the entire field.
+	//
+	// Signers should document the keys and values they support. Signers should
+	// deny requests that contain keys they do not recognize.
+	userAnnotations?: {[string]: string} @go(UserAnnotations,map[string]string) @protobuf(7,bytes,rep)
 }
 
 // Represents a projected volume source
@@ -2410,7 +2420,8 @@ import (
 	// issues; consult the signer implementation's documentation to learn how to
 	// use the certificates it issues.
 	//
-	// +featureGate=PodCertificateProjection +optional
+	// +featureGate=PodCertificateProjection
+	// +optional
 	podCertificate?: null | #PodCertificateProjection @go(PodCertificate,*PodCertificateProjection) @protobuf(6,bytes,opt)
 }
 
@@ -2647,8 +2658,6 @@ import (
 	// None (or be unspecified, which defaults to None).
 	//
 	// If this field is not specified, it is treated as an equivalent of Disabled.
-	//
-	// +featureGate=RecursiveReadOnlyMounts
 	// +optional
 	recursiveReadOnly?: null | #RecursiveReadOnlyMode @go(RecursiveReadOnly,*RecursiveReadOnlyMode) @protobuf(7,bytes,opt,casttype=RecursiveReadOnlyMode)
 
@@ -3293,6 +3302,7 @@ import (
 	resources?: #ResourceRequirements @go(Resources) @protobuf(8,bytes,opt)
 
 	// Resources resize policy for the container.
+	// This field cannot be set on ephemeral containers.
 	// +featureGate=InPlacePodVerticalScaling
 	// +optional
 	// +listType=atomic
@@ -3313,7 +3323,6 @@ import (
 	// container. Instead, the next init container starts immediately after this
 	// init container is started, or after any startupProbe has successfully
 	// completed.
-	// +featureGate=SidecarContainers
 	// +optional
 	restartPolicy?: null | #ContainerRestartPolicy @go(RestartPolicy,*ContainerRestartPolicy) @protobuf(24,bytes,opt,casttype=ContainerRestartPolicy)
 
@@ -3473,7 +3482,6 @@ import (
 	tcpSocket?: null | #TCPSocketAction @go(TCPSocket,*TCPSocketAction) @protobuf(3,bytes,opt)
 
 	// Sleep represents a duration that the container should sleep.
-	// +featureGate=PodLifecycleSleepAction
 	// +optional
 	sleep?: null | #SleepAction @go(Sleep,*SleepAction) @protobuf(4,bytes,opt)
 }
@@ -3800,7 +3808,6 @@ import (
 	// +patchStrategy=merge
 	// +listType=map
 	// +listMapKey=mountPath
-	// +featureGate=RecursiveReadOnlyMounts
 	volumeMounts?: [...#VolumeMountStatus] @go(VolumeMounts,[]VolumeMountStatus) @protobuf(12,bytes,rep)
 
 	// User represents user identity information initially attached to the first process of the container
@@ -3948,7 +3955,8 @@ import (
 	#DisruptionTarget |
 	#PodReadyToStartContainers |
 	#PodResizePending |
-	#PodResizeInProgress
+	#PodResizeInProgress |
+	#AllContainersRestarting
 
 // ContainersReady indicates whether all containers in the pod are ready.
 #ContainersReady: #PodConditionType & "ContainersReady"
@@ -3983,6 +3991,9 @@ import (
 // If both PodResizePending and PodResizeInProgress are set, it means that a new resize was
 // requested in the middle of a previous pod resize that is still in progress.
 #PodResizeInProgress: #PodConditionType & "PodResizeInProgress"
+
+// AllContainersRestarting indicates that all containers of the pod is being restarted.
+#AllContainersRestarting: #PodConditionType & "AllContainersRestarting"
 
 // PodReasonUnschedulable reason in PodScheduled PodCondition means that the scheduler
 // can't schedule the pod right now, for example due to insufficient resources in the cluster.
@@ -4023,7 +4034,7 @@ import (
 	type: #PodConditionType @go(Type) @protobuf(1,bytes,opt,casttype=PodConditionType)
 
 	// If set, this represents the .metadata.generation that the pod condition was set based upon.
-	// This is an alpha field. Enable PodObservedGenerationTracking to be able to use this field.
+	// The PodObservedGenerationTracking feature gate must be enabled to use this field.
 	// +featureGate=PodObservedGenerationTracking
 	// +optional
 	observedGeneration?: int64 @go(ObservedGeneration) @protobuf(7,varint,opt)
@@ -4082,7 +4093,6 @@ import (
 	// RecursiveReadOnly must be set to Disabled, Enabled, or unspecified (for non-readonly mounts).
 	// An IfPossible value in the original VolumeMount must be translated to Disabled or Enabled,
 	// depending on the mount result.
-	// +featureGate=RecursiveReadOnlyMounts
 	// +optional
 	recursiveReadOnly?: null | #RecursiveReadOnlyMode @go(RecursiveReadOnly,*RecursiveReadOnlyMode) @protobuf(4,bytes,opt,casttype=RecursiveReadOnlyMode)
 }
@@ -4135,9 +4145,11 @@ import (
 #ContainerRestartRuleAction: string // #enumContainerRestartRuleAction
 
 #enumContainerRestartRuleAction:
-	#ContainerRestartRuleActionRestart
+	#ContainerRestartRuleActionRestart |
+	#ContainerRestartRuleActionRestartAllContainers
 
-#ContainerRestartRuleActionRestart: #ContainerRestartRuleAction & "Restart"
+#ContainerRestartRuleActionRestart:              #ContainerRestartRuleAction & "Restart"
+#ContainerRestartRuleActionRestartAllContainers: #ContainerRestartRuleAction & "RestartAllContainers"
 
 // ContainerRestartRuleOnExitCodes describes the condition
 // for handling an exited container based on its exit codes.
@@ -4520,9 +4532,10 @@ import (
 	key?: string @go(Key) @protobuf(1,bytes,opt)
 
 	// Operator represents a key's relationship to the value.
-	// Valid operators are Exists and Equal. Defaults to Equal.
+	// Valid operators are Exists, Equal, Lt, and Gt. Defaults to Equal.
 	// Exists is equivalent to wildcard for value, so that a pod can
 	// tolerate all taints of a particular category.
+	// Lt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators).
 	// +optional
 	operator?: #TolerationOperator @go(Operator) @protobuf(2,bytes,opt,casttype=TolerationOperator)
 
@@ -4550,10 +4563,14 @@ import (
 
 #enumTolerationOperator:
 	#TolerationOpExists |
-	#TolerationOpEqual
+	#TolerationOpEqual |
+	#TolerationOpLt |
+	#TolerationOpGt
 
 #TolerationOpExists: #TolerationOperator & "Exists"
 #TolerationOpEqual:  #TolerationOperator & "Equal"
+#TolerationOpLt:     #TolerationOperator & "Lt"
+#TolerationOpGt:     #TolerationOperator & "Gt"
 
 // PodReadinessGate contains the reference to a pod condition
 #PodReadinessGate: {
@@ -4899,8 +4916,8 @@ import (
 	// will be made available to those containers which consume them
 	// by name.
 	//
-	// This is an alpha field and requires enabling the
-	// DynamicResourceAllocation feature gate.
+	// This is a stable field but requires that the
+	// DynamicResourceAllocation feature gate is enabled.
 	//
 	// This field is immutable.
 	//
@@ -4941,6 +4958,18 @@ import (
 	// +featureGate=HostnameOverride
 	// +optional
 	hostnameOverride?: null | string @go(HostnameOverride,*string) @protobuf(41,bytes,opt)
+
+	// WorkloadRef provides a reference to the Workload object that this Pod belongs to.
+	// This field is used by the scheduler to identify the PodGroup and apply the
+	// correct group scheduling policies. The Workload object referenced
+	// by this field may not exist at the time the Pod is created.
+	// This field is immutable, but a Workload object with the same name
+	// may be recreated with different policies. Doing this during pod scheduling
+	// may result in the placement not conforming to the expected policies.
+	//
+	// +featureGate=GenericWorkload
+	// +optional
+	workloadRef?: null | #WorkloadReference @go(WorkloadRef,*WorkloadReference) @protobuf(42,bytes,opt)
 }
 
 // PodResourceClaim references exactly one ResourceClaim, either directly
@@ -5048,6 +5077,36 @@ import (
 	// Name of the scheduling gate.
 	// Each scheduling gate must have a unique name field.
 	name: string @go(Name) @protobuf(1,bytes,opt)
+}
+
+// WorkloadReference identifies the Workload object and PodGroup membership
+// that a Pod belongs to. The scheduler uses this information to apply
+// workload-aware scheduling semantics.
+#WorkloadReference: {
+	// Name defines the name of the Workload object this Pod belongs to.
+	// Workload must be in the same namespace as the Pod.
+	// If it doesn't match any existing Workload, the Pod will remain unschedulable
+	// until a Workload object is created and observed by the kube-scheduler.
+	// It must be a DNS subdomain.
+	//
+	// +required
+	name: string @go(Name) @protobuf(1,bytes,opt)
+
+	// PodGroup is the name of the PodGroup within the Workload that this Pod
+	// belongs to. If it doesn't match any existing PodGroup within the Workload,
+	// the Pod will remain unschedulable until the Workload object is recreated
+	// and observed by the kube-scheduler. It must be a DNS label.
+	//
+	// +required
+	podGroup: string @go(PodGroup) @protobuf(2,bytes,opt)
+
+	// PodGroupReplicaKey specifies the replica key of the PodGroup to which this
+	// Pod belongs. It is used to distinguish pods belonging to different replicas
+	// of the same pod group. The pod group policy is applied separately to each replica.
+	// When set, it must be a DNS label.
+	//
+	// +optional
+	podGroupReplicaKey?: string @go(PodGroupReplicaKey) @protobuf(3,bytes,opt)
 }
 
 // +enum
@@ -5647,7 +5706,6 @@ import (
 	// Restart policy for the container to manage the restart behavior of each
 	// container within a pod.
 	// You cannot set this field on ephemeral containers.
-	// +featureGate=SidecarContainers
 	// +optional
 	restartPolicy?: null | #ContainerRestartPolicy @go(RestartPolicy,*ContainerRestartPolicy) @protobuf(24,bytes,opt,casttype=ContainerRestartPolicy)
 
@@ -5773,7 +5831,7 @@ import (
 // plane.
 #PodStatus: {
 	// If set, this represents the .metadata.generation that the pod status was set based upon.
-	// This is an alpha field. Enable PodObservedGenerationTracking to be able to use this field.
+	// The PodObservedGenerationTracking feature gate must be enabled to use this field.
 	// +featureGate=PodObservedGenerationTracking
 	// +optional
 	observedGeneration?: int64 @go(ObservedGeneration) @protobuf(17,varint,opt)
@@ -5929,6 +5987,20 @@ import (
 	// +featureGate=DRAExtendedResource
 	// +optional
 	extendedResourceClaimStatus?: null | #PodExtendedResourceClaimStatus @go(ExtendedResourceClaimStatus,*PodExtendedResourceClaimStatus) @protobuf(18,bytes,opt)
+
+	// AllocatedResources is the total requests allocated for this pod by the node.
+	// If pod-level requests are not set, this will be the total requests aggregated
+	// across containers in the pod.
+	// +featureGate=InPlacePodLevelResourcesVerticalScaling
+	// +optional
+	allocatedResources?: #ResourceList @go(AllocatedResources) @protobuf(19,bytes,rep,casttype=ResourceList,castkey=ResourceName)
+
+	// Resources represents the compute resource requests and limits that have been
+	// applied at the pod level if pod-level requests or limits are set in
+	// PodSpec.Resources
+	// +featureGate=InPlacePodLevelResourcesVerticalScaling
+	// +optional
+	resources?: null | #ResourceRequirements @go(Resources,*ResourceRequirements) @protobuf(20,bytes,opt)
 }
 
 // PodStatusResult is a wrapper for PodStatus returned by kubelet that can be encode/decoded
@@ -6137,6 +6209,8 @@ import (
 	// be the same as the Pod(s) that the replication controller manages.
 	// Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
+	// +k8s:subfield(name)=+k8s:optional
+	// +k8s:subfield(name)=+k8s:format=k8s-long-name
 	metadata?: metav1.#ObjectMeta @go(ObjectMeta) @protobuf(1,bytes,opt)
 
 	// Spec defines the specification of the desired behavior of the replication controller.
@@ -6243,8 +6317,11 @@ import (
 // node as the client pod (dropping the traffic if there are no local endpoints).
 #ServiceInternalTrafficPolicyLocal: #ServiceInternalTrafficPolicy & "Local"
 
-// for backwards compat
+// ServiceInternalTrafficPolicy describes how nodes distribute service traffic they
+// receive on the ClusterIP.
 // +enum
+//
+// Deprecated: use ServiceInternalTrafficPolicy instead.
 #ServiceInternalTrafficPolicyType: #ServiceInternalTrafficPolicy
 
 // ServiceExternalTrafficPolicy describes how nodes distribute service traffic they
@@ -6267,34 +6344,36 @@ import (
 // (dropping the traffic if there are no local endpoints).
 #ServiceExternalTrafficPolicyLocal: #ServiceExternalTrafficPolicy & "Local"
 
-// for backwards compat
+// ServiceExternalTrafficPolicy describes how nodes distribute service traffic they
+// receive on one of the Service's "externally-facing" addresses (NodePorts, ExternalIPs,
+// and LoadBalancer IPs.
 // +enum
+//
+// Deprecated: use ServiceExternalTrafficPolicy instead.
 #ServiceExternalTrafficPolicyType: #ServiceExternalTrafficPolicy
 
 #ServiceExternalTrafficPolicyTypeLocal:   #ServiceExternalTrafficPolicy & "Local"
 #ServiceExternalTrafficPolicyTypeCluster: #ServiceExternalTrafficPolicy & "Cluster"
 
-// Indicates a preference for routing traffic to endpoints that are in the same
-// zone as the client. Users should not set this value unless they have ensured
-// that clients and endpoints are distributed in such a way that the "same zone"
-// preference will not result in endpoints getting overloaded.
-#ServiceTrafficDistributionPreferClose: "PreferClose"
-
-// Indicates a preference for routing traffic to endpoints that are in the same
-// zone as the client. Users should not set this value unless they have ensured
-// that clients and endpoints are distributed in such a way that the "same zone"
-// preference will not result in endpoints getting overloaded.
-// This is an alias for "PreferClose", but it is an Alpha feature and is only
-// recognized if the PreferSameTrafficDistribution feature gate is enabled.
+// ServiceTrafficDistributionPreferSameZone indicates a preference for routing
+// traffic to endpoints that are in the same zone as the client. Users should only
+// set this value if they have ensured that clients and endpoints are distributed
+// in such a way that the "same zone" preference will not result in endpoints
+// getting overloaded.
 #ServiceTrafficDistributionPreferSameZone: "PreferSameZone"
 
-// Indicates a preference for routing traffic to endpoints that are on the same
-// node as the client. Users should not set this value unless they have ensured
-// that clients and endpoints are distributed in such a way that the "same node"
-// preference will not result in endpoints getting overloaded.
-// This is an Alpha feature and is only recognized if the
-// PreferSameTrafficDistribution feature gate is enabled.
+// ServiceTrafficDistributionPreferSameNode indicates a preference for routing
+// traffic to endpoints that are on the same node as the client. Users should only
+// set this value if they have ensured that clients and endpoints are distributed
+// in such a way that the "same node" preference will not result in endpoints
+// getting overloaded.
 #ServiceTrafficDistributionPreferSameNode: "PreferSameNode"
+
+// ServiceTrafficDistributionPreferClose is the original name of "PreferSameZone".
+// Despite the generic-sounding name, it has exactly the same meaning as
+// "PreferSameZone".
+// Deprecated: use "PreferSameZone" instead.
+#ServiceTrafficDistributionPreferClose: "PreferClose"
 
 // LoadBalancerPortsError represents the condition of the requested ports
 // on the cloud load balancer instance.
@@ -6406,8 +6485,10 @@ import (
 // IPFamily will be added by apiserver
 #IPFamilyPolicyRequireDualStack: #IPFamilyPolicy & "RequireDualStack"
 
-// for backwards compat
+// IPFamilyPolicy represents the dual-stack-ness requested or required by a Service
 // +enum
+//
+// Deprecated: use IPFamilyPolicy instead.
 #IPFamilyPolicyType: #IPFamilyPolicy
 
 // ServiceSpec describes the attributes that a user creates on a service.
@@ -6650,7 +6731,6 @@ import (
 	// field is not set, the implementation will apply its default routing
 	// strategy. If set to "PreferClose", implementations should prioritize
 	// endpoints that are in the same zone.
-	// +featureGate=ServiceTrafficDistribution
 	// +optional
 	trafficDistribution?: null | string @go(TrafficDistribution,*string) @protobuf(23,bytes,opt)
 }
@@ -7046,7 +7126,6 @@ import (
 // NodeRuntimeHandlerFeatures is a set of features implemented by the runtime handler.
 #NodeRuntimeHandlerFeatures: {
 	// RecursiveReadOnlyMounts is set to true if the runtime handler supports RecursiveReadOnlyMounts.
-	// +featureGate=RecursiveReadOnlyMounts
 	// +optional
 	recursiveReadOnlyMounts?: null | bool @go(RecursiveReadOnlyMounts,*bool) @protobuf(1,varint,opt)
 
@@ -7247,7 +7326,6 @@ import (
 	config?: null | #NodeConfigStatus @go(Config,*NodeConfigStatus) @protobuf(11,bytes,opt)
 
 	// The available runtime handlers.
-	// +featureGate=RecursiveReadOnlyMounts
 	// +featureGate=UserNamespacesSupport
 	// +optional
 	// +listType=atomic
@@ -7257,6 +7335,12 @@ import (
 	// +featureGate=SupplementalGroupsPolicy
 	// +optional
 	features?: null | #NodeFeatures @go(Features,*NodeFeatures) @protobuf(13,bytes,rep)
+
+	// DeclaredFeatures represents the features related to feature gates that are declared by the node.
+	// +featureGate=NodeDeclaredFeatures
+	// +optional
+	// +listType=atomic
+	declaredFeatures?: [...string] @go(DeclaredFeatures,[]string) @protobuf(14,bytes,rep)
 }
 
 #UniqueVolumeName: string
@@ -8242,6 +8326,9 @@ import (
 
 // resource.k8s.io devices requested with a certain DeviceClass, number
 #ResourceClaimsPerClass: ".deviceclass.resource.k8s.io/devices"
+
+// resource.k8s.io devices requested with a certain DeviceClass by implicit extended resource name, number
+#ResourceImplicitExtendedClaimsPerClass: "requests.deviceclass.resource.kubernetes.io/"
 
 // HugePages request, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
 // As burst is not supported for HugePages, we would only quota its request, and ignore the limit.
