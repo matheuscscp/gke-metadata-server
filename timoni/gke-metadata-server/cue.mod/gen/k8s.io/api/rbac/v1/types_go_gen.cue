@@ -63,6 +63,8 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apiGroup?: string @go(APIGroup) @protobuf(2,bytes,opt)
 
 	// Name of the object being referenced.
+	// +required
+	// +k8s:required
 	name: string @go(Name) @protobuf(3,bytes,opt)
 
 	// Namespace of the referenced object.  If the object kind is non-namespace, such as "User" or "Group", and this value is not empty
@@ -81,6 +83,8 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kind: string @go(Kind) @protobuf(2,bytes,opt)
 
 	// Name is the name of resource being referenced
+	// +required
+	// +k8s:required
 	name: string @go(Name) @protobuf(3,bytes,opt)
 }
 

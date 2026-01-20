@@ -4,8 +4,10 @@
 
 package runtime
 
+// ProtobufReverseMarshaller can precompute size, and marshals to the start of the provided data buffer.
 #ProtobufMarshaller: _
 
+// ProtobufReverseMarshaller can precompute size, and marshals to the end of the provided data buffer.
 #ProtobufReverseMarshaller: _
 
 _#typeMetaTag:        0xa
