@@ -3,7 +3,7 @@
 
 ARG TARGETARCH
 
-FROM golang:1.25.5-alpine3.21 AS builder
+FROM golang:1.26.0-alpine3.23 AS builder
 
 RUN apk add --no-cache clang llvm bpftool libbpf-dev
 
