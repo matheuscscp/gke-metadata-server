@@ -7,7 +7,7 @@ TEST_IMAGE := ghcr.io/matheuscscp/gke-metadata-server/test
 PLATFORMS ?= linux/amd64
 
 .PHONY: dev
-dev: tidy gen-ebpf dev-cluster build dev-test
+dev: tidy gen-ebpf dev-cluster build build-go-test dev-test
 
 .PHONY: clean
 clean:
@@ -101,14 +101,6 @@ build:
 		--metadata-file container-metadata.json
 	jq -r '."containerimage.digest"' container-metadata.json > container-digest.txt
 
-	mv .dockerignore .dockerignore.bkp
-	mv .dockerignore.test .dockerignore
-	docker buildx build . --platform ${PLATFORMS} -t ${TEST_IMAGE}:go-test -f Dockerfile.test --push \
-		--metadata-file go-test-metadata.json
-	mv .dockerignore .dockerignore.test
-	mv .dockerignore.bkp .dockerignore
-	jq -r '."containerimage.digest"' go-test-metadata.json > go-test-digest.txt
-
 	sed "s|<HELM_VERSION>|$$(cat version.txt)|g" helm/gke-metadata-server/Chart.tpl.yaml | \
 		sed "s|<CONTAINER_VERSION>|$$(cat version.txt)|g" > helm/gke-metadata-server/Chart.yaml
 	helm lint helm/gke-metadata-server
@@ -125,6 +117,16 @@ build:
 	timoni mod push timoni/gke-metadata-server/ oci://${TEST_IMAGE}/timoni \
 		--version $$(cat version.txt) \
 		--output yaml | yq .digest > timoni-digest.txt
+
+.PHONY: build-go-test
+build-go-test:
+	mv .dockerignore .dockerignore.bkp
+	mv .dockerignore.test .dockerignore
+	docker buildx build . --platform ${PLATFORMS} -t ${TEST_IMAGE}:go-test -f Dockerfile.test --push \
+		--metadata-file go-test-metadata.json
+	mv .dockerignore .dockerignore.test
+	mv .dockerignore.bkp .dockerignore
+	jq -r '."containerimage.digest"' go-test-metadata.json > go-test-digest.txt
 
 .PHONY: test-unit
 test-unit:
