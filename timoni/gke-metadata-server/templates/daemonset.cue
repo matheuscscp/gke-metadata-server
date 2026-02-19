@@ -30,7 +30,7 @@ import (
 				nodeSelector: {
 					"iam.gke.io/gke-metadata-server-enabled": "true"
 					"kubernetes.io/os":                       "linux"
-					"kubernetes.io/arch":                     "amd64"
+					"kubernetes.io/arch":                     #config.nodeArch
 				}
 				tolerations: [{
 					operator: "Exists"

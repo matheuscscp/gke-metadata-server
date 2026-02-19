@@ -35,6 +35,8 @@ runs:
       registry: ghcr.io
       username: ${{ github.actor }}
       password: ${{ inputs.github-token }}
+  - uses: docker/setup-qemu-action@v3
+  - uses: docker/setup-buildx-action@v3
   - name: Install dependencies
     shell: bash
     run: |

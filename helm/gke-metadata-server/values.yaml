@@ -54,6 +54,8 @@ resources: {}
   #   cpu: 100m
   #   memory: 128Mi
 
+nodeArch: amd64 # Target node architecture. Accepted values: amd64, arm64
+
 image:
   repository: ghcr.io/matheuscscp/gke-metadata-server
   pullPolicy: IfNotPresent
