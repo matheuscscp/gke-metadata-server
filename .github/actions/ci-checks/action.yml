@@ -60,7 +60,7 @@ runs:
       if [ "$SKIP_TESTS" = "true" ]; then
         make gen-ebpf build
       else
-        make gen-ebpf ci-cluster build ci-test
+        make gen-ebpf ci-cluster build build-go-test ci-test
       fi
     shell: bash
     env:
