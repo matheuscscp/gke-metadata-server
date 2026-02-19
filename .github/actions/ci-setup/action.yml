@@ -23,7 +23,6 @@ runs:
       docker system prune -af || true
       sudo apt-get clean || true
       df -h
-  - uses: cue-lang/setup-cue@v1.0.1
   - uses: stefanprodan/timoni/actions/setup@main
   - uses: google-github-actions/auth@v3
     with:

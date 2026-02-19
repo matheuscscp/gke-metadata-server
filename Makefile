@@ -4,6 +4,7 @@
 SHELL := /bin/bash
 
 TEST_IMAGE := ghcr.io/matheuscscp/gke-metadata-server/test
+PLATFORMS ?= linux/amd64
 
 .PHONY: dev
 dev: tidy gen-ebpf dev-cluster build dev-test
@@ -96,13 +97,13 @@ build-dev:
 
 .PHONY: build
 build:
-	docker buildx build . --platform linux/amd64,linux/arm64 -t ${TEST_IMAGE}:container --push \
+	docker buildx build . --platform ${PLATFORMS} -t ${TEST_IMAGE}:container --push \
 		--metadata-file container-metadata.json
 	jq -r '."containerimage.digest"' container-metadata.json > container-digest.txt
 
 	mv .dockerignore .dockerignore.bkp
 	mv .dockerignore.test .dockerignore
-	docker buildx build . --platform linux/amd64,linux/arm64 -t ${TEST_IMAGE}:go-test -f Dockerfile.test --push \
+	docker buildx build . --platform ${PLATFORMS} -t ${TEST_IMAGE}:go-test -f Dockerfile.test --push \
 		--metadata-file go-test-metadata.json
 	mv .dockerignore .dockerignore.test
 	mv .dockerignore.bkp .dockerignore

@@ -4,6 +4,9 @@
 inputs:
   version:
     required: false
+  platforms:
+    required: false
+    default: linux/amd64
 
 runs:
   using: composite
@@ -12,8 +15,11 @@ runs:
   - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
   - uses: actions/setup-go@v6
     with:
-      go-version: 1.25.0
+      go-version: 1.26.0
       cache: false
+  - name: Install cue
+    shell: bash
+    run: go install cuelang.org/go/cmd/cue@latest
 
   - run: make tidy
     shell: bash
@@ -40,3 +46,5 @@ runs:
       echo $VERSION > version.txt
   - run: make gen-ebpf ci-cluster build ci-test
     shell: bash
+    env:
+      PLATFORMS: ${{ inputs.platforms }}
