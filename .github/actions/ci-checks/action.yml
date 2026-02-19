@@ -4,6 +4,9 @@
 inputs:
   version:
     required: false
+  platforms:
+    required: false
+    default: linux/amd64
 
 runs:
   using: composite
@@ -40,3 +43,5 @@ runs:
       echo $VERSION > version.txt
   - run: make gen-ebpf ci-cluster build ci-test
     shell: bash
+    env:
+      PLATFORMS: ${{ inputs.platforms }}
