@@ -17,6 +17,9 @@ runs:
     with:
       go-version: 1.26.0
       cache: false
+  - name: Install cue
+    shell: bash
+    run: go install cuelang.org/go/cmd/cue@latest
 
   - run: make tidy
     shell: bash
