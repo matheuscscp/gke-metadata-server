@@ -7,6 +7,8 @@ inputs:
   platforms:
     required: false
     default: linux/amd64
+  skip-tests:
+    required: false
 
 runs:
   using: composite
@@ -54,7 +56,13 @@ runs:
         VERSION="100.0.0-ci"
       fi
       echo $VERSION > version.txt
-  - run: make gen-ebpf ci-cluster build ci-test
+  - run: |
+      if [ "$SKIP_TESTS" = "true" ]; then
+        make gen-ebpf build
+      else
+        make gen-ebpf ci-cluster build ci-test
+      fi
     shell: bash
     env:
       PLATFORMS: ${{ inputs.platforms }}
+      SKIP_TESTS: ${{ inputs.skip-tests }}
