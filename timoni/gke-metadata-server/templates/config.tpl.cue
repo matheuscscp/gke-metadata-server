@@ -53,6 +53,9 @@ import (
 		resources?:    timoniv1.#ResourceRequirements
 	}
 
+	// nodeArch is the target node architecture for the DaemonSet nodeSelector.
+	nodeArch: string & ("amd64" | "arm64") | *"amd64"
+
 	// The application settings.
 	settings: #Settings
 

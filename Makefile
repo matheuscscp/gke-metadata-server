@@ -92,21 +92,21 @@ install-cilium:
 
 .PHONY: build-dev
 build-dev:
-	docker build . -t ${TEST_IMAGE}:${TAG} --push
+	docker buildx build . --platform linux/amd64,linux/arm64 -t ${TEST_IMAGE}:${TAG} --push
 
 .PHONY: build
 build:
-	docker build . -t ${TEST_IMAGE}:container
-	docker push ${TEST_IMAGE}:container | tee docker-push.logs
-	cat docker-push.logs | grep digest: | awk '{print $$3}' > container-digest.txt
+	docker buildx build . --platform linux/amd64,linux/arm64 -t ${TEST_IMAGE}:container --push \
+		--metadata-file container-metadata.json
+	jq -r '."containerimage.digest"' container-metadata.json > container-digest.txt
 
 	mv .dockerignore .dockerignore.bkp
 	mv .dockerignore.test .dockerignore
-	docker build . -t ${TEST_IMAGE}:go-test -f Dockerfile.test
+	docker buildx build . --platform linux/amd64,linux/arm64 -t ${TEST_IMAGE}:go-test -f Dockerfile.test --push \
+		--metadata-file go-test-metadata.json
 	mv .dockerignore .dockerignore.test
 	mv .dockerignore.bkp .dockerignore
-	docker push ${TEST_IMAGE}:go-test | tee docker-push.logs
-	cat docker-push.logs | grep digest: | awk '{print $$3}' > go-test-digest.txt
+	jq -r '."containerimage.digest"' go-test-metadata.json > go-test-digest.txt
 
 	sed "s|<HELM_VERSION>|$$(cat version.txt)|g" helm/gke-metadata-server/Chart.tpl.yaml | \
 		sed "s|<CONTAINER_VERSION>|$$(cat version.txt)|g" > helm/gke-metadata-server/Chart.yaml
