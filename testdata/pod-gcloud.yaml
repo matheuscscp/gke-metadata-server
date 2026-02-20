@@ -14,7 +14,7 @@ spec:
   restartPolicy: Never
   containers:
   - name: gcs
-    image: google/cloud-sdk:510.0.0-slim
+    image: google/cloud-sdk:557.0.0-slim
     command:
     - sh
     - -c
