@@ -14,6 +14,7 @@ import (
 	"github.com/matheuscscp/gke-metadata-server/internal/googlecredentials"
 	pkghttp "github.com/matheuscscp/gke-metadata-server/internal/http"
 	"github.com/matheuscscp/gke-metadata-server/internal/logging"
+	"github.com/matheuscscp/gke-metadata-server/internal/preflight"
 	"github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts"
 
 	"google.golang.org/api/googleapi"
@@ -55,6 +56,12 @@ func (s *Server) gkeServiceAccountEmailAPI() pkghttp.MetadataHandlerFunc {
 
 func (s *Server) gkeServiceAccountIdentityAPI() pkghttp.MetadataHandler {
 	mh := func(w http.ResponseWriter, r *http.Request) (any, error) {
+
+		// sanity check for the container image
+		if err := preflight.Check(preflight.WithContainerOS("distroless", 12), preflight.WithContainerOS("rhel", 8)); err != nil {
+			pkghttp.RespondErrorf(w, r, http.StatusInternalServerError, "preflight check failed: %v", err)
+			return nil, err
+		}
 
 		// validate audience
 		audience := strings.TrimSpace(r.URL.Query().Get("audience"))
@@ -111,6 +118,13 @@ func (s *Server) gkeServiceAccountScopesAPI() pkghttp.MetadataHandlerFunc {
 
 func (s *Server) gkeServiceAccountTokenAPI() pkghttp.MetadataHandler {
 	mh := func(w http.ResponseWriter, r *http.Request) (any, error) {
+
+		// sanity check for the container image
+		if err := preflight.Check(preflight.WithContainerOS("distroless", 12), preflight.WithContainerOS("rhel", 8)); err != nil {
+			pkghttp.RespondErrorf(w, r, http.StatusInternalServerError, "preflight check failed: %v", err)
+			return nil, err
+		}
+
 		var scopes []string
 		for scope := range strings.SplitSeq(r.URL.Query().Get("scopes"), ",") {
 			if s := strings.TrimSpace(scope); s != "" {
