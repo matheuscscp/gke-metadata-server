@@ -1,3 +1,7 @@
+## GA is coming soon!
+
+Please [check it out](https://github.com/matheuscscp/gke-metadata-server/discussions/460)!
+
 # gke-metadata-server
 
 ![release](https://img.shields.io/github/v/release/matheuscscp/gke-metadata-server?style=flat-square&color=blue)
