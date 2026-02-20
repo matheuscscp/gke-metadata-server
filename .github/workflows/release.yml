@@ -19,6 +19,11 @@ jobs:
       contents: write
       id-token: write
       packages: write
+    env:
+      IMAGE: ghcr.io/matheuscscp/gke-metadata-server
+    outputs:
+      image_url: ghcr.io/matheuscscp/gke-metadata-server
+      image_digest: ${{ steps.build-push.outputs.digest }}
 
     steps:
     - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -28,6 +33,13 @@ jobs:
         google-service-account-name: release
         github-token: ${{ secrets.GITHUB_TOKEN }}
 
+    - uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+      with:
+        go-version: 1.26.0
+        cache: false
+    - name: Install cue
+      run: go install cuelang.org/go/cmd/cue@latest
+
     - name: Version
       id: version
       env:
@@ -36,54 +48,86 @@ jobs:
         value=$(echo "${TAG#v}" | tr -d '\n')
         echo "value=$value" >> $GITHUB_OUTPUT
 
-    - uses: ./.github/actions/ci-checks/
+    - name: Generate container image metadata
+      id: meta
+      uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
       with:
-        version: ${{ steps.version.outputs.value }}
+        images: ${{ env.IMAGE }}
+        tags: |
+          type=raw,value=${{ steps.version.outputs.value }}
+          type=raw,value=latest
+
+    - name: Build and push container image
+      id: build-push
+      uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+      with:
+        sbom: true
+        provenance: true
+        push: true
+        context: .
+        file: ./Dockerfile
         platforms: linux/amd64,linux/arm64
-        skip-tests: "true"
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+    - name: Save container digest
+      env:
+        DIGEST: ${{ steps.build-push.outputs.digest }}
+      run: echo "$DIGEST" > container-digest.txt
+
+    - name: Build and push Helm chart
+      id: helm-push
+      env:
+        VERSION: ${{ steps.version.outputs.value }}
+      run: |
+        sed "s|<HELM_VERSION>|${VERSION}|g" helm/gke-metadata-server/Chart.tpl.yaml | \
+          sed "s|<CONTAINER_VERSION>|${VERSION}|g" > helm/gke-metadata-server/Chart.yaml
+        helm lint helm/gke-metadata-server
+        helm package helm/gke-metadata-server
+        helm push gke-metadata-server-helm-${VERSION}.tgz oci://ghcr.io/matheuscscp 2>&1 | tee helm-push.logs
+        digest=$(grep Digest: helm-push.logs | awk '{print $NF}')
+        echo "$digest" > helm-digest.txt
+        echo "digest=$digest" >> $GITHUB_OUTPUT
+
+    - name: Build and push Timoni module
+      id: timoni-push
+      env:
+        VERSION: ${{ steps.version.outputs.value }}
+      run: |
+        sed "s|<CONTAINER_VERSION>|${VERSION}|g" \
+          timoni/gke-metadata-server/templates/config.tpl.cue > timoni/gke-metadata-server/templates/config.cue
+        timoni mod vet timoni/gke-metadata-server/ \
+          --name gke-metadata-server \
+          --namespace kube-system \
+          --values timoni/gke-metadata-server/debug_values.cue
+        digest=$(timoni mod push timoni/gke-metadata-server/ oci://ghcr.io/matheuscscp/gke-metadata-server-timoni \
+          --version ${VERSION} \
+          --output yaml | yq .digest)
+        echo "$digest" > timoni-digest.txt
+        echo "digest=$digest" >> $GITHUB_OUTPUT
+        skopeo copy --all \
+          docker://ghcr.io/matheuscscp/gke-metadata-server-timoni:${VERSION} \
+          docker://ghcr.io/matheuscscp/gke-metadata-server-timoni:latest
 
     - uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
       with:
         cosign-release: v2.6.1 # TODO: remove after Flux 2.8 with support for cosign v3
 
-    - name: Release Container in GitHub Container Registry
-      id: release-container-ghcr
-      uses: ./.github/actions/copy-image/
+    - name: Sign and verify container image
+      uses: ./.github/actions/sign-and-verify-image/
       with:
-        component: container
-        source-repository: test
-        target-repository: gke-metadata-server
-        version: ${{ steps.version.outputs.value }}
-    - uses: ./.github/actions/sign-and-verify-image/
-      with:
-        image: ${{ steps.release-container-ghcr.outputs.image-with-digest }}
+        image: ${{ env.IMAGE }}@${{ steps.build-push.outputs.digest }}
         version: ${{ steps.version.outputs.value }}
 
-    - name: Release Helm Chart in GitHub Container Registry
-      id: release-helm-ghcr
-      uses: ./.github/actions/copy-image/
+    - name: Sign and verify Helm chart
+      uses: ./.github/actions/sign-and-verify-image/
       with:
-        component: helm
-        source-repository: test/gke-metadata-server-helm
-        target-repository: gke-metadata-server-helm
-        version: ${{ steps.version.outputs.value }}
-        latest: skip
-    - uses: ./.github/actions/sign-and-verify-image/
-      with:
-        image: ${{ steps.release-helm-ghcr.outputs.image-with-digest }}
+        image: ghcr.io/matheuscscp/gke-metadata-server-helm@${{ steps.helm-push.outputs.digest }}
         version: ${{ steps.version.outputs.value }}
 
-    - name: Release Timoni Module in GitHub Container Registry
-      id: release-timoni-ghcr
-      uses: ./.github/actions/copy-image/
+    - name: Sign and verify Timoni module
+      uses: ./.github/actions/sign-and-verify-image/
       with:
-        component: timoni
-        source-repository: test/timoni
-        target-repository: gke-metadata-server-timoni
-        version: ${{ steps.version.outputs.value }}
-    - uses: ./.github/actions/sign-and-verify-image/
-      with:
-        image: ${{ steps.release-timoni-ghcr.outputs.image-with-digest }}
+        image: ghcr.io/matheuscscp/gke-metadata-server-timoni@${{ steps.timoni-push.outputs.digest }}
         version: ${{ steps.version.outputs.value }}
 
     - name: Create GitHub Release
@@ -98,3 +142,17 @@ jobs:
           --repo="$GITHUB_REPOSITORY" \
           --generate-notes \
           --latest
+
+  ghcr-provenance:
+    needs: [release]
+    permissions:
+      actions: read
+      id-token: write
+      packages: write
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
+    with:
+      image: ${{ needs.release.outputs.image_url }}
+      digest: ${{ needs.release.outputs.image_digest }}
+      registry-username: ${{ github.actor }}
+    secrets:
+      registry-password: ${{ secrets.GITHUB_TOKEN }}
