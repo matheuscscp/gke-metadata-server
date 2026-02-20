@@ -7,10 +7,6 @@ on:
   push:
     tags: [v*]
 
-concurrency:
-  group: continuous-integration # lock for shared CI resources
-  cancel-in-progress: false
-
 jobs:
   release:
     runs-on: ubuntu-latest
