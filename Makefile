@@ -5,6 +5,7 @@ SHELL := /bin/bash
 
 TEST_IMAGE := ghcr.io/matheuscscp/gke-metadata-server/test
 PLATFORMS ?= linux/amd64
+CILIUM_VERSION ?= 1.17.1
 
 .PHONY: dev
 dev: tidy gen-ebpf dev-cluster build build-go-test dev-test
@@ -84,9 +85,9 @@ install-cilium:
 	sudo sysctl fs.inotify.max_user_watches=524288
 	sudo sysctl fs.inotify.max_user_instances=512
 	helm repo add cilium https://helm.cilium.io/
-	docker pull quay.io/cilium/cilium:v1.17.1
-	kind load docker-image --name gke-metadata-server quay.io/cilium/cilium:v1.17.1
-	helm install cilium cilium/cilium --version 1.17.1 \
+	docker pull quay.io/cilium/cilium:v$(CILIUM_VERSION)
+	kind load docker-image --name gke-metadata-server quay.io/cilium/cilium:v$(CILIUM_VERSION)
+	helm install cilium cilium/cilium --version $(CILIUM_VERSION) \
 		--namespace kube-system \
 		--set image.pullPolicy=IfNotPresent \
 		--set ipam.mode=kubernetes
