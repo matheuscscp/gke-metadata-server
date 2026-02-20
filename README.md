@@ -2,6 +2,9 @@
 
 ![release](https://img.shields.io/github/v/release/matheuscscp/gke-metadata-server?style=flat-square&color=blue)
 [![release](https://github.com/matheuscscp/gke-metadata-server/actions/workflows/release.yml/badge.svg?branch=main)](https://github.com/matheuscscp/gke-metadata-server/actions/workflows/release.yml)
+[![SLSA 3](https://slsa.dev/images/gh-badge-level3.svg)](https://slsa.dev)
+![FIPS 140-3 compliant](https://img.shields.io/badge/FIPS_140--3-compliant-brightgreen)
+![Distroless](https://img.shields.io/badge/Distroless-base_image-blue)
 
 A GKE Metadata Server *emulator* for making it easier to use GCP Workload Identity Federation
 inside *non-GKE* Kubernetes clusters, e.g. KinD, on-prem, managed Kubernetes from other
