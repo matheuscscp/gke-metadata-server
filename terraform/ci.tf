@@ -17,16 +17,6 @@ resource "google_service_account_iam_member" "pull_request_workload_identity_use
   member             = "${local.gh_wi_member_prefix}:pull-request"
 }
 
-resource "google_service_account" "release" {
-  account_id = "release"
-}
-
-resource "google_service_account_iam_member" "release_workload_identity_user" {
-  service_account_id = google_service_account.release.name
-  role               = local.wi_user_role
-  member             = "${local.gh_wi_member_prefix}:release"
-}
-
 resource "google_service_account" "clean_resources" {
   account_id = "clean-resources"
 }
@@ -42,7 +32,6 @@ resource "google_project_iam_binding" "continuous_integration" {
   role    = google_project_iam_custom_role.continuous_integration.name
   members = [
     google_service_account.pull_request.member,
-    google_service_account.release.member,
   ]
 }
 
