@@ -4,8 +4,7 @@ Please [check it out](https://github.com/matheuscscp/gke-metadata-server/discuss
 
 # gke-metadata-server
 
-![release](https://img.shields.io/github/v/release/matheuscscp/gke-metadata-server?style=flat-square&color=blue)
-[![release](https://github.com/matheuscscp/gke-metadata-server/actions/workflows/release.yml/badge.svg?branch=main)](https://github.com/matheuscscp/gke-metadata-server/actions/workflows/release.yml)
+![release](https://img.shields.io/github/v/release/matheuscscp/gke-metadata-server?style=flat&color=blue)
 [![SLSA 3](https://slsa.dev/images/gh-badge-level3.svg)](https://slsa.dev)
 ![FIPS 140-3 compliant](https://img.shields.io/badge/FIPS_140--3-compliant-brightgreen)
 ![Distroless](https://img.shields.io/badge/Distroless-base_image-blue)
