@@ -1,0 +1,68 @@
+# Copyright 2025 Matheus Pimenta.
+# SPDX-License-Identifier: AGPL-3.0
+
+name: pull-request
+
+on: [pull_request]
+
+concurrency:
+  group: continuous-integration # lock for shared CI resources
+  cancel-in-progress: false
+
+jobs:
+  pull-request:
+    runs-on: ubuntu-latest
+    environment: pull-request
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
+      pull-requests: write
+
+    steps:
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+    - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+      with:
+        project_id: gke-metadata-server
+        workload_identity_provider: projects/637293746831/locations/global/workloadIdentityPools/github-actions/providers/github-actions
+        service_account: pull-request@gke-metadata-server.iam.gserviceaccount.com
+
+    - uses: ./.github/actions/ci-setup/
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+
+    - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+    - uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+      with:
+        go-version: 1.26.0
+        cache: false
+    - name: Install cue
+      run: go install cuelang.org/go/cmd/cue@latest
+
+    - run: make tidy
+    - name: Fail if make tidy produced changes
+      run: |
+        if [ -n "$(git diff --name-only)" ] || [ -n "$(git status --porcelain | grep '??')" ]; then
+          git status
+          echo ""
+          echo "The command 'make tidy' produced differences."
+          echo "Please remember to run it locally before committing your changes."
+          echo ""
+          exit 1
+        fi
+
+    - name: Install eBPF toolchain
+      run: |
+        sudo apt-get update && sudo apt-get install -y linux-tools-common linux-tools-generic libbpf-dev
+        # Workaround: the runner kernel version may not match available linux-tools packages.
+        # Symlink the generic tools directory so the bpftool wrapper can find it.
+        TOOLS_DIR=$(ls -d /usr/lib/linux-tools/*-generic 2>/dev/null | head -1)
+        if [ -n "$TOOLS_DIR" ] && [ ! -d "/usr/lib/linux-tools/$(uname -r)" ]; then
+          sudo ln -s "$TOOLS_DIR" "/usr/lib/linux-tools/$(uname -r)"
+        fi
+    - name: Set version
+      run: echo "100.0.0-ci" > version.txt
+    - run: make gen-ebpf ci-cluster build build-go-test ci-test
+      env:
+        PLATFORMS: linux/amd64

@@ -15,18 +15,14 @@ jobs:
       contents: write
       id-token: write
       packages: write
-    env:
-      IMAGE: ghcr.io/matheuscscp/gke-metadata-server
     outputs:
-      image_url: ghcr.io/matheuscscp/gke-metadata-server
-      image_digest: ${{ steps.build-push.outputs.digest }}
+      digest: ${{ steps.build-push.outputs.digest }}
 
     steps:
     - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
     - uses: ./.github/actions/ci-setup/
       with:
-        google-service-account-name: release
         github-token: ${{ secrets.GITHUB_TOKEN }}
 
     - uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
@@ -48,7 +44,7 @@ jobs:
       id: meta
       uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
       with:
-        images: ${{ env.IMAGE }}
+        images: ghcr.io/matheuscscp/gke-metadata-server
         tags: |
           type=raw,value=${{ steps.version.outputs.value }}
           type=raw,value=latest
@@ -109,22 +105,31 @@ jobs:
         cosign-release: v2.6.1 # TODO: remove after Flux 2.8 with support for cosign v3
 
     - name: Sign and verify container image
-      uses: ./.github/actions/sign-and-verify-image/
-      with:
-        image: ${{ env.IMAGE }}@${{ steps.build-push.outputs.digest }}
-        version: ${{ steps.version.outputs.value }}
+      env:
+        IMAGE_REF: ghcr.io/matheuscscp/gke-metadata-server@${{ steps.build-push.outputs.digest }}
+        VERSION: ${{ steps.version.outputs.value }}
+      run: |
+        cosign sign --yes $IMAGE_REF && cosign verify $IMAGE_REF \
+          --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+          --certificate-identity=https://github.com/matheuscscp/gke-metadata-server/.github/workflows/release.yaml@refs/tags/v${VERSION}
 
     - name: Sign and verify Helm chart
-      uses: ./.github/actions/sign-and-verify-image/
-      with:
-        image: ghcr.io/matheuscscp/gke-metadata-server-helm@${{ steps.helm-push.outputs.digest }}
-        version: ${{ steps.version.outputs.value }}
+      env:
+        IMAGE_REF: ghcr.io/matheuscscp/gke-metadata-server-helm@${{ steps.helm-push.outputs.digest }}
+        VERSION: ${{ steps.version.outputs.value }}
+      run: |
+        cosign sign --yes $IMAGE_REF && cosign verify $IMAGE_REF \
+          --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+          --certificate-identity=https://github.com/matheuscscp/gke-metadata-server/.github/workflows/release.yaml@refs/tags/v${VERSION}
 
     - name: Sign and verify Timoni module
-      uses: ./.github/actions/sign-and-verify-image/
-      with:
-        image: ghcr.io/matheuscscp/gke-metadata-server-timoni@${{ steps.timoni-push.outputs.digest }}
-        version: ${{ steps.version.outputs.value }}
+      env:
+        IMAGE_REF: ghcr.io/matheuscscp/gke-metadata-server-timoni@${{ steps.timoni-push.outputs.digest }}
+        VERSION: ${{ steps.version.outputs.value }}
+      run: |
+        cosign sign --yes $IMAGE_REF && cosign verify $IMAGE_REF \
+          --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+          --certificate-identity=https://github.com/matheuscscp/gke-metadata-server/.github/workflows/release.yaml@refs/tags/v${VERSION}
 
     - name: Create GitHub Release
       env:
@@ -147,8 +152,8 @@ jobs:
       packages: write
     uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
     with:
-      image: ${{ needs.release.outputs.image_url }}
-      digest: ${{ needs.release.outputs.image_digest }}
+      image: ghcr.io/matheuscscp/gke-metadata-server
+      digest: ${{ needs.release.outputs.digest }}
       registry-username: ${{ github.actor }}
     secrets:
       registry-password: ${{ secrets.GITHUB_TOKEN }}
