@@ -1,6 +1,8 @@
 # Copyright 2025 Matheus Pimenta.
 # SPDX-License-Identifier: AGPL-3.0
 
+name: clean-resources
+
 on:
   schedule: # runs at 09:00 UTC every day
   - cron:  0 9 * * *
