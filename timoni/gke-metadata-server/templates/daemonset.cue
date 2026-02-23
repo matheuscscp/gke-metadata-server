@@ -27,11 +27,27 @@ import (
 				hostNetwork:        true
 				serviceAccountName: #config.#namespacedMetadata.name
 				priorityClassName:  "system-node-critical"
-				nodeSelector: {
-					"iam.gke.io/gke-metadata-server-enabled": "true"
-					"kubernetes.io/os":                       "linux"
-					"kubernetes.io/arch":                     #config.nodeArch
-				}
+				affinity: nodeAffinity: requiredDuringSchedulingIgnoredDuringExecution: nodeSelectorTerms: [{
+					matchExpressions: [
+						if #config.requireNodeLabel {
+							{
+								key:      "iam.gke.io/gke-metadata-server-enabled"
+								operator: "In"
+								values: ["true"]
+							}
+						},
+						{
+							key:      "kubernetes.io/os"
+							operator: "In"
+							values: ["linux"]
+						},
+						{
+							key:      "kubernetes.io/arch"
+							operator: "In"
+							values: ["amd64", "arm64"]
+						},
+					]
+				}]
 				tolerations: [{
 					operator: "Exists"
 					effect:   "NoSchedule"

@@ -26,7 +26,8 @@ obtained after step 1.
 3. Add the label `iam.gke.io/gke-metadata-server-enabled: "true"` to the Nodes you want to have
 the emulator Pods running on. Only Pods running on these Nodes will be able to use the emulator.
 The most recommended way to do this is by using Node pooling/grouping features from your Kubernetes
-provider.
+provider. Alternatively, set `requireNodeLabel: false` to skip this label requirement and run the
+emulator on all nodes.
 4. See [`./testdata/pod.yaml`](./testdata/pod.yaml) for an example of how to configure your Pods
 and their ServiceAccounts.
 5. (Optional but highly recommended) Verify gke-metadata-server's artifact signatures to make sure
@@ -225,8 +226,8 @@ hard-coded IP address and port to implement workload identity. If your use case 
 the recommended solution is to use Node pooling/grouping features from your Kubernetes
 provider to isolate the workloads that need to use the emulator as mentioned in the
 [Usage](#usage) section. Remember to add the label
-`iam.gke.io/gke-metadata-server-enabled: "true"` to such Nodes and appropriate Node
-selectors/tolerations to your Pods.
+`iam.gke.io/gke-metadata-server-enabled: "true"` to such Nodes (or set `requireNodeLabel: false`)
+and appropriate Node selectors/tolerations to your Pods.
 
 #### `eBPF`
 
