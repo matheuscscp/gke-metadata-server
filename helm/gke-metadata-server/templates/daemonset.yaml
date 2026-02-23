@@ -22,10 +22,26 @@ spec:
       hostNetwork: true
       serviceAccountName: gke-metadata-server
       priorityClassName: system-node-critical
-      nodeSelector:
-        iam.gke.io/gke-metadata-server-enabled: "true"
-        kubernetes.io/os: linux
-        kubernetes.io/arch: {{ .Values.nodeArch }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              {{- if .Values.requireNodeLabel }}
+              - key: iam.gke.io/gke-metadata-server-enabled
+                operator: In
+                values:
+                - "true"
+              {{- end }}
+              - key: kubernetes.io/os
+                operator: In
+                values:
+                - linux
+              - key: kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+                - arm64
       tolerations:
       - operator: Exists
         effect: NoSchedule

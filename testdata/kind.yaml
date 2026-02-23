@@ -25,5 +25,10 @@ nodes:
     node.gke-metadata-server.matheuscscp.io/routingMode: None
     hasRoutingMode: "false"
     hasServiceAccount: "false"
+- role: worker
+  labels:
+    allNodesTest: "true"
+    hasRoutingMode: "false"
+    hasServiceAccount: "false"
 networking:
   disableDefaultCNI: true

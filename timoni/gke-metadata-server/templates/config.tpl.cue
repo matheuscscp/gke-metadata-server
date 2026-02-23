@@ -53,8 +53,9 @@ import (
 		resources?:    timoniv1.#ResourceRequirements
 	}
 
-	// nodeArch is the target node architecture for the DaemonSet nodeSelector.
-	nodeArch: string & ("amd64" | "arm64") | *"amd64"
+	// requireNodeLabel controls whether the iam.gke.io/gke-metadata-server-enabled: "true"
+	// label is required in the DaemonSet node affinity. Set to false to run on all nodes.
+	requireNodeLabel: bool | *true
 
 	// The application settings.
 	settings: #Settings

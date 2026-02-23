@@ -54,7 +54,9 @@ resources: {}
   #   cpu: 100m
   #   memory: 128Mi
 
-nodeArch: amd64 # Target node architecture. Accepted values: amd64, arm64
+# Whether to require the node label iam.gke.io/gke-metadata-server-enabled: "true" in the
+# DaemonSet node affinity. Set to false to run the emulator on all nodes without labeling them.
+requireNodeLabel: true
 
 image:
   repository: ghcr.io/matheuscscp/gke-metadata-server

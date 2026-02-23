@@ -49,6 +49,7 @@ func TestEndToEnd(t *testing.T) {
 	for _, tt := range []struct {
 		name           string
 		emulatorValues string
+		allNodes       bool
 		pods           []pod
 	}{
 		{
@@ -70,6 +71,18 @@ func TestEndToEnd(t *testing.T) {
 				serviceAccountName: "test-impersonated",
 				nodeSelector: map[string]string{
 					"hasRoutingMode": "true",
+				},
+			}},
+		},
+		{
+			name:           "timoni all nodes",
+			emulatorValues: "timoni-all-nodes.cue",
+			allNodes:       true,
+			pods: []pod{{
+				name:               "test-impersonation",
+				serviceAccountName: "test-impersonated",
+				nodeSelector: map[string]string{
+					"allNodesTest": "true",
 				},
 			}},
 		},
@@ -137,7 +150,7 @@ func TestEndToEnd(t *testing.T) {
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			if !applyEmulator(t, tt.emulatorValues) {
+			if !applyEmulator(t, tt.emulatorValues, tt.allNodes) {
 				// Emulator failed to start, skip to debug logging
 				printDebugInfo(t, nil, nil)
 				t.FailNow()
@@ -149,7 +162,7 @@ func TestEndToEnd(t *testing.T) {
 	}
 }
 
-func countEnabledWorkerNodes(t *testing.T) int {
+func countExpectedNodes(t *testing.T, allNodes bool) int {
 	t.Helper()
 
 	type kindNode struct {
@@ -168,6 +181,10 @@ func countEnabledWorkerNodes(t *testing.T) int {
 	err = yaml.Unmarshal(b, &cluster)
 	require.NoError(t, err)
 
+	if allNodes {
+		return len(cluster.Nodes)
+	}
+
 	count := 0
 	for _, node := range cluster.Nodes {
 		if node.Role == "worker" && node.Labels["iam.gke.io/gke-metadata-server-enabled"] == "true" {
@@ -178,11 +195,11 @@ func countEnabledWorkerNodes(t *testing.T) int {
 	return count
 }
 
-func applyEmulator(t *testing.T, valuesFile string) bool {
+func applyEmulator(t *testing.T, valuesFile string, allNodes bool) bool {
 	t.Helper()
 
 	// count expected worker nodes from kind.yaml
-	expectedNodes := countEnabledWorkerNodes(t)
+	expectedNodes := countExpectedNodes(t, allNodes)
 
 	// delete previous instances
 	_ = exec.Command(
