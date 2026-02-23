@@ -5,6 +5,8 @@ name: terraform-plan
 
 on: [pull_request]
 
+permissions: {}
+
 jobs:
   terraform-plan:
     runs-on: ubuntu-latest

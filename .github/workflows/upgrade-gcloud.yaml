@@ -8,6 +8,8 @@ on:
   - cron: "0 8 * * 2" # every Tuesday
   workflow_dispatch:
 
+permissions: {}
+
 jobs:
   upgrade:
     runs-on: ubuntu-latest

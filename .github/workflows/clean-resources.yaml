@@ -8,6 +8,8 @@ on:
   - cron:  0 9 * * *
   workflow_dispatch: # for manual trigger in the UI
 
+permissions: {}
+
 concurrency:
   group: continuous-integration # lock for shared CI resources
   cancel-in-progress: false
