@@ -58,6 +58,12 @@ resources: {}
 # DaemonSet node affinity. Set to false to run the emulator on all nodes without labeling them.
 requireNodeLabel: true
 
+dnsProvider:
+  # coreDnsCustom deploys a coredns-custom ConfigMap to resolve metadata.google.internal cluster-wide.
+  # Only enable this if your cluster runs k3s or AKS with CoreDNS as the DNS provider, as these
+  # distributions support the coredns-custom ConfigMap extension mechanism out of the box.
+  coreDnsCustom: false
+
 image:
   repository: ghcr.io/matheuscscp/gke-metadata-server
   pullPolicy: IfNotPresent

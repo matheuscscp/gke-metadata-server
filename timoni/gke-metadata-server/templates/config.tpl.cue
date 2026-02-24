@@ -57,6 +57,15 @@ import (
 	// label is required in the DaemonSet node affinity. Set to false to run on all nodes.
 	requireNodeLabel: bool | *true
 
+	// dnsProvider contains settings for DNS provider integrations.
+	dnsProvider: {
+		// coreDnsCustom, if true, deploys a coredns-custom ConfigMap to resolve metadata.google.internal
+		// cluster-wide. Only enable this if your cluster runs k3s or AKS with CoreDNS as the DNS
+		// provider, as these distributions support the coredns-custom ConfigMap extension mechanism
+		// out of the box.
+		coreDnsCustom: bool | *false
+	}
+
 	// The application settings.
 	settings: #Settings
 
@@ -95,5 +104,10 @@ import (
 		serviceAccount:     #ServiceAccount & {#config: config}
 		clusterRole:        #ClusterRole & {#config: config}
 		clusterRoleBinding: #ClusterRoleBinding & {#config: config}
+
+		// configmap.cue
+		if config.dnsProvider.coreDnsCustom {
+			coreDnsConfigMap: #CoreDNSConfigMap
+		}
 	}
 }
