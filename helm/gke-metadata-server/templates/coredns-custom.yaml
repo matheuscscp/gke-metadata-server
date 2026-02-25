@@ -1,7 +1,7 @@
-# Copyright 2025 Matheus Pimenta.
+# Copyright 2026 Matheus Pimenta.
 # SPDX-License-Identifier: AGPL-3.0
 
-{{- if (.Values.dnsProvider | default dict).coreDnsCustom }}
+{{- if eq .Values.dns.provider "CoreDNSCustom" }}
 ---
 apiVersion: v1
 kind: ConfigMap

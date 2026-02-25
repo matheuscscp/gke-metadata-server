@@ -320,11 +320,12 @@ Not all Google libraries hit `metadata.google.internal`, some just hit
 `169.254.169.254` directly. The `gcloud` CLI, for example, needs this
 DNS configuration to work properly. See this [example](./testdata/pod-gcloud.yaml).
 
-If your cluster runs **k3s or AKS with CoreDNS** as the DNS provider, you can alternatively
-enable the `dnsProvider.coreDnsCustom` option in the Helm Chart or Timoni Module. When set
-to `true`, this deploys a `coredns-custom` ConfigMap in the `kube-system` namespace that
-instructs CoreDNS to resolve `metadata.google.internal` cluster-wide, eliminating the need
-for per-Pod `hostAliases` configuration.
+If your cluster uses CoreDNS, like k3s or AKS, you can alternatively set
+`dns.provider` to `CoreDNS` in the Helm Chart or Timoni Module. When set,
+this option applies a ConfigMap called `coredns-cusom` in the `kube-system`
+namespace that instructs CoreDNS to resolve `metadata.google.internal` to
+`169.254.169.254` cluster-wide, eliminating the need for per-Pod
+`hostAliases` configuration.
 
 ### Node initialization
 
