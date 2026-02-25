@@ -8,11 +8,13 @@ import (
 )
 
 #CoreDNSConfigMap: corev1.#ConfigMap & {
+	#config:    #Config
 	apiVersion: "v1"
 	kind:       "ConfigMap"
 	metadata: {
 		name:      "coredns-custom"
 		namespace: "kube-system"
+		labels:    #config.metadata.labels
 	}
 	data: {
 		"metadata.override": """

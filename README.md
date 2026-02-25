@@ -327,6 +327,12 @@ or Timoni Module. When set, this option applies a ConfigMap called
 resolve `metadata.google.internal` to `169.254.169.254` cluster-wide,
 eliminating the need for per-Pod `hostAliases` configuration.
 
+> **Warning:** Enabling `CoreDNSCustom` will **overwrite** any existing
+> `coredns-custom` ConfigMap in the `kube-system` namespace. If you already
+> have custom CoreDNS entries in that ConfigMap, they will be lost. In that
+> case, manually add the `metadata.override` entry to your existing ConfigMap
+> instead of using this option.
+
 ### Node initialization
 
 The emulator Pods have toleration for any taints, so they will get scheduled earlier
