@@ -57,6 +57,14 @@ import (
 	// label is required in the DaemonSet node affinity. Set to false to run on all nodes.
 	requireNodeLabel: bool | *true
 
+	// dns applies DNS configurations based on a DNS provider for apps to
+	// resolve metadata.google.internal to 169.254.169.254 cluster-wide.
+	//   - None: No DNS configuration. The default.
+	//   - CoreDNSCustom: Applies a `coredns-custom` ConfigMap with "metadata.override".
+	dns: {
+		provider: ("None" | "CoreDNSCustom") | *"None"
+	}
+
 	// The application settings.
 	settings: #Settings
 
@@ -95,5 +103,10 @@ import (
 		serviceAccount:     #ServiceAccount & {#config: config}
 		clusterRole:        #ClusterRole & {#config: config}
 		clusterRoleBinding: #ClusterRoleBinding & {#config: config}
+
+		// coredns-custom.cue
+		if config.dns.provider == "CoreDNSCustom" {
+			coreDnsConfigMap: #CoreDNSConfigMap
+		}
 	}
 }
