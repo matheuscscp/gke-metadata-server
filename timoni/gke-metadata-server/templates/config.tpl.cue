@@ -106,7 +106,7 @@ import (
 
 		// coredns-custom.cue
 		if config.dns.provider == "CoreDNSCustom" {
-			coreDnsConfigMap: #CoreDNSConfigMap
+			coreDnsConfigMap: #CoreDNSConfigMap & {#config: config}
 		}
 	}
 }

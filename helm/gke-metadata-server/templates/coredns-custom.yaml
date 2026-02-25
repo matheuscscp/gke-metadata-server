@@ -1,6 +1,9 @@
 # Copyright 2026 Matheus Pimenta.
 # SPDX-License-Identifier: AGPL-3.0
 
+{{- if not (or (eq .Values.dns.provider "None") (eq .Values.dns.provider "CoreDNSCustom")) }}
+{{- fail (printf "invalid dns.provider value %q: must be None or CoreDNSCustom" .Values.dns.provider) }}
+{{- end }}
 {{- if eq .Values.dns.provider "CoreDNSCustom" }}
 ---
 apiVersion: v1
@@ -8,6 +11,8 @@ kind: ConfigMap
 metadata:
   name: coredns-custom
   namespace: kube-system
+  labels:
+    app: gke-metadata-server
 data:
   metadata.override: |
     template IN A metadata.google.internal {
