@@ -104,7 +104,7 @@ import (
 		clusterRole:        #ClusterRole & {#config: config}
 		clusterRoleBinding: #ClusterRoleBinding & {#config: config}
 
-		// configmap.cue
+		// coredns-custom.cue
 		if config.dns.provider == "CoreDNSCustom" {
 			coreDnsConfigMap: #CoreDNSConfigMap
 		}
