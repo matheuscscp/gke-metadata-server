@@ -58,10 +58,12 @@ jobs:
       run: |
         sudo apt-get update && sudo apt-get install -y linux-tools-common linux-tools-generic libbpf-dev
         # Workaround: the runner kernel version may not match available linux-tools packages.
-        # Symlink the generic tools directory so the bpftool wrapper can find it.
+        # The bpftool wrapper at /usr/bin/bpftool directly invokes
+        # /usr/lib/linux-tools/$(uname -r)/bpftool, so symlink the generic tools
+        # directory there. Use ln -sfn to overwrite any existing entry.
         TOOLS_DIR=$(ls -d /usr/lib/linux-tools/*-generic 2>/dev/null | head -1)
-        if [ -n "$TOOLS_DIR" ] && [ ! -d "/usr/lib/linux-tools/$(uname -r)" ]; then
-          sudo ln -s "$TOOLS_DIR" "/usr/lib/linux-tools/$(uname -r)"
+        if [ -n "$TOOLS_DIR" ]; then
+          sudo ln -sfn "$TOOLS_DIR" "/usr/lib/linux-tools/$(uname -r)"
         fi
     - name: Set version
       run: echo "100.0.0-ci" > version.txt
