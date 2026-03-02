@@ -26,7 +26,7 @@ runs:
       docker system prune -af || true
       sudo apt-get clean || true
       df -h
-  - uses: stefanprodan/timoni/actions/setup@9fba6459016ddbb7ce172f507027b911183c7f82 # main
+  - uses: stefanprodan/timoni/actions/setup@c68e33a34f17c7ca93c7fc6717d61a14819276dc # main
   - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
     with:
       registry: ghcr.io

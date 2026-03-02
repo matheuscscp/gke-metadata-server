@@ -24,5 +24,5 @@ jobs:
         project_id: gke-metadata-server
         workload_identity_provider: projects/637293746831/locations/global/workloadIdentityPools/github-actions/providers/github-actions
         service_account: tf-apply@gke-metadata-server.iam.gserviceaccount.com
-    - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+    - uses: hashicorp/setup-terraform@5e8dbf3c6d9deaf4193ca7a8fb23f2ac83bb6c85 # v4.0.0
     - run: cd terraform/ && terraform init && terraform apply -auto-approve && terraform plan -detailed-exitcode
