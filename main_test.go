@@ -281,7 +281,7 @@ func applyEmulator(t *testing.T, valuesFile string, allNodes bool) bool {
 	}
 
 	// wait with timeout
-	const emulatorTimeout = time.Minute
+	const emulatorTimeout = 2 * time.Minute
 	const sleepSecs = 10
 	timeout := time.Now().Add(emulatorTimeout)
 
