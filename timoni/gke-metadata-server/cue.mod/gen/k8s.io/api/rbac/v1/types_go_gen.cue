@@ -164,7 +164,7 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	// If AggregationRule is set, then the Rules are controller managed and direct changes to Rules will be
 	// stomped by the controller.
 	// +optional
-	aggregationRule?: null | #AggregationRule @go(AggregationRule,*AggregationRule) @protobuf(3,bytes,opt)
+	aggregationRule?: #AggregationRule @go(AggregationRule,*AggregationRule) @protobuf(3,bytes,opt)
 }
 
 // AggregationRule describes how to locate ClusterRoles to aggregate into the ClusterRole

@@ -31,8 +31,9 @@ jobs:
       with:
         go-version: 1.26.0
         cache: false
-    - name: Install cue
-      run: go install cuelang.org/go/cmd/cue@latest
+    - uses: cue-lang/setup-cue@a93fa358375740cd8b0078f76355512b9208acb1 # v1.0.1
+      with:
+        version: v0.16.0
 
     - name: Version
       id: version

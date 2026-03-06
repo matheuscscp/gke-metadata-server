@@ -76,7 +76,7 @@ import (
 	// The intended use of the remainingItemCount is *estimating* the size of a collection. Clients
 	// should not rely on the remainingItemCount to be set or to be exact.
 	// +optional
-	remainingItemCount?: null | int64 @go(RemainingItemCount,*int64) @protobuf(4,bytes,opt)
+	remainingItemCount?: int64 @go(RemainingItemCount,*int64) @protobuf(4,bytes,opt)
 }
 
 #ObjectNameField: "metadata.name"
@@ -184,14 +184,14 @@ import (
 	// Read-only.
 	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
-	deletionTimestamp?: null | #Time @go(DeletionTimestamp,*Time) @protobuf(9,bytes,opt)
+	deletionTimestamp?: #Time @go(DeletionTimestamp,*Time) @protobuf(9,bytes,opt)
 
 	// Number of seconds allowed for this object to gracefully terminate before
 	// it will be removed from the system. Only set when deletionTimestamp is also set.
 	// May only be shortened.
 	// Read-only.
 	// +optional
-	deletionGracePeriodSeconds?: null | int64 @go(DeletionGracePeriodSeconds,*int64) @protobuf(10,varint,opt)
+	deletionGracePeriodSeconds?: int64 @go(DeletionGracePeriodSeconds,*int64) @protobuf(10,varint,opt)
 
 	// Map of string keys and values that can be used to organize and categorize
 	// (scope and select) objects. May match selectors of replication controllers
@@ -286,7 +286,7 @@ import (
 
 	// If true, this reference points to the managing controller.
 	// +optional
-	controller?: null | bool @go(Controller,*bool) @protobuf(6,varint,opt)
+	controller?: bool @go(Controller,*bool) @protobuf(6,varint,opt)
 
 	// If true, AND if the owner has the "foregroundDeletion" finalizer, then
 	// the owner cannot be deleted from the key-value store until this
@@ -297,7 +297,7 @@ import (
 	// To set this field, a user needs "delete" permission of the owner,
 	// otherwise 422 (Unprocessable Entity) will be returned.
 	// +optional
-	blockOwnerDeletion?: null | bool @go(BlockOwnerDeletion,*bool) @protobuf(7,varint,opt)
+	blockOwnerDeletion?: bool @go(BlockOwnerDeletion,*bool) @protobuf(7,varint,opt)
 }
 
 // ListOptions is the query options to a standard REST list call.
@@ -349,7 +349,7 @@ import (
 	// Timeout for the list/watch call.
 	// This limits the duration of the call, regardless of any activity or inactivity.
 	// +optional
-	timeoutSeconds?: null | int64 @go(TimeoutSeconds,*int64) @protobuf(5,varint,opt)
+	timeoutSeconds?: int64 @go(TimeoutSeconds,*int64) @protobuf(5,varint,opt)
 
 	// limit is a maximum number of responses to return for a list call. If more items exist, the
 	// server will set the `continue` field on the list metadata to a value that can be used with the
@@ -409,7 +409,7 @@ import (
 	// Defaults to true if `resourceVersion=""` or `resourceVersion="0"` (for backward
 	// compatibility reasons) and to false otherwise.
 	// +optional
-	sendInitialEvents?: null | bool @go(SendInitialEvents,*bool) @protobuf(11,varint,opt)
+	sendInitialEvents?: bool @go(SendInitialEvents,*bool) @protobuf(11,varint,opt)
 }
 
 // InitialEventsAnnotationKey the name of the key
@@ -490,20 +490,20 @@ import (
 	// specified type will be used.
 	// Defaults to a per object value if not specified. zero means delete immediately.
 	// +optional
-	gracePeriodSeconds?: null | int64 @go(GracePeriodSeconds,*int64) @protobuf(1,varint,opt)
+	gracePeriodSeconds?: int64 @go(GracePeriodSeconds,*int64) @protobuf(1,varint,opt)
 
 	// Must be fulfilled before a deletion is carried out. If not possible, a 409 Conflict status will be
 	// returned.
 	// +k8s:conversion-gen=false
 	// +optional
-	preconditions?: null | #Preconditions @go(Preconditions,*Preconditions) @protobuf(2,bytes,opt)
+	preconditions?: #Preconditions @go(Preconditions,*Preconditions) @protobuf(2,bytes,opt)
 
 	// Deprecated: please use the PropagationPolicy, this field will be deprecated in 1.7.
 	// Should the dependent objects be orphaned. If true/false, the "orphan"
 	// finalizer will be added to/removed from the object's finalizers list.
 	// Either this field or PropagationPolicy may be set, but not both.
 	// +optional
-	orphanDependents?: null | bool @go(OrphanDependents,*bool) @protobuf(3,varint,opt)
+	orphanDependents?: bool @go(OrphanDependents,*bool) @protobuf(3,varint,opt)
 
 	// Whether and how garbage collection will be performed.
 	// Either this field or OrphanDependents may be set, but not both.
@@ -514,7 +514,7 @@ import (
 	// 'Foreground' - a cascading policy that deletes all dependents in the
 	// foreground.
 	// +optional
-	propagationPolicy?: null | #DeletionPropagation @go(PropagationPolicy,*DeletionPropagation) @protobuf(4,varint,opt)
+	propagationPolicy?: #DeletionPropagation @go(PropagationPolicy,*DeletionPropagation) @protobuf(4,varint,opt)
 
 	// When present, indicates that modifications should not be
 	// persisted. An invalid or unrecognized dryRun directive will
@@ -538,7 +538,7 @@ import (
 	// deletion flow. Use only if you REALLY know what you are doing.
 	// The default value is false, and the user must opt in to enable it
 	// +optional
-	ignoreStoreReadErrorWithClusterBreakingPotential?: null | bool @go(IgnoreStoreReadErrorWithClusterBreakingPotential,*bool) @protobuf(6,varint,opt)
+	ignoreStoreReadErrorWithClusterBreakingPotential?: bool @go(IgnoreStoreReadErrorWithClusterBreakingPotential,*bool) @protobuf(6,varint,opt)
 }
 
 // FieldValidationIgnore ignores unknown/duplicate fields
@@ -608,7 +608,7 @@ import (
 	// re-acquire conflicting fields owned by other people. Force
 	// flag must be unset for non-apply patch requests.
 	// +optional
-	force?: null | bool @go(Force,*bool) @protobuf(2,varint,opt)
+	force?: bool @go(Force,*bool) @protobuf(2,varint,opt)
 
 	// fieldManager is a name associated with the actor or entity
 	// that is making these changes. The value must be less than or
@@ -713,11 +713,11 @@ import (
 #Preconditions: {
 	// Specifies the target UID.
 	// +optional
-	uid?: null | types.#UID @go(UID,*types.UID) @protobuf(1,bytes,opt,casttype=k8s.io/apimachinery/pkg/types.UID)
+	uid?: types.#UID @go(UID,*types.UID) @protobuf(1,bytes,opt,casttype=k8s.io/apimachinery/pkg/types.UID)
 
 	// Specifies the target ResourceVersion
 	// +optional
-	resourceVersion?: null | string @go(ResourceVersion,*string) @protobuf(2,bytes,opt)
+	resourceVersion?: string @go(ResourceVersion,*string) @protobuf(2,bytes,opt)
 }
 
 // Status is a return value for calls that don't return other objects.
@@ -751,7 +751,7 @@ import (
 	// is not guaranteed to conform to any schema except that defined by
 	// the reason type.
 	// +optional
-	details?: null | #StatusDetails @go(Details,*StatusDetails) @protobuf(5,bytes,opt)
+	details?: #StatusDetails @go(Details,*StatusDetails) @protobuf(5,bytes,opt)
 
 	// Suggested HTTP return code for this status, 0 if not set.
 	// +optional
@@ -1371,7 +1371,7 @@ import (
 	// timestamp does not update when a field is removed from the entry
 	// because another manager took it over.
 	// +optional
-	time?: null | #Time @go(Time,*Time) @protobuf(4,bytes,opt)
+	time?: #Time @go(Time,*Time) @protobuf(4,bytes,opt)
 
 	// FieldsType is the discriminator for the different fields format and version.
 	// There is currently only one possible value: "FieldsV1"
@@ -1379,7 +1379,7 @@ import (
 
 	// FieldsV1 holds the first JSON version format as described in the "FieldsV1" type.
 	// +optional
-	fieldsV1?: null | #FieldsV1 @go(FieldsV1,*FieldsV1) @protobuf(7,bytes,opt)
+	fieldsV1?: #FieldsV1 @go(FieldsV1,*FieldsV1) @protobuf(7,bytes,opt)
 
 	// Subresource is the name of the subresource used to update that object, or
 	// empty string if the object was updated through the main resource. The
