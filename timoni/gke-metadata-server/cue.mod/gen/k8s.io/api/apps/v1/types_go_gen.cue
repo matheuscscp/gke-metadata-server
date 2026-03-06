@@ -73,7 +73,7 @@ import (
 
 	// RollingUpdate is used to communicate parameters when Type is RollingUpdateStatefulSetStrategyType.
 	// +optional
-	rollingUpdate?: null | #RollingUpdateStatefulSetStrategy @go(RollingUpdate,*RollingUpdateStatefulSetStrategy) @protobuf(2,bytes,opt)
+	rollingUpdate?: #RollingUpdateStatefulSetStrategy @go(RollingUpdate,*RollingUpdateStatefulSetStrategy) @protobuf(2,bytes,opt)
 }
 
 // StatefulSetUpdateStrategyType is a string enumeration type that enumerates
@@ -106,7 +106,7 @@ import (
 	// Partition are updated. All pods from ordinal Partition-1 to 0 remain untouched.
 	// This is helpful in being able to do a canary based deployment. The default value is 0.
 	// +optional
-	partition?: null | int32 @go(Partition,*int32) @protobuf(1,varint,opt)
+	partition?: int32 @go(Partition,*int32) @protobuf(1,varint,opt)
 
 	// The maximum number of pods that can be unavailable during the update.
 	// Value can be an absolute number (ex: 5) or a percentage of desired pods (ex: 10%).
@@ -118,7 +118,7 @@ import (
 	//
 	// +featureGate=MaxUnavailableStatefulSet
 	// +optional
-	maxUnavailable?: null | intstr.#IntOrString @go(MaxUnavailable,*intstr.IntOrString) @protobuf(2,varint,opt)
+	maxUnavailable?: intstr.#IntOrString @go(MaxUnavailable,*intstr.IntOrString) @protobuf(2,varint,opt)
 }
 
 // PersistentVolumeClaimRetentionPolicyType is a string enumeration of the policies that will determine
@@ -182,12 +182,12 @@ import (
 	// If unspecified, defaults to 1.
 	// TODO: Consider a rename of this field.
 	// +optional
-	replicas?: null | int32 @go(Replicas,*int32) @protobuf(1,varint,opt)
+	replicas?: int32 @go(Replicas,*int32) @protobuf(1,varint,opt)
 
 	// selector is a label query over pods that should match the replica count.
 	// It must match the pod template's labels.
 	// More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors
-	selector?: null | metav1.#LabelSelector @go(Selector,*metav1.LabelSelector) @protobuf(2,bytes,opt)
+	selector?: metav1.#LabelSelector @go(Selector,*metav1.LabelSelector) @protobuf(2,bytes,opt)
 
 	// template is the object that describes the pod that will be created if
 	// insufficient replicas are detected. Each pod stamped out by the StatefulSet
@@ -237,7 +237,7 @@ import (
 	// be maintained in the StatefulSet's revision history. The revision history
 	// consists of all revisions not represented by a currently applied
 	// StatefulSetSpec version. The default value is 10.
-	revisionHistoryLimit?: null | int32 @go(RevisionHistoryLimit,*int32) @protobuf(8,varint,opt)
+	revisionHistoryLimit?: int32 @go(RevisionHistoryLimit,*int32) @protobuf(8,varint,opt)
 
 	// Minimum number of seconds for which a newly created pod should be ready
 	// without any of its container crashing for it to be considered available.
@@ -252,13 +252,13 @@ import (
 	// volume claims when their stateful set is deleted, or when their pod is scaled
 	// down.
 	// +optional
-	persistentVolumeClaimRetentionPolicy?: null | #StatefulSetPersistentVolumeClaimRetentionPolicy @go(PersistentVolumeClaimRetentionPolicy,*StatefulSetPersistentVolumeClaimRetentionPolicy) @protobuf(10,bytes,opt)
+	persistentVolumeClaimRetentionPolicy?: #StatefulSetPersistentVolumeClaimRetentionPolicy @go(PersistentVolumeClaimRetentionPolicy,*StatefulSetPersistentVolumeClaimRetentionPolicy) @protobuf(10,bytes,opt)
 
 	// ordinals controls the numbering of replica indices in a StatefulSet. The
 	// default ordinals behavior assigns a "0" index to the first replica and
 	// increments the index by one for each additional replica requested.
 	// +optional
-	ordinals?: null | #StatefulSetOrdinals @go(Ordinals,*StatefulSetOrdinals) @protobuf(11,bytes,opt)
+	ordinals?: #StatefulSetOrdinals @go(Ordinals,*StatefulSetOrdinals) @protobuf(11,bytes,opt)
 }
 
 // StatefulSetStatus represents the current state of a StatefulSet.
@@ -294,7 +294,7 @@ import (
 	// uses this field as a collision avoidance mechanism when it needs to create the name for the
 	// newest ControllerRevision.
 	// +optional
-	collisionCount?: null | int32 @go(CollisionCount,*int32) @protobuf(9,varint,opt)
+	collisionCount?: int32 @go(CollisionCount,*int32) @protobuf(9,varint,opt)
 
 	// Represents the latest available observations of a statefulset's current state.
 	// +optional
@@ -368,12 +368,12 @@ import (
 	// Number of desired pods. This is a pointer to distinguish between explicit
 	// zero and not specified. Defaults to 1.
 	// +optional
-	replicas?: null | int32 @go(Replicas,*int32) @protobuf(1,varint,opt)
+	replicas?: int32 @go(Replicas,*int32) @protobuf(1,varint,opt)
 
 	// Label selector for pods. Existing ReplicaSets whose pods are
 	// selected by this will be the ones affected by this deployment.
 	// It must match the pod template's labels.
-	selector?: null | metav1.#LabelSelector @go(Selector,*metav1.LabelSelector) @protobuf(2,bytes,opt)
+	selector?: metav1.#LabelSelector @go(Selector,*metav1.LabelSelector) @protobuf(2,bytes,opt)
 
 	// Template describes the pods that will be created.
 	// The only allowed template.spec.restartPolicy value is "Always".
@@ -394,7 +394,7 @@ import (
 	// This is a pointer to distinguish between explicit zero and not specified.
 	// Defaults to 10.
 	// +optional
-	revisionHistoryLimit?: null | int32 @go(RevisionHistoryLimit,*int32) @protobuf(6,varint,opt)
+	revisionHistoryLimit?: int32 @go(RevisionHistoryLimit,*int32) @protobuf(6,varint,opt)
 
 	// Indicates that the deployment is paused.
 	// +optional
@@ -405,7 +405,7 @@ import (
 	// process failed deployments and a condition with a ProgressDeadlineExceeded
 	// reason will be surfaced in the deployment status. Note that progress will
 	// not be estimated during the time a deployment is paused. Defaults to 600s.
-	progressDeadlineSeconds?: null | int32 @go(ProgressDeadlineSeconds,*int32) @protobuf(9,varint,opt)
+	progressDeadlineSeconds?: int32 @go(ProgressDeadlineSeconds,*int32) @protobuf(9,varint,opt)
 }
 
 // DefaultDeploymentUniqueLabelKey is the default key of the selector that is added
@@ -425,7 +425,7 @@ import (
 	// TODO: Update this to follow our convention for oneOf, whatever we decide it
 	// to be.
 	// +optional
-	rollingUpdate?: null | #RollingUpdateDeployment @go(RollingUpdate,*RollingUpdateDeployment) @protobuf(2,bytes,opt)
+	rollingUpdate?: #RollingUpdateDeployment @go(RollingUpdate,*RollingUpdateDeployment) @protobuf(2,bytes,opt)
 }
 
 // +enum
@@ -454,7 +454,7 @@ import (
 	// that the total number of pods available at all times during the update is at
 	// least 70% of desired pods.
 	// +optional
-	maxUnavailable?: null | intstr.#IntOrString @go(MaxUnavailable,*intstr.IntOrString) @protobuf(1,bytes,opt)
+	maxUnavailable?: intstr.#IntOrString @go(MaxUnavailable,*intstr.IntOrString) @protobuf(1,bytes,opt)
 
 	// The maximum number of pods that can be scheduled above the desired number of
 	// pods.
@@ -468,7 +468,7 @@ import (
 	// new ReplicaSet can be scaled up further, ensuring that total number of pods running
 	// at any time during the update is at most 130% of desired pods.
 	// +optional
-	maxSurge?: null | intstr.#IntOrString @go(MaxSurge,*intstr.IntOrString) @protobuf(2,bytes,opt)
+	maxSurge?: intstr.#IntOrString @go(MaxSurge,*intstr.IntOrString) @protobuf(2,bytes,opt)
 }
 
 // DeploymentStatus is the most recently observed status of the Deployment.
@@ -504,7 +504,7 @@ import (
 	//
 	// This is a beta field and requires enabling DeploymentReplicaSetTerminatingReplicas feature (enabled by default).
 	// +optional
-	terminatingReplicas?: null | int32 @go(TerminatingReplicas,*int32) @protobuf(9,varint,opt)
+	terminatingReplicas?: int32 @go(TerminatingReplicas,*int32) @protobuf(9,varint,opt)
 
 	// Represents the latest available observations of a deployment's current state.
 	// +patchMergeKey=type
@@ -517,7 +517,7 @@ import (
 	// field as a collision avoidance mechanism when it needs to create the name for the
 	// newest ReplicaSet.
 	// +optional
-	collisionCount?: null | int32 @go(CollisionCount,*int32) @protobuf(8,varint,opt)
+	collisionCount?: int32 @go(CollisionCount,*int32) @protobuf(8,varint,opt)
 }
 
 #DeploymentConditionType: string // #enumDeploymentConditionType
@@ -586,7 +586,7 @@ import (
 	// to be. Same as Deployment `strategy.rollingUpdate`.
 	// See https://github.com/kubernetes/kubernetes/issues/35345
 	// +optional
-	rollingUpdate?: null | #RollingUpdateDaemonSet @go(RollingUpdate,*RollingUpdateDaemonSet) @protobuf(2,bytes,opt)
+	rollingUpdate?: #RollingUpdateDaemonSet @go(RollingUpdate,*RollingUpdateDaemonSet) @protobuf(2,bytes,opt)
 }
 
 // +enum
@@ -619,7 +619,7 @@ import (
 	// 70% of original number of DaemonSet pods are available at all times during
 	// the update.
 	// +optional
-	maxUnavailable?: null | intstr.#IntOrString @go(MaxUnavailable,*intstr.IntOrString) @protobuf(1,bytes,opt)
+	maxUnavailable?: intstr.#IntOrString @go(MaxUnavailable,*intstr.IntOrString) @protobuf(1,bytes,opt)
 
 	// The maximum number of nodes with an existing available DaemonSet pod that
 	// can have an updated DaemonSet pod during during an update.
@@ -640,7 +640,7 @@ import (
 	// so resource intensive daemonsets should take into account that they may
 	// cause evictions during disruption.
 	// +optional
-	maxSurge?: null | intstr.#IntOrString @go(MaxSurge,*intstr.IntOrString) @protobuf(2,bytes,opt)
+	maxSurge?: intstr.#IntOrString @go(MaxSurge,*intstr.IntOrString) @protobuf(2,bytes,opt)
 }
 
 // DaemonSetSpec is the specification of a daemon set.
@@ -649,7 +649,7 @@ import (
 	// Must match in order to be controlled.
 	// It must match the pod template's labels.
 	// More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors
-	selector?: null | metav1.#LabelSelector @go(Selector,*metav1.LabelSelector) @protobuf(1,bytes,opt)
+	selector?: metav1.#LabelSelector @go(Selector,*metav1.LabelSelector) @protobuf(1,bytes,opt)
 
 	// An object that describes the pod that will be created.
 	// The DaemonSet will create exactly one copy of this pod on every node
@@ -674,7 +674,7 @@ import (
 	// This is a pointer to distinguish between explicit zero and not specified.
 	// Defaults to 10.
 	// +optional
-	revisionHistoryLimit?: null | int32 @go(RevisionHistoryLimit,*int32) @protobuf(6,varint,opt)
+	revisionHistoryLimit?: int32 @go(RevisionHistoryLimit,*int32) @protobuf(6,varint,opt)
 }
 
 // DaemonSetStatus represents the current status of a daemon set.
@@ -722,7 +722,7 @@ import (
 	// uses this field as a collision avoidance mechanism when it needs to
 	// create the name for the newest ControllerRevision.
 	// +optional
-	collisionCount?: null | int32 @go(CollisionCount,*int32) @protobuf(9,varint,opt)
+	collisionCount?: int32 @go(CollisionCount,*int32) @protobuf(9,varint,opt)
 
 	// Represents the latest available observations of a DaemonSet's current state.
 	// +optional
@@ -843,7 +843,7 @@ import (
 	// Defaults to 1.
 	// More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset
 	// +optional
-	replicas?: null | int32 @go(Replicas,*int32) @protobuf(1,varint,opt)
+	replicas?: int32 @go(Replicas,*int32) @protobuf(1,varint,opt)
 
 	// Minimum number of seconds for which a newly created pod should be ready
 	// without any of its container crashing, for it to be considered available.
@@ -855,7 +855,7 @@ import (
 	// Label keys and values that must match in order to be controlled by this replica set.
 	// It must match the pod template's labels.
 	// More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors
-	selector?: null | metav1.#LabelSelector @go(Selector,*metav1.LabelSelector) @protobuf(2,bytes,opt)
+	selector?: metav1.#LabelSelector @go(Selector,*metav1.LabelSelector) @protobuf(2,bytes,opt)
 
 	// Template is the object that describes the pod that will be created if
 	// insufficient replicas are detected.
@@ -887,7 +887,7 @@ import (
 	//
 	// This is a beta field and requires enabling DeploymentReplicaSetTerminatingReplicas feature (enabled by default).
 	// +optional
-	terminatingReplicas?: null | int32 @go(TerminatingReplicas,*int32) @protobuf(7,varint,opt)
+	terminatingReplicas?: int32 @go(TerminatingReplicas,*int32) @protobuf(7,varint,opt)
 
 	// ObservedGeneration reflects the generation of the most recently observed ReplicaSet.
 	// +optional

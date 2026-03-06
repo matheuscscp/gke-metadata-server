@@ -31,8 +31,9 @@ jobs:
       with:
         go-version: 1.26.0
         cache: false
-    - name: Install cue
-      run: go install cuelang.org/go/cmd/cue@latest
+    - uses: cue-lang/setup-cue@a93fa358375740cd8b0078f76355512b9208acb1 # v1.0.1
+      with:
+        version: v0.16.0
 
     - name: Version
       id: version
@@ -103,8 +104,6 @@ jobs:
           docker://ghcr.io/matheuscscp/gke-metadata-server-timoni:latest
 
     - uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
-      with:
-        cosign-release: v2.6.1 # TODO: remove after Flux 2.8 with support for cosign v3
 
     - name: Sign and verify container image
       env:
