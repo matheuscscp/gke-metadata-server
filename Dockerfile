@@ -25,7 +25,7 @@ ARG TARGETARCH
 RUN CGO_ENABLED=0 GOFIPS140=latest GOOS=linux GOARCH=${TARGETARCH} go build -ldflags="-w -s" -o gke-metadata-server \
     github.com/matheuscscp/gke-metadata-server
 
-FROM gcr.io/distroless/static:latest@sha256:28efbe90d0b2f2a3ee465cc5b44f3f2cf5533514cf4d51447a977a5dc8e526d0
+FROM gcr.io/distroless/static:latest@sha256:47b2d72ff90843eb8a768b5c2f89b40741843b639d065b9b937b07cd59b479c6
 
 COPY --from=builder /app/gke-metadata-server .
 COPY LICENSE .
