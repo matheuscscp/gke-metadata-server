@@ -5,7 +5,7 @@ SHELL := /bin/bash
 
 TEST_IMAGE := ghcr.io/matheuscscp/gke-metadata-server/test
 PLATFORMS ?= linux/amd64
-CILIUM_VERSION ?= 1.19.2
+CILIUM_VERSION ?= 1.19.3
 
 .PHONY: dev
 dev: tidy gen-ebpf dev-cluster build build-go-test dev-test
