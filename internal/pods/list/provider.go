@@ -60,3 +60,22 @@ func (p *Provider) GetByIP(ctx context.Context, ipAddr string) (*corev1.Pod, err
 
 	return &podList.Items[0], nil
 }
+
+func (p *Provider) GetByUID(ctx context.Context, uid string) (*corev1.Pod, error) {
+	fieldSelector := "spec.nodeName=" + p.opts.NodeName
+	podList, err := p.opts.KubeClient.
+		CoreV1().
+		Pods(corev1.NamespaceAll).
+		List(ctx, metav1.ListOptions{FieldSelector: fieldSelector})
+	if err != nil {
+		return nil, fmt.Errorf("error listing pods in the node matching uid %s: %w", uid, err)
+	}
+	podList.Items = pods.FilterPods(podList.Items)
+
+	for i := range podList.Items {
+		if string(podList.Items[i].UID) == uid {
+			return &podList.Items[i], nil
+		}
+	}
+	return nil, fmt.Errorf("no pods found in the node matching uid %s", uid)
+}

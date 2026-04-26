@@ -11,6 +11,11 @@ import (
 
 type Provider interface {
 	GetByIP(ctx context.Context, ipAddr string) (*corev1.Pod, error)
+	// GetByUID looks up a pod by its kubernetes UID. Used for pods identified
+	// through kernel attestation (cgroup → pod UID), where the source IP
+	// alone is not sufficient (notably hostNetwork pods, which share the
+	// node IP).
+	GetByUID(ctx context.Context, uid string) (*corev1.Pod, error)
 }
 
 // FilterPods removes pods that are not running.
