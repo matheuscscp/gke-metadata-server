@@ -126,24 +126,14 @@ func TestEndToEnd(t *testing.T) {
 						"node.gke-metadata-server.matheuscscp.io/routingMode": "None",
 					},
 				},
-				// for host network pods the service account is retrieved from the node
+				// hostNetwork pods now get their own per-pod identity via kernel
+				// attestation rather than inheriting the node-level SA.
 				{
 					name:               "test-host-network",
-					serviceAccountName: "",
+					serviceAccountName: "test-impersonated",
 					hostNetwork:        true,
 					nodeSelector: map[string]string{
-						"hasRoutingMode":    "true",
-						"hasServiceAccount": "true",
-					},
-				},
-				{
-					name:               "test-host-network-on-node-without-service-account",
-					serviceAccountName: "",
-					hostNetwork:        true,
-					expectedExitCode:   1,
-					nodeSelector: map[string]string{
-						"hasRoutingMode":    "true",
-						"hasServiceAccount": "false",
+						"hasRoutingMode": "true",
 					},
 				},
 			},

@@ -10,13 +10,13 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"time"
 
 	"github.com/matheuscscp/gke-metadata-server/api"
 	pkghttp "github.com/matheuscscp/gke-metadata-server/internal/http"
 	"github.com/matheuscscp/gke-metadata-server/internal/logging"
 	"github.com/matheuscscp/gke-metadata-server/internal/metrics"
-	"github.com/matheuscscp/gke-metadata-server/internal/node"
 	"github.com/matheuscscp/gke-metadata-server/internal/pods"
 	"github.com/matheuscscp/gke-metadata-server/internal/proxy"
 	"github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts"
@@ -25,6 +25,17 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 )
+
+// localAddrContextKey is the context key under which the metadataServer's
+// ConnContext stashes the accepted socket's LocalAddr.
+type localAddrContextKey struct{}
+
+// LocalAddrFromRequest returns the server-side LocalAddr of the connection
+// the request arrived on, or nil if it was not captured.
+func LocalAddrFromRequest(r *http.Request) *net.TCPAddr {
+	v, _ := r.Context().Value(localAddrContextKey{}).(*net.TCPAddr)
+	return v
+}
 
 type (
 	Server struct {
@@ -40,7 +51,6 @@ type (
 		Addr                 string
 		HealthPort           int
 		Pods                 pods.Provider
-		Node                 node.Provider
 		ServiceAccounts      serviceaccounts.Provider
 		ServiceAccountTokens serviceaccounttokens.Provider
 		MetricsRegistry      *prometheus.Registry
@@ -49,6 +59,21 @@ type (
 		WorkloadIdentityPool string
 		RoutingMode          string
 		PodLookup            PodLookupOptions
+
+		// Attestation resolves a connection 4-tuple to the kubernetes pod
+		// UID of the connecting process. Required in eBPF mode and for
+		// hostNetwork pods in Loopback or None modes; the (mode, pod-kind)
+		// selection in pods.go decides whether it is consulted for a given
+		// request.
+		Attestation AttestationLookuper
+	}
+
+	// AttestationLookuper resolves a connection 4-tuple to the kubernetes
+	// pod UID of the connecting process. Implementations differ by routing
+	// mode (eBPF sockops map vs netlink SOCK_DIAG + /proc walk) but both
+	// converge on a kernel-attested pod identity.
+	AttestationLookuper interface {
+		Lookup(srcIP, dstIP netip.Addr, srcPort, dstPort uint16) (podUID string, err error)
 	}
 
 	PodLookupOptions struct {
@@ -59,7 +84,6 @@ type (
 
 	serverMetrics struct {
 		lookupPodFailures *prometheus.CounterVec
-		getNodeFailures   prometheus.Counter
 	}
 )
 
@@ -98,9 +122,6 @@ func New(ctx context.Context, opts ServerOptions) *Server {
 	lookupPodFailures := metrics.NewLookupPodFailuresCounter()
 	opts.MetricsRegistry.MustRegister(lookupPodFailures)
 
-	getNodeFailures := metrics.NewGetNodeFailuresCounter()
-	opts.MetricsRegistry.MustRegister(getNodeFailures)
-
 	proxyDialLatencyMillis := metrics.NewProxyDialLantencyMillis()
 	opts.MetricsRegistry.MustRegister(proxyDialLatencyMillis)
 
@@ -128,12 +149,24 @@ func New(ctx context.Context, opts ServerOptions) *Server {
 		opts: opts,
 		metrics: serverMetrics{
 			lookupPodFailures: lookupPodFailures,
-			getNodeFailures:   getNodeFailures,
 		},
 		metadataServer: &http.Server{
 			Addr:        opts.Addr,
 			BaseContext: baseContext,
-			Handler:     observabilityMiddleware(metadataHandler),
+			// ConnContext stashes the accepted socket's LocalAddr in the
+			// request context so the request handler can use it as the
+			// destination for kernel-attestation 4-tuple lookups. The
+			// listener bind address (e.g. ":16321" wildcard) is not
+			// equivalent to the actual local addr the kernel chose for
+			// each connection, especially on Loopback mode where the
+			// link-local 169.254.169.254 differs from PodIP.
+			ConnContext: func(ctx context.Context, c net.Conn) context.Context {
+				if a, ok := c.LocalAddr().(*net.TCPAddr); ok {
+					ctx = context.WithValue(ctx, localAddrContextKey{}, a)
+				}
+				return ctx
+			},
+			Handler: observabilityMiddleware(metadataHandler),
 		},
 		healthServer: &http.Server{
 			Addr:        healthAddr,

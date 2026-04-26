@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/matheuscscp/gke-metadata-server/api"
+	attestbpf "github.com/matheuscscp/gke-metadata-server/internal/attestation/bpf"
+	"github.com/matheuscscp/gke-metadata-server/internal/attestation/sockdiag"
 	"github.com/matheuscscp/gke-metadata-server/internal/googlecredentials"
 	"github.com/matheuscscp/gke-metadata-server/internal/logging"
 	"github.com/matheuscscp/gke-metadata-server/internal/loopback"
@@ -291,6 +293,31 @@ func main() {
 		serverAddr = loopback.GKEMetadataServerAddr
 	}
 
+	// Pick the per-mode attestation strategy. eBPF mode loads a sockops
+	// program that records every active TCP connect's 4-tuple -> cgroup ID,
+	// which userspace resolves to a pod UID by walking /sys/fs/cgroup.
+	// Loopback and None modes use a userspace netlink SOCK_DIAG fallback
+	// that resolves a 4-tuple to the owning socket's inode, walks
+	// /proc/<pid>/fd to find the PID, then reads /proc/<pid>/cgroup. The
+	// server consults this lookuper for hostNetwork pods (and, in eBPF
+	// mode, for every pod).
+	var attestationLookuper server.AttestationLookuper
+	switch routingMode {
+	case api.RoutingModeBPF:
+		attestMap, err := attestbpf.LoadAndAttach()
+		if err != nil {
+			l.WithError(err).Fatal("error loading attestation eBPF program")
+		}
+		defer func() {
+			if err := attestMap.Close(); err != nil {
+				l.WithError(err).Error("error closing attestation eBPF program")
+			}
+		}()
+		attestationLookuper = attestMap
+	case api.RoutingModeLoopback, api.RoutingModeNone:
+		attestationLookuper = sockdiag.New()
+	}
+
 	l.WithFields(logrus.Fields{
 		"routing":    routingMode,
 		"serverAddr": serverAddr,
@@ -303,7 +330,6 @@ func main() {
 		Addr:                 serverAddr,
 		HealthPort:           healthPort,
 		Pods:                 pods,
-		Node:                 node,
 		ServiceAccounts:      serviceAccounts,
 		ServiceAccountTokens: serviceAccountTokens,
 		MetricsRegistry:      metricsRegistry,
@@ -311,6 +337,7 @@ func main() {
 		NumericProjectID:     numericProjectID,
 		WorkloadIdentityPool: workloadIdentityPool,
 		RoutingMode:          routingMode,
+		Attestation:          attestationLookuper,
 		PodLookup: server.PodLookupOptions{
 			MaxAttempts:       podLookupMaxAttempts,
 			RetryInitialDelay: podLookupRetryInitialDelay,

@@ -24,7 +24,14 @@ import (
 				}
 			}
 			spec: {
-				hostNetwork:        true
+				hostNetwork: true
+				// hostPID is required by the netlink SOCK_DIAG fallback used in
+				// Loopback and None routing modes for hostNetwork pods: the
+				// server walks /proc/<pid>/fd to map a socket inode back to its
+				// owning PID, then reads /proc/<pid>/cgroup to derive the pod
+				// UID. eBPF mode does not need it (cgroup ID alone identifies
+				// the pod).
+				hostPID:            true
 				serviceAccountName: #config.#namespacedMetadata.name
 				priorityClassName:  "system-node-critical"
 				affinity: nodeAffinity: requiredDuringSchedulingIgnoredDuringExecution: nodeSelectorTerms: [{
