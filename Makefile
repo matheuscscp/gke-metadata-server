@@ -36,6 +36,7 @@ gen-timoni:
 .PHONY: gen-ebpf
 gen-ebpf:
 	go generate ./internal/redirect
+	go generate ./internal/attestation/bpf
 
 .PHONY: dev-cluster
 dev-cluster:

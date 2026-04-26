@@ -18,6 +18,7 @@ COPY ./internal/ ./internal/
 COPY ./ebpf/ ./ebpf/
 
 RUN go generate ./internal/redirect
+RUN go generate ./internal/attestation/bpf
 
 # CGO_ENABLED=0 to build a statically-linked binary
 # -ldflags '-w -s' to strip debugging information for smaller size
