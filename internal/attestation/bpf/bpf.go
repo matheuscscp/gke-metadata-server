@@ -95,6 +95,29 @@ func (m *Map) Lookup(srcIP, dstIP netip.Addr, srcPort, dstPort uint16) (string, 
 	return uid, nil
 }
 
+// Verify checks that the BPF sockops program captured the given 4-tuple.
+// Returns ErrNotFound if the entry isn't there — typically meaning the
+// program is not yet attached or did not fire for this connection. Used by
+// the daemon's readiness probe to gate /readyz on the pipeline being live.
+func (m *Map) Verify(srcIP, dstIP netip.Addr, srcPort, dstPort uint16) error {
+	srcIPv4 := srcIP.As4()
+	dstIPv4 := dstIP.As4()
+	key := attestAttestKey{
+		SrcIp:   binary.NativeEndian.Uint32(srcIPv4[:]),
+		DstIp:   binary.NativeEndian.Uint32(dstIPv4[:]),
+		SrcPort: htons(srcPort),
+		DstPort: htons(dstPort),
+	}
+	var val attestAttestValue
+	if err := m.objs.attestMaps.MapAttest.Lookup(&key, &val); err != nil {
+		if errors.Is(err, ebpf.ErrKeyNotExist) || errors.Is(err, os.ErrNotExist) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("verifying attestation map: %w", err)
+	}
+	return nil
+}
+
 func htons(v uint16) uint16 {
 	return v<<8 | v>>8
 }

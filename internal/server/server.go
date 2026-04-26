@@ -74,6 +74,12 @@ type (
 	// converge on a kernel-attested pod identity.
 	AttestationLookuper interface {
 		Lookup(srcIP, dstIP netip.Addr, srcPort, dstPort uint16) (podUID string, err error)
+		// Verify checks that the attestation pipeline correctly captured the
+		// connection identified by the given 4-tuple. Used by the readiness
+		// probe to gate /readyz on attestation being live; in eBPF mode this
+		// confirms the sockops program actually fired and recorded the entry,
+		// in netlink modes it's a no-op.
+		Verify(srcIP, dstIP netip.Addr, srcPort, dstPort uint16) error
 	}
 
 	PodLookupOptions struct {
@@ -193,41 +199,65 @@ func New(ctx context.Context, opts ServerOptions) *Server {
 	healthHandler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
+	// /readyz exercises the full request path against the daemon itself
+	// using a fresh TCP connection (DisableKeepAlives), then asks the
+	// attestation lookuper whether it captured that connection's 4-tuple.
+	// In eBPF mode this gates readiness on the sockops program actually
+	// firing for new connects; in netlink modes the verify is a no-op.
 	healthHandler.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
+		l := logging.FromRequest(r)
+		var local, remote *net.TCPAddr
+		client := &http.Client{Transport: &http.Transport{
+			DisableKeepAlives: true,
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				conn, err := (&net.Dialer{}).DialContext(ctx, network, addr)
+				if err == nil {
+					local = conn.LocalAddr().(*net.TCPAddr)
+					remote = conn.RemoteAddr().(*net.TCPAddr)
+				}
+				return conn, err
+			},
+		}}
 		url := fmt.Sprintf("http://%s%s", opts.Addr, gkeNodeNameAPI)
 		req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, url, nil)
 		if err != nil {
-			logging.FromRequest(r).WithError(err).Error("error creating healthcheck request")
+			l.WithError(err).Error("readiness: building self request")
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 		req.Header.Set(pkghttp.MetadataFlavorHeader, pkghttp.MetadataFlavorGoogle)
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := client.Do(req)
 		if err != nil {
-			logging.FromRequest(r).WithError(err).Error("error performing healthcheck request")
+			l.WithError(err).Error("readiness: self request failed")
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
-			logging.FromRequest(r).WithField("status_code", resp.StatusCode).Error("healthcheck request failed")
+			l.WithField("status_code", resp.StatusCode).Error("readiness: self request returned non-200")
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		b, err := io.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		if err != nil {
-			logging.FromRequest(r).WithError(err).Error("error reading healthcheck response")
+			l.WithError(err).Error("readiness: reading self response")
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		if string(b) != opts.NodeName {
-			l := logging.FromRequest(r).WithFields(logrus.Fields{
-				"node_name": opts.NodeName,
-				"response":  string(b),
-			})
-			l.Error("healthcheck failed, response does not match expected node name")
+		if string(body) != opts.NodeName {
+			l.WithFields(logrus.Fields{"node_name": opts.NodeName, "response": string(body)}).
+				Error("readiness: self response does not match expected node name")
 			w.WriteHeader(http.StatusInternalServerError)
 			return
+		}
+		if opts.Attestation != nil && local != nil && remote != nil {
+			src, _ := netip.AddrFromSlice(local.IP.To4())
+			dst, _ := netip.AddrFromSlice(remote.IP.To4())
+			if err := opts.Attestation.Verify(src.Unmap(), dst.Unmap(), uint16(local.Port), uint16(remote.Port)); err != nil {
+				l.WithError(err).Error("readiness: attestation pipeline did not capture self-connection")
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
 		}
 		w.WriteHeader(http.StatusOK)
 	})

@@ -38,6 +38,13 @@ type Lookuper struct{}
 // New constructs a Lookuper. Stateless; safe to share across goroutines.
 func New() *Lookuper { return &Lookuper{} }
 
+// Verify is a no-op for the netlink path — sockdiag is a stateless query
+// against the host's live socket table, with no asynchronous capture step
+// to gate the daemon's readiness on.
+func (l *Lookuper) Verify(srcIP, dstIP netip.Addr, srcPort, dstPort uint16) error {
+	return nil
+}
+
 // Lookup implements server.AttestationLookuper.
 func (l *Lookuper) Lookup(srcIP, dstIP netip.Addr, srcPort, dstPort uint16) (string, error) {
 	local := &net.TCPAddr{IP: srcIP.AsSlice(), Port: int(srcPort)}
