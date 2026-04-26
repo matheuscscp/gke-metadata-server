@@ -373,6 +373,15 @@ func applyPods(t *testing.T, pods []pod) {
     - name: GCE_METADATA_IP
       value: "$(HOST_IP):$(GKE_METADATA_SERVER_PORT)"`
 		}
+		// On pods pinned to eBPF nodes, signal that the daemon's --test-proxy-upstream
+		// marker server is reachable so TestProxyPassthrough can issue a hard
+		// assertion rather than skipping. Pods not pinned to eBPF skip the test.
+		var ebpfEnv string
+		if p.nodeSelector["node.gke-metadata-server.matheuscscp.io/routingMode"] == "eBPF" {
+			ebpfEnv = `
+    - name: EXPECT_PROXY_UPSTREAM
+      value: "true"`
+		}
 		var nodeSelector string
 		if len(p.nodeSelector) > 0 {
 			var b strings.Builder
@@ -387,7 +396,7 @@ func applyPods(t *testing.T, pods []pod) {
 		pod = strings.ReplaceAll(pod, "<SERVICE_ACCOUNT>", serviceAccountName)
 		pod = strings.ReplaceAll(pod, "<HOST_NETWORK>", fmt.Sprint(p.hostNetwork))
 		pod = strings.ReplaceAll(pod, "<GO_TEST_DIGEST>", fmt.Sprint(goTestDigest))
-		pod = strings.ReplaceAll(pod, "<EXTRA_ENV>", noneRoutingEnv)
+		pod = strings.ReplaceAll(pod, "<EXTRA_ENV>", noneRoutingEnv+ebpfEnv)
 		pod = strings.ReplaceAll(pod, "<NODE_SELECTOR>", nodeSelector)
 
 		// apply

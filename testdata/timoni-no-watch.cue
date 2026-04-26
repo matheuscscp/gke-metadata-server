@@ -10,6 +10,7 @@ values: settings: {
 	watchNode:                enable: false
 	watchServiceAccounts:     enable: false
 	cacheTokens:              enable: false
+	testProxyUpstream:        true
 }
 
 values: image: {

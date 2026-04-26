@@ -126,6 +126,9 @@ import (
 						if #config.settings.podLookup.retryMaxDelay != _|_ {
 							"--pod-lookup-retry-max-delay=\(#config.settings.podLookup.retryMaxDelay)"
 						}
+						if #config.settings.testProxyUpstream {
+							"--test-proxy-upstream"
+						}
 					]
 					env: [
 						{

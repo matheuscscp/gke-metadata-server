@@ -120,6 +120,9 @@ spec:
         {{- if .Values.config.podLookup.retryMaxDelay }}
         - --pod-lookup-retry-max-delay={{ .Values.config.podLookup.retryMaxDelay }}
         {{- end }}
+        {{- if .Values.config.testProxyUpstream }}
+        - --test-proxy-upstream
+        {{- end }}
         env:
         - name: NODE_NAME
           valueFrom:

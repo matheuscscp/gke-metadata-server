@@ -20,6 +20,7 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/matheuscscp/gke-metadata-server/internal/proxytest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2/google"
@@ -197,6 +198,40 @@ func TestGKEServiceAccountTokenAPI_DefaultTokenSource(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, scope, tokenInfo.Scope)
 	}
+}
+
+// TestProxyPassthrough proves the eBPF-mode proxy passthrough end-to-end:
+// the test pod GETs a non-metadata path on 169.254.169.254. cgroup/connect4
+// rewrites the destination to the daemon's listener; proxy.handle() sniffs
+// the prefix, sees it isn't /computeMetadata/v1, and dials 169.254.169.254:80
+// itself; cgroup/connect4 sees the daemon's cgroup and exempts the connect,
+// so the dial reaches the in-daemon test marker server (bound to lo by
+// --test-proxy-upstream). Receiving the marker proves both halves of the
+// chain work — the redirect's self-exemption (kernel) and the userspace
+// sniff/forward (Go).
+//
+// Skipped on pods that aren't pinned to eBPF nodes (where the marker server
+// isn't reachable); main_test.go sets EXPECT_PROXY_UPSTREAM=true on the
+// eBPF-pinned pods to gate this.
+func TestProxyPassthrough(t *testing.T) {
+	if os.Getenv("EXPECT_PROXY_UPSTREAM") != "true" {
+		t.Skip("EXPECT_PROXY_UPSTREAM not set — pod is not on an eBPF node")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	url := "http://169.254.169.254" + proxytest.Path
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	require.NoError(t, err)
+	// Force a fresh TCP connection. The proxy sniff happens once at the
+	// start of each connection; reusing a kept-alive connection from an
+	// earlier metadata request would route this non-metadata request to
+	// the inner listener instead of the upstream.
+	client := &http.Client{Transport: &http.Transport{DisableKeepAlives: true}}
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+	assert.Equal(t, proxytest.Marker, resp.Header.Get(proxytest.HeaderName))
 }
 
 func TestGKEServiceAccountIdentityAPI(t *testing.T) {
