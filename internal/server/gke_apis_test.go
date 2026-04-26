@@ -37,6 +37,22 @@ var gkeHeaders = http.Header{
 	"Metadata-Flavor": []string{gkeMetadataFlavor},
 }
 
+// isDirectAccessPod reports whether this test container is running as one of
+// the pods bound to the un-impersonated `test` ServiceAccount. Those pods
+// share an IAM binding for direct GCS access but do NOT have a GSA annotation,
+// so the Identity API and scoped-token tests must take the negative branch.
+//
+// We read POD_NAME (set via the downward API) rather than HOSTNAME because
+// hostNetwork pods share the host's UTS namespace — their HOSTNAME is the
+// node name, not the pod name.
+func isDirectAccessPod() bool {
+	switch os.Getenv("POD_NAME") {
+	case "test-direct-access", "test-host-network-ebpf-disambig":
+		return true
+	}
+	return false
+}
+
 func TestOnGCE(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -173,7 +189,7 @@ func TestGKEServiceAccountTokenAPI_DefaultTokenSource(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, token.AccessToken)
 
-	if os.Getenv("HOSTNAME") != "test-direct-access" {
+	if !isDirectAccessPod() {
 		svc, err := oauth2.NewService(ctx)
 		require.NoError(t, err)
 
@@ -195,7 +211,7 @@ func TestGKEServiceAccountIdentityAPI(t *testing.T) {
 	const expectedSubject = `^\d{20,30}$`
 	const url = "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/identity?audience=" + expectedAudience
 
-	if os.Getenv("HOSTNAME") == "test-direct-access" {
+	if isDirectAccessPod() {
 		const expectedMsg = `Your Kubernetes service account (default/test) is not annotated with a target Google service account, which is a requirement for retrieving Identity Tokens using Workload Identity.
 Please add the iam.gke.io/gcp-service-account=[GSA_NAME]@[PROJECT_ID] annotation to your Kubernetes service account.
 Refer to https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity
