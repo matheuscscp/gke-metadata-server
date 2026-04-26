@@ -26,23 +26,24 @@ type pod struct {
 }
 
 var (
-	// testID is used to isolate test resources.
-	testID      = os.Getenv("TEST_ID")
-	testImage   = os.Getenv("TEST_IMAGE")
-	helmVersion = os.Getenv("HELM_VERSION")
+	// testID is used to isolate the GCP workload-identity-pool provider
+	// across CI runs.
+	testID = os.Getenv("TEST_ID")
 
-	containerDigest = readDigest("container")
-	timoniDigest    = readDigest("timoni")
-	helmDigest      = readDigest("helm")
-	goTestDigest    = readDigest("go-test")
+	// localImage and the per-target tags identify the daemon and test
+	// container images that `make build`/`make build-go-test` produced
+	// locally and that `make kind-load-images` loaded into the kind nodes'
+	// containerd. Pods reference them by tag with imagePullPolicy: Never.
+	localImage     = envOrDefault("LOCAL_IMAGE", "gke-metadata-server-test")
+	localTagDaemon = envOrDefault("LOCAL_TAG_DAEMON", "container")
+	localTagGoTest = envOrDefault("LOCAL_TAG_GOTEST", "go-test")
 )
 
-func readDigest(s string) string {
-	b, err := os.ReadFile(fmt.Sprintf("%s-digest.txt", s))
-	if err != nil {
-		panic(err)
+func envOrDefault(k, d string) string {
+	if v := os.Getenv(k); v != "" {
+		return v
 	}
-	return strings.TrimSpace(string(b))
+	return d
 }
 
 func TestEndToEnd(t *testing.T) {
@@ -245,55 +246,27 @@ func applyEmulator(t *testing.T, valuesFile string, allNodes bool) bool {
 	b, err := os.ReadFile(fmt.Sprintf("testdata/%s", valuesFile))
 	require.NoError(t, err)
 	values = strings.ReplaceAll(string(b), "<TEST_ID>", testID)
-	values = strings.ReplaceAll(values, "<CONTAINER_DIGEST>", containerDigest)
+	values = strings.ReplaceAll(values, "<LOCAL_IMAGE>", localImage)
+	values = strings.ReplaceAll(values, "<LOCAL_TAG_DAEMON>", localTagDaemon)
 
-	// detect helm or timoni
+	// Apply directly from the on-disk chart/module — no OCI push happens
+	// during PR validation (see Makefile), so there is nothing to pull.
 	var emulatorCmdName string
 	var emulatorCmdArgs []string
 	if strings.Contains(valuesFile, "helm") {
-		// remove previous helm package
-		helmPackage := fmt.Sprintf("gke-metadata-server-helm-%s.tgz", helmVersion)
-		os.Remove(helmPackage)
-
-		// pull helm package
-		cmd := exec.Command(
-			"helm",
-			"pull",
-			fmt.Sprintf("oci://%s/gke-metadata-server-helm", testImage),
-			"--version", helmVersion)
-		b, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("error pulling helm chart: %v: %s", err, string(b))
-		}
-
-		// verify helm package digest
-		var digest string
-		for _, line := range strings.Split(string(b), "\n") {
-			if strings.Contains(line, "Digest:") {
-				digest = strings.Fields(line)[1]
-				break
-			}
-		}
-		if digest != helmDigest {
-			t.Fatalf("expected helm digest %s, got %s", helmDigest, digest)
-		}
-
-		// set helm command
 		emulatorCmdName = "helm"
 		emulatorCmdArgs = []string{
 			"--kube-context", "kind-gke-metadata-server",
 			"--namespace", "kube-system",
-			"upgrade", "--install", "gke-metadata-server", helmPackage,
+			"upgrade", "--install", "gke-metadata-server", "./helm/gke-metadata-server",
 			"-f", "-",
 		}
 	} else {
-		// set timoni command
 		emulatorCmdName = "timoni"
 		emulatorCmdArgs = []string{
 			"--kube-context", "kind-gke-metadata-server",
 			"--namespace", "kube-system",
-			"apply", "gke-metadata-server", fmt.Sprintf("oci://%s/timoni", testImage),
-			"--digest", timoniDigest,
+			"apply", "gke-metadata-server", "./timoni/gke-metadata-server",
 			"-f", "-",
 		}
 	}
@@ -376,11 +349,30 @@ func applyPods(t *testing.T, pods []pod) {
 		// On pods pinned to eBPF nodes, signal that the daemon's --test-proxy-upstream
 		// marker server is reachable so TestProxyPassthrough can issue a hard
 		// assertion rather than skipping. Pods not pinned to eBPF skip the test.
+		//
+		// Also set GCE_METADATA_HOST so cloud.google.com/go/compute/metadata's
+		// OnGCE short-circuits to true without probing 169.254.169.254 — the
+		// proxy-passthrough marker server intercepts non-metadata requests on
+		// that IP and replies without `Metadata-Flavor: Google`, which races
+		// with the library's parallel DNS strategy and flakes OnGCE to false.
 		var ebpfEnv string
 		if p.nodeSelector["node.gke-metadata-server.matheuscscp.io/routingMode"] == "eBPF" {
 			ebpfEnv = `
     - name: EXPECT_PROXY_UPSTREAM
-      value: "true"`
+      value: "true"
+    - name: GCE_METADATA_HOST
+      value: "169.254.169.254"`
+		}
+		// Loopback mode binds the daemon directly to 169.254.169.254:80; the
+		// library's HTTP probe to that IP gets a metadata response from the
+		// daemon, but for paths it doesn't recognise (like `/`) it can return
+		// without the expected header and lose the OnGCE race the same way.
+		// Short-circuit it the same way as eBPF.
+		var loopbackEnv string
+		if p.nodeSelector["node.gke-metadata-server.matheuscscp.io/routingMode"] == "Loopback" {
+			loopbackEnv = `
+    - name: GCE_METADATA_HOST
+      value: "169.254.169.254"`
 		}
 		var nodeSelector string
 		if len(p.nodeSelector) > 0 {
@@ -395,8 +387,9 @@ func applyPods(t *testing.T, pods []pod) {
 		pod = strings.ReplaceAll(string(b), "<POD_NAME>", p.name)
 		pod = strings.ReplaceAll(pod, "<SERVICE_ACCOUNT>", serviceAccountName)
 		pod = strings.ReplaceAll(pod, "<HOST_NETWORK>", fmt.Sprint(p.hostNetwork))
-		pod = strings.ReplaceAll(pod, "<GO_TEST_DIGEST>", fmt.Sprint(goTestDigest))
-		pod = strings.ReplaceAll(pod, "<EXTRA_ENV>", noneRoutingEnv+ebpfEnv)
+		pod = strings.ReplaceAll(pod, "<LOCAL_IMAGE>", localImage)
+		pod = strings.ReplaceAll(pod, "<LOCAL_TAG_GOTEST>", localTagGoTest)
+		pod = strings.ReplaceAll(pod, "<EXTRA_ENV>", noneRoutingEnv+ebpfEnv+loopbackEnv)
 		pod = strings.ReplaceAll(pod, "<NODE_SELECTOR>", nodeSelector)
 
 		// apply

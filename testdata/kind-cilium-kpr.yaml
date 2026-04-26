@@ -1,0 +1,34 @@
+# Copyright 2025 Matheus Pimenta.
+# SPDX-License-Identifier: AGPL-3.0
+
+# kind cluster used by the cilium-kpr CI matrix entry: Cilium with
+# kubeProxyReplacement=true. kube-proxy is disabled in the kind cluster so
+# Cilium owns service-VIP redirection via its own cgroup/connect4 program;
+# this exercises the multi-attach coexistence with our redirect program.
+
+apiVersion: kind.x-k8s.io/v1alpha4
+kind: Cluster
+nodes:
+- role: control-plane
+- role: worker
+  labels:
+    iam.gke.io/gke-metadata-server-enabled: "true"
+    node.gke-metadata-server.matheuscscp.io/routingMode: eBPF
+    hasRoutingMode: "true"
+- role: worker
+  labels:
+    iam.gke.io/gke-metadata-server-enabled: "true"
+    node.gke-metadata-server.matheuscscp.io/routingMode: Loopback
+    hasRoutingMode: "true"
+- role: worker
+  labels:
+    iam.gke.io/gke-metadata-server-enabled: "true"
+    node.gke-metadata-server.matheuscscp.io/routingMode: None
+    hasRoutingMode: "false"
+- role: worker
+  labels:
+    allNodesTest: "true"
+    hasRoutingMode: "false"
+networking:
+  disableDefaultCNI: true
+  kubeProxyMode: "none"

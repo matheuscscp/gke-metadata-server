@@ -3,16 +3,30 @@
 
 SHELL := /bin/bash
 
-TEST_IMAGE := ghcr.io/matheuscscp/gke-metadata-server/test
+# Exported so recursive sub-make recipes see CNI in their shell environment
+# (Make doesn't auto-export command-line variables otherwise).
+export CNI
+
+# Local-only image refs used by CI and dev builds. Pods reference these by
+# tag with imagePullPolicy: Never; images are loaded into the kind cluster
+# via `kind load docker-image`. No registry push happens for PR validation
+# — release.yaml has its own inline OCI push to the production registry.
+LOCAL_IMAGE := gke-metadata-server-test
+LOCAL_TAG_DAEMON := container
+LOCAL_TAG_GOTEST := go-test
+# Helm/Timoni need a valid SemVer for chart/module metadata; the value is
+# only used as a string label in PR-mode applies (filesystem-based, not OCI).
+LOCAL_VERSION := 0.0.0-dev
 PLATFORMS ?= linux/amd64
 CILIUM_VERSION ?= 1.19.3
 
 .PHONY: dev
-dev: tidy gen-ebpf dev-cluster build build-go-test dev-test
+dev: tidy gen-ebpf dev-cluster build build-go-test kind-load-images dev-test
 
 .PHONY: clean
 clean:
-	rm -rf *.json *.txt *.logs *.tgz
+	rm -rf *.json *.logs *.tgz ci-test-id.txt jwks.json
+	rm -f helm/gke-metadata-server/Chart.yaml timoni/gke-metadata-server/templates/config.cue
 
 .PHONY: tidy
 tidy:
@@ -63,10 +77,25 @@ ci-test:
 cluster:
 	@if [ "${TEST_ID}" == "" ]; then echo "TEST_ID variable is required."; exit -1; fi
 	@if [ "${PROVIDER_COMMAND}" == "" ]; then echo "PROVIDER_COMMAND variable is required."; exit -1; fi
-	kind create cluster --name gke-metadata-server --config testdata/kind.yaml
+	# CNI selects the kind config and whether to install Cilium:
+	#   cilium-default (default): testdata/kind.yaml + Cilium 1.19.x default settings.
+	#   cilium-kpr:               testdata/kind-cilium-kpr.yaml + Cilium with
+	#                             kubeProxyReplacement=true and bpf.masquerade=true.
+	#   kindnet:                  testdata/kind-kindnet.yaml (default kind CNI), no Cilium.
+	CNI=$${CNI:-cilium-default}; \
+	case "$$CNI" in \
+		cilium-default) KIND_CONFIG=testdata/kind.yaml ;; \
+		cilium-kpr)     KIND_CONFIG=testdata/kind-cilium-kpr.yaml ;; \
+		kindnet)        KIND_CONFIG=testdata/kind-kindnet.yaml ;; \
+		*) echo "unknown CNI=$$CNI"; exit 1 ;; \
+	esac; \
+	kind create cluster --name gke-metadata-server --config $$KIND_CONFIG
 	kubectl --context kind-gke-metadata-server get nodes -o custom-columns="NODE:.metadata.name,ROUTING MODE:.metadata.labels['node\.gke-metadata-server\.matheuscscp\.io/routingMode']"
 	make create-or-update-provider TEST_ID=${TEST_ID} PROVIDER_COMMAND=${PROVIDER_COMMAND}
-	make install-cilium
+	@CNI=$${CNI:-cilium-default}; \
+	if [ "$$CNI" != "kindnet" ]; then \
+		make install-cilium CNI=$$CNI; \
+	fi
 
 .PHONY: create-or-update-provider
 create-or-update-provider:
@@ -88,47 +117,66 @@ install-cilium:
 	helm repo add cilium https://helm.cilium.io/
 	docker pull quay.io/cilium/cilium:v$(CILIUM_VERSION)
 	kind load docker-image --name gke-metadata-server quay.io/cilium/cilium:v$(CILIUM_VERSION)
+	# CNI=cilium-kpr enables Cilium's kubeProxyReplacement (kube-proxy is
+	# disabled in the kind config via kubeProxyMode: "none"). This validates
+	# coexistence with Cilium's own cgroup/connect4 program — Cilium attaches
+	# one for service-VIP redirection, ours attaches one for the metadata-IP
+	# rewrite, and the two must run together via cilium/ebpf's BPF_LINK_CREATE
+	# multi-attach. bpf.masquerade is intentionally NOT enabled: it requires
+	# additional Cilium config (ipv4NativeRoutingCIDR etc.) to keep egress
+	# DNS working in kind, and it's orthogonal to what this matrix entry is
+	# validating.
+	@CNI=$${CNI:-cilium-default}; \
+	if [ "$$CNI" = "cilium-kpr" ]; then \
+		KPR_FLAGS="--set kubeProxyReplacement=true \
+			--set k8sServiceHost=gke-metadata-server-control-plane \
+			--set k8sServicePort=6443"; \
+	else \
+		KPR_FLAGS=""; \
+	fi; \
 	helm install cilium cilium/cilium --version $(CILIUM_VERSION) \
 		--namespace kube-system \
 		--set image.pullPolicy=IfNotPresent \
-		--set ipam.mode=kubernetes
-
-.PHONY: build-dev
-build-dev:
-	docker buildx build . --platform linux/amd64,linux/arm64 -t ${TEST_IMAGE}:${TAG} --push
+		--set ipam.mode=kubernetes \
+		$$KPR_FLAGS
 
 .PHONY: build
+# Builds the daemon container image into the local Docker daemon and renders
+# the Helm chart / Timoni module metadata so they are valid for filesystem
+# applies. Nothing is pushed to a registry; CI loads the local image into
+# the kind cluster via `make kind-load-images` and applies helm/timoni from
+# their on-disk paths. Release-mode OCI publishing is handled inline by
+# .github/workflows/release.yaml.
 build:
-	docker buildx build . --platform ${PLATFORMS} -t ${TEST_IMAGE}:container --push \
-		--metadata-file container-metadata.json
-	jq -r '."containerimage.digest"' container-metadata.json > container-digest.txt
-
-	sed "s|<HELM_VERSION>|$$(cat version.txt)|g" helm/gke-metadata-server/Chart.tpl.yaml | \
-		sed "s|<CONTAINER_VERSION>|$$(cat version.txt)|g" > helm/gke-metadata-server/Chart.yaml
+	docker buildx build . --platform ${PLATFORMS} \
+		-t ${LOCAL_IMAGE}:${LOCAL_TAG_DAEMON} --load
+	sed "s|<HELM_VERSION>|${LOCAL_VERSION}|g" helm/gke-metadata-server/Chart.tpl.yaml | \
+		sed "s|<CONTAINER_VERSION>|${LOCAL_VERSION}|g" > helm/gke-metadata-server/Chart.yaml
 	helm lint helm/gke-metadata-server
-	helm package helm/gke-metadata-server
-	helm push gke-metadata-server-helm-$$(cat version.txt).tgz oci://${TEST_IMAGE} 2>&1 | tee helm-push.logs
-	cat helm-push.logs | grep Digest: | awk '{print $$NF}' > helm-digest.txt
-
-	sed "s|<CONTAINER_VERSION>|$$(cat version.txt)|g" \
+	sed "s|<CONTAINER_VERSION>|${LOCAL_VERSION}|g" \
 		timoni/gke-metadata-server/templates/config.tpl.cue > timoni/gke-metadata-server/templates/config.cue
 	timoni mod vet timoni/gke-metadata-server/ \
 		--name gke-metadata-server \
 		--namespace kube-system \
 		--values timoni/gke-metadata-server/debug_values.cue
-	timoni mod push timoni/gke-metadata-server/ oci://${TEST_IMAGE}/timoni \
-		--version $$(cat version.txt) \
-		--output yaml | yq .digest > timoni-digest.txt
 
 .PHONY: build-go-test
 build-go-test:
 	mv .dockerignore .dockerignore.bkp
 	mv .dockerignore.test .dockerignore
-	docker buildx build . --platform ${PLATFORMS} -t ${TEST_IMAGE}:go-test -f Dockerfile.test --push \
-		--metadata-file go-test-metadata.json
+	docker buildx build . --platform ${PLATFORMS} \
+		-t ${LOCAL_IMAGE}:${LOCAL_TAG_GOTEST} -f Dockerfile.test --load
 	mv .dockerignore .dockerignore.test
 	mv .dockerignore.bkp .dockerignore
-	jq -r '."containerimage.digest"' go-test-metadata.json > go-test-digest.txt
+
+.PHONY: kind-load-images
+# Loads the locally-built daemon and test images into the kind cluster's
+# containerd. Must run after both `build` and `build-go-test` and after the
+# kind cluster is up. Pods then reference these tags directly with
+# imagePullPolicy: Never (see testdata/pod.yaml).
+kind-load-images:
+	kind load docker-image --name gke-metadata-server ${LOCAL_IMAGE}:${LOCAL_TAG_DAEMON}
+	kind load docker-image --name gke-metadata-server ${LOCAL_IMAGE}:${LOCAL_TAG_GOTEST}
 
 .PHONY: test-unit
 test-unit:
@@ -138,7 +186,11 @@ test-unit:
 .PHONY: test
 test:
 	@if [ "${TEST_ID}" == "" ]; then echo "TEST_ID variable is required."; exit -1; fi
-	TEST_ID=${TEST_ID} TEST_IMAGE=${TEST_IMAGE} HELM_VERSION=$$(cat version.txt) go test -v ${TEST_ARGS}
+	TEST_ID=${TEST_ID} \
+	LOCAL_IMAGE=${LOCAL_IMAGE} \
+	LOCAL_TAG_DAEMON=${LOCAL_TAG_DAEMON} \
+	LOCAL_TAG_GOTEST=${LOCAL_TAG_GOTEST} \
+	go test -v ${TEST_ARGS}
 
 .PHONY: update-branch
 update-branch:

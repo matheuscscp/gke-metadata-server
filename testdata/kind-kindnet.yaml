@@ -1,0 +1,30 @@
+# Copyright 2025 Matheus Pimenta.
+# SPDX-License-Identifier: AGPL-3.0
+
+# kind cluster used by the kindnet CI matrix entry: default kind CNI (kindnet),
+# default kube-proxy. Validates the README's "no specific CNI required" claim
+# by exercising the full attestation chain on a non-Cilium cluster.
+
+apiVersion: kind.x-k8s.io/v1alpha4
+kind: Cluster
+nodes:
+- role: control-plane
+- role: worker
+  labels:
+    iam.gke.io/gke-metadata-server-enabled: "true"
+    node.gke-metadata-server.matheuscscp.io/routingMode: eBPF
+    hasRoutingMode: "true"
+- role: worker
+  labels:
+    iam.gke.io/gke-metadata-server-enabled: "true"
+    node.gke-metadata-server.matheuscscp.io/routingMode: Loopback
+    hasRoutingMode: "true"
+- role: worker
+  labels:
+    iam.gke.io/gke-metadata-server-enabled: "true"
+    node.gke-metadata-server.matheuscscp.io/routingMode: None
+    hasRoutingMode: "false"
+- role: worker
+  labels:
+    allNodesTest: "true"
+    hasRoutingMode: "false"
