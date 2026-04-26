@@ -13,7 +13,6 @@ import (
 type serviceAccount struct {
 	serviceaccounts.Reference
 	podCount         int
-	usedByNode       bool
 	deleted          bool
 	tokens           *tokens
 	externalRequests chan chan<- *tokensAndError
@@ -24,8 +23,7 @@ func (p *Provider) getTokens(ctx context.Context, ref *serviceaccounts.Reference
 	sa, ok := p.serviceAccounts[*ref]
 	if !ok {
 		const podCount = 0
-		const usedByNode = false
-		sa = p.addServiceAccount(ref, podCount, usedByNode)
+		sa = p.addServiceAccount(ref, podCount)
 	} else if sa.deleted {
 		p.serviceAccountsMutex.Unlock()
 		return nil, errServiceAccountDeleted
@@ -75,11 +73,10 @@ func (s *serviceAccount) requestTokens(reqCtx, providerCtx context.Context) (*to
 	}
 }
 
-func (p *Provider) addServiceAccount(ref *serviceaccounts.Reference, podCount int, usedByNode bool) *serviceAccount {
+func (p *Provider) addServiceAccount(ref *serviceaccounts.Reference, podCount int) *serviceAccount {
 	sa := &serviceAccount{
 		Reference:        *ref,
 		podCount:         podCount,
-		usedByNode:       usedByNode,
 		externalRequests: make(chan chan<- *tokensAndError, 1),
 	}
 	p.serviceAccounts[sa.Reference] = sa
@@ -104,8 +101,7 @@ func (p *Provider) AddPodServiceAccount(ref *serviceaccounts.Reference) {
 	}
 
 	const podCount = 1
-	const usedByNode = false
-	p.addServiceAccount(ref, podCount, usedByNode)
+	p.addServiceAccount(ref, podCount)
 }
 
 func (p *Provider) DeletePodServiceAccount(ref *serviceaccounts.Reference) {
@@ -115,50 +111,6 @@ func (p *Provider) DeletePodServiceAccount(ref *serviceaccounts.Reference) {
 	if sa, ok := p.serviceAccounts[*ref]; ok && sa.podCount > 0 {
 		sa.podCount--
 	}
-}
-
-func (p *Provider) UpdateNodeServiceAccount(ref *serviceaccounts.Reference) {
-	p.serviceAccountsMutex.Lock()
-	defer p.serviceAccountsMutex.Unlock()
-
-	// if both are nil, nothing to do
-	if p.nodeServiceAccountRef == nil && ref == nil {
-		return
-	}
-
-	// if ref is nil, we must delete the current node service account
-	if ref == nil {
-		if sa, ok := p.serviceAccounts[*p.nodeServiceAccountRef]; ok {
-			sa.usedByNode = false
-		}
-		p.nodeServiceAccountRef = nil
-		return
-	}
-
-	// non-nil ref. is the current node service account also non-nil?
-	if cur := p.nodeServiceAccountRef; cur != nil {
-		// yes. if they are the same, nothing to do
-		if *cur == *ref {
-			return
-		}
-		// yes, but they are different. we must delete the current node service account
-		if sa, ok := p.serviceAccounts[*cur]; ok {
-			sa.usedByNode = false
-		}
-	}
-	p.nodeServiceAccountRef = ref
-
-	// does the new node service account exist?
-	if sa, ok := p.serviceAccounts[*ref]; ok {
-		// yes. mark it as used by the node pool and that's it
-		sa.usedByNode = true
-		return
-	}
-
-	// no. create it and mark it as used by the node pool
-	const podCount = 0
-	const usedByNode = true
-	p.addServiceAccount(ref, podCount, usedByNode)
 }
 
 func (p *Provider) UpdateServiceAccount(ref *serviceaccounts.Reference) {
@@ -197,7 +149,7 @@ func (p *Provider) checkIfMustDeleteAndDelete(sa *serviceAccount) bool {
 	p.serviceAccountsMutex.Lock()
 	defer p.serviceAccountsMutex.Unlock()
 
-	if (sa.podCount == 0 && !sa.usedByNode) || sa.deleted {
+	if sa.podCount == 0 || sa.deleted {
 		delete(p.serviceAccounts, sa.Reference)
 		p.numTokens.Dec()
 		return true

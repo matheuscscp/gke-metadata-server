@@ -254,9 +254,6 @@ func main() {
 		if wp != nil {
 			wp.AddListener(p)
 		}
-		if wn != nil {
-			wn.AddListener(p)
-		}
 		if wsa != nil {
 			wsa.AddListener(p)
 		}

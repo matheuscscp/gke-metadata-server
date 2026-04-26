@@ -26,7 +26,6 @@ type Provider struct {
 	serviceAccounts               map[serviceaccounts.Reference]*serviceAccount
 	googleIDTokens                map[googleIDTokenReference]*tokenAndExpiration[string]
 	googleScopedAccessTokens      map[googleScopedAccessTokenReference]*tokenAndExpiration[string]
-	nodeServiceAccountRef         *serviceaccounts.Reference
 	ctx                           context.Context
 	cancelCtx                     context.CancelFunc
 	serviceAccountsMutex          sync.Mutex

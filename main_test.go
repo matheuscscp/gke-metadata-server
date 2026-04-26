@@ -126,8 +126,8 @@ func TestEndToEnd(t *testing.T) {
 						"node.gke-metadata-server.matheuscscp.io/routingMode": "None",
 					},
 				},
-				// hostNetwork pods now get their own per-pod identity via kernel
-				// attestation rather than inheriting the node-level SA.
+				// hostNetwork pods are resolved via kernel attestation, not
+				// source IP, so they get a per-pod identity.
 				{
 					name:               "test-host-network",
 					serviceAccountName: "test-impersonated",
