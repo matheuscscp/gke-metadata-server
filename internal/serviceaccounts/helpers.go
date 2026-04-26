@@ -41,29 +41,6 @@ func ReferenceFromPod(pod *corev1.Pod) *Reference {
 	}
 }
 
-// ReferenceFromNode returns a ServiceAccount reference from the Node object annotations or labels.
-// Annotations take precedence over labels because we encourage users to use annotations instead of
-// labels in this case since. Labels are more impactful to etcd since they are indexed, and we don't
-// need indexing here so we prefer annotations. However, we support labels because not all cloud
-// providers support customizing annotations on Node pools/groups. Not even KinD supports it.
-//
-// The ServiceAccount reference is retrieved from the following pair of annotations or labels:
-//
-//	{nodeAPIGroup}/serviceAccountName
-//
-//	{nodeAPIGroup}/serviceAccountNamespace
-//
-// Only Pods running on the host network should use this ServiceAccount.
-func ReferenceFromNode(node *corev1.Node) *Reference {
-	if ref := getServiceAccountReference(node.Annotations); ref != nil {
-		return ref
-	}
-	if ref := getServiceAccountReference(node.Labels); ref != nil {
-		return ref
-	}
-	return nil
-}
-
 // ReferenceFromToken returns a ServiceAccount reference from a ServiceAccount Token.
 func ReferenceFromToken(token string) *Reference {
 	tok, _, _ := jwt.NewParser().ParseUnverified(token, jwt.MapClaims{})
@@ -85,25 +62,4 @@ func GoogleServiceAccountEmail(sa *corev1.ServiceAccount) (*string, error) {
 		return nil, ErrGKEAnnotationInvalid
 	}
 	return &v, nil
-}
-
-func getServiceAccountReference(m map[string]string) *Reference {
-	if m == nil {
-		return nil
-	}
-	name, ok := m[api.AnnotationServiceAccountName]
-	if !ok {
-		return nil
-	}
-	namespace, ok := m[api.AnnotationServiceAccountNamespace]
-	if !ok {
-		return nil
-	}
-	if name == "" || namespace == "" {
-		return nil
-	}
-	return &Reference{
-		Name:      name,
-		Namespace: namespace,
-	}
 }

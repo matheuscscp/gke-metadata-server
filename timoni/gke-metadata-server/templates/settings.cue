@@ -58,6 +58,12 @@ import (
 		retryMaxDelay?: time.Duration
 	}
 
+	// testProxyUpstream is a TEST-ONLY flag. When true, in eBPF routing mode the
+	// daemon binds 169.254.169.254 to lo and serves a marker on port 80 to allow
+	// the project's e2e suite to assert the proxy-passthrough chain is wired up.
+	// Has no effect outside eBPF mode. Do not enable in production.
+	testProxyUpstream: bool | *false
+
 	// Helper definitions.
 	#watchSettings: {
 		// enable is a flag to enable the watch feature.

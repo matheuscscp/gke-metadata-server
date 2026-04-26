@@ -19,6 +19,7 @@ COPY ./internal/ ./internal/
 COPY ./ebpf/ ./ebpf/
 
 RUN go generate ./internal/redirect
+RUN go generate ./internal/attestation/bpf
 
 ARG TARGETARCH
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go test -c github.com/matheuscscp/gke-metadata-server/internal/server

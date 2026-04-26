@@ -9,9 +9,7 @@ const (
 
 	GroupGKE = "iam.gke.io"
 
-	AnnotationRoutingMode             = GroupNode + "/routingMode"
-	AnnotationServiceAccountName      = GroupNode + "/serviceAccountName"
-	AnnotationServiceAccountNamespace = GroupNode + "/serviceAccountNamespace"
+	AnnotationRoutingMode = GroupNode + "/routingMode"
 
 	RoutingModeDefault  = RoutingModeBPF
 	RoutingModeBPF      = "eBPF"

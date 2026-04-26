@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/matheuscscp/gke-metadata-server/api"
+	attestbpf "github.com/matheuscscp/gke-metadata-server/internal/attestation/bpf"
+	"github.com/matheuscscp/gke-metadata-server/internal/attestation/sockdiag"
 	"github.com/matheuscscp/gke-metadata-server/internal/googlecredentials"
 	"github.com/matheuscscp/gke-metadata-server/internal/logging"
 	"github.com/matheuscscp/gke-metadata-server/internal/loopback"
@@ -22,6 +24,7 @@ import (
 	watchnode "github.com/matheuscscp/gke-metadata-server/internal/node/watch"
 	listpods "github.com/matheuscscp/gke-metadata-server/internal/pods/list"
 	watchpods "github.com/matheuscscp/gke-metadata-server/internal/pods/watch"
+	"github.com/matheuscscp/gke-metadata-server/internal/proxytest"
 	"github.com/matheuscscp/gke-metadata-server/internal/routing"
 	"github.com/matheuscscp/gke-metadata-server/internal/server"
 	getserviceaccount "github.com/matheuscscp/gke-metadata-server/internal/serviceaccounts/get"
@@ -68,6 +71,7 @@ func main() {
 		podLookupMaxAttempts                int
 		podLookupRetryInitialDelay          time.Duration
 		podLookupRetryMaxDelay              time.Duration
+		testProxyUpstream                   bool
 	)
 
 	flags := pflag.NewFlagSet(os.Args[0], pflag.ContinueOnError)
@@ -112,6 +116,8 @@ func main() {
 		"Initial delay for retrying pod lookups upon failures")
 	flags.DurationVar(&podLookupRetryMaxDelay, "pod-lookup-retry-max-delay", 30*time.Second,
 		"Maximum delay for retrying pod lookups upon failures")
+	flags.BoolVar(&testProxyUpstream, "test-proxy-upstream", false,
+		"Test-only: in eBPF mode, bind 169.254.169.254 to lo and serve a marker on port 80 to e2e-test the proxy passthrough chain. Has no effect outside eBPF mode. Do not enable in production.")
 
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		if errors.Is(err, pflag.ErrHelp) {
@@ -252,9 +258,6 @@ func main() {
 		if wp != nil {
 			wp.AddListener(p)
 		}
-		if wn != nil {
-			wn.AddListener(p)
-		}
 		if wsa != nil {
 			wsa.AddListener(p)
 		}
@@ -291,10 +294,47 @@ func main() {
 		serverAddr = loopback.GKEMetadataServerAddr
 	}
 
+	// Pick the per-mode attestation strategy. eBPF mode loads a sockops
+	// program that records every active TCP connect's 4-tuple -> cgroup ID,
+	// which userspace resolves to a pod UID by walking /sys/fs/cgroup.
+	// Loopback and None modes use a userspace netlink SOCK_DIAG fallback
+	// that resolves a 4-tuple to the owning socket's inode, walks
+	// /proc/<pid>/fd to find the PID, then reads /proc/<pid>/cgroup. The
+	// server consults this lookuper for hostNetwork pods (and, in eBPF
+	// mode, for every pod).
+	var attestationLookuper server.AttestationLookuper
+	switch routingMode {
+	case api.RoutingModeBPF:
+		attestMap, err := attestbpf.LoadAndAttach()
+		if err != nil {
+			l.WithError(err).Fatal("error loading attestation eBPF program")
+		}
+		defer func() {
+			if err := attestMap.Close(); err != nil {
+				l.WithError(err).Error("error closing attestation eBPF program")
+			}
+		}()
+		attestationLookuper = attestMap
+	case api.RoutingModeLoopback, api.RoutingModeNone:
+		attestationLookuper = sockdiag.New()
+	}
+
 	l.WithFields(logrus.Fields{
 		"routing":    routingMode,
 		"serverAddr": serverAddr,
 	}).Info("routing mode loaded and attached")
+
+	// test-only: bring up the proxy-passthrough marker upstream on lo so the
+	// e2e suite can prove the cgroup-ID self-exemption + userspace forward
+	// chain is wired up. Only active in eBPF mode; in Loopback mode the
+	// daemon already binds 169.254.169.254:80 so a second bind would fail,
+	// and in None mode the redirect path the test exercises doesn't exist.
+	if testProxyUpstream && routingMode == api.RoutingModeBPF {
+		if err := proxytest.Start(); err != nil {
+			l.WithError(err).Fatal("error starting test proxy upstream")
+		}
+		l.Info("test proxy upstream listening on 169.254.169.254:80")
+	}
 
 	// start server
 	s := server.New(ctx, server.ServerOptions{
@@ -303,7 +343,6 @@ func main() {
 		Addr:                 serverAddr,
 		HealthPort:           healthPort,
 		Pods:                 pods,
-		Node:                 node,
 		ServiceAccounts:      serviceAccounts,
 		ServiceAccountTokens: serviceAccountTokens,
 		MetricsRegistry:      metricsRegistry,
@@ -311,6 +350,7 @@ func main() {
 		NumericProjectID:     numericProjectID,
 		WorkloadIdentityPool: workloadIdentityPool,
 		RoutingMode:          routingMode,
+		Attestation:          attestationLookuper,
 		PodLookup: server.PodLookupOptions{
 			MaxAttempts:       podLookupMaxAttempts,
 			RetryInitialDelay: podLookupRetryInitialDelay,

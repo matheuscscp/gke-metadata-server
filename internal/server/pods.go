@@ -5,13 +5,16 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"net/netip"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/matheuscscp/gke-metadata-server/api"
 	pkghttp "github.com/matheuscscp/gke-metadata-server/internal/http"
 	"github.com/matheuscscp/gke-metadata-server/internal/logging"
 	"github.com/matheuscscp/gke-metadata-server/internal/retry"
@@ -135,7 +138,7 @@ func (s *Server) getPodServiceAccountReference(w http.ResponseWriter,
 	// datagrams/TCP segments the network interface delivered to the
 	// server. if this gets compromised, game over. this is the core
 	// security assumption of the project.
-	clientHost, _, err := net.SplitHostPort(r.RemoteAddr)
+	clientHost, clientPortStr, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		const format = "error spliting host-port for %q: %w"
 		pkghttp.RespondErrorf(w, r, http.StatusInternalServerError, format, r.RemoteAddr, err)
@@ -151,71 +154,116 @@ func (s *Server) getPodServiceAccountReference(w http.ResponseWriter,
 	l := logging.FromRequest(r).WithField("client_ip", clientIP)
 	r = logging.IntoRequest(r, l)
 
-	// fetch pod by ip
-	pod, err := s.lookupPodByIP(r.Context(), clientIP)
-	if err != nil {
-		if strings.Contains(err.Error(), "no pods found") {
-			return s.getNodeServiceAccountReference(w, r, clientIP)
+	// Pick the resolution strategy by (routing mode, pod kind). Each
+	// (mode, kind) has exactly one strategy — no fallback between paths.
+	//
+	//   eBPF mode:     kernel attestation for both pod kinds (sockops map).
+	//   Loopback/None: source IP for non-hostNetwork; sockdiag for
+	//                  hostNetwork (the only way to disambiguate pods that
+	//                  share the node IP without an eBPF map).
+	//
+	// hostNetwork pods on Loopback/None modes don't have a single canonical
+	// source IP — the kernel picks one based on the route used to reach the
+	// listener (the link-local 169.254.169.254 for Loopback's lo bind, the
+	// node IP for None's wildcard bind, possibly 127.0.0.1 if the operator
+	// set GCE_METADATA_HOST that way). Anything that isn't a regular
+	// routable pod IP is treated as a host-source connection.
+	useAttestation := s.opts.RoutingMode == api.RoutingModeBPF || isHostSourceIP(clientIPAddr, s.opts.PodIP)
+
+	var pod *corev1.Pod
+	if useAttestation {
+		pod, err = s.attestByConnTuple(r, clientIPAddr, clientPortStr)
+		if err != nil {
+			pkghttp.RespondErrorf(w, r, http.StatusForbidden, "kernel attestation failed: %w", err)
+			return nil, nil, fmt.Errorf("kernel attestation failed: %w", err)
 		}
-		const format = "error looking up pod by ip address: %w"
-		pkghttp.RespondErrorf(w, r, retry.HTTPStatusCode(err), format, err)
-		return nil, nil, fmt.Errorf(format, err)
+	} else {
+		pod, err = s.lookupPodByIP(r.Context(), clientIP)
+		if err != nil {
+			const format = "error looking up pod by ip address: %w"
+			pkghttp.RespondErrorf(w, r, retry.HTTPStatusCode(err), format, err)
+			return nil, nil, fmt.Errorf(format, err)
+		}
 	}
 
-	// update context, logger and request
+	return s.assignPodServiceAccount(r, pod)
+}
+
+// assignPodServiceAccount stores the resolved pod's ServiceAccount reference
+// on the request context and enriches the logger. Shared between the
+// attestation and source-IP resolution paths.
+func (s *Server) assignPodServiceAccount(r *http.Request, pod *corev1.Pod) (*serviceaccounts.Reference, *http.Request, error) {
 	saRef := serviceaccounts.ReferenceFromPod(pod)
 	ctx := context.WithValue(r.Context(), podServiceAccountReferenceContextKey{}, saRef)
-	l = l.WithField("pod", logrus.Fields{
+	l := logging.FromRequest(r).WithField("pod", logrus.Fields{
 		"name":                 pod.Name,
 		"namespace":            pod.Namespace,
 		"service_account_name": pod.Spec.ServiceAccountName,
 	})
 	r = logging.IntoRequest(r.WithContext(ctx), l)
-
 	return saRef, r, nil
 }
 
-// getNodeServiceAccountReference retrieves the reference of the ServiceAccount that should
-// be used by the Node, but only if the client IP address is the same as the Node's IP address.
-// If there's an error this function sends the response to the client.
-func (s *Server) getNodeServiceAccountReference(w http.ResponseWriter,
-	r *http.Request, clientIP string) (*serviceaccounts.Reference, *http.Request, error) {
+// isHostSourceIP reports whether clientIP looks like a connection from the
+// host's network namespace rather than from a pod-network IP. hostNetwork
+// pods share their node's network stack, so the kernel-chosen source IP for
+// their connections to the daemon is whatever the route picks: the node IP
+// (when the listener is on a node-IP-reachable address), the lo-bound
+// link-local 169.254.169.254 (Loopback mode), or 127.0.0.1 (when an operator
+// points GCE_METADATA_HOST at loopback). None of these are pod-network IPs,
+// so this distinguishes hostNetwork from non-hostNetwork callers reliably
+// enough for routing-mode dispatch.
+func isHostSourceIP(clientIP netip.Addr, podIP string) bool {
+	if clientIP.IsLoopback() || clientIP.IsLinkLocalUnicast() {
+		return true
+	}
+	if pip, err := netip.ParseAddr(podIP); err == nil && clientIP == pip {
+		return true
+	}
+	return false
+}
 
-	// check if client ip matches the current node's ip
-	if clientIP != s.opts.PodIP {
-		const format = "client ip address does not match any pods running on the node %s: %s"
-		pkghttp.RespondErrorf(w, r, http.StatusForbidden, format, s.opts.NodeName, clientIP)
-		return nil, nil, fmt.Errorf(format, s.opts.NodeName, clientIP)
+// attestByConnTuple resolves the connecting process to its pod via the
+// configured kernel-attestation lookuper (BPF sockops map in eBPF mode,
+// netlink SOCK_DIAG + /proc walk in Loopback/None) and a UID-based pod
+// lookup. Any failure is returned to the caller; there is no fallback by
+// design — each (routing mode, pod kind) has exactly one resolution
+// strategy.
+func (s *Server) attestByConnTuple(r *http.Request, clientIP netip.Addr, clientPortStr string) (*corev1.Pod, error) {
+	if s.opts.Attestation == nil {
+		return nil, errors.New("attestation lookuper not configured for this routing mode")
 	}
 
-	// get current node
-	node, err := s.getCurrentNode(r.Context())
+	clientPort, err := strconv.ParseUint(clientPortStr, 10, 16)
 	if err != nil {
-		const format = "error getting current node: %w"
-		pkghttp.RespondErrorf(w, r, retry.HTTPStatusCode(err), format, err)
-		return nil, nil, fmt.Errorf(format, err)
+		return nil, fmt.Errorf("parsing client port %q: %w", clientPortStr, err)
 	}
 
-	// get node service account reference
-	saRef := serviceaccounts.ReferenceFromNode(node)
-	if saRef == nil {
-		const format = "node does not have the service account annotations/labels: %s"
-		pkghttp.RespondErrorf(w, r, http.StatusForbidden, format, s.opts.NodeName)
-		return nil, nil, fmt.Errorf(format, s.opts.NodeName)
+	// Use the kernel-chosen LocalAddr of this connection as the destination
+	// of the 4-tuple lookup. This is what the kernel saw when it accepted
+	// the connection, so it matches what sockops recorded (eBPF mode) and
+	// what netlink SOCK_DIAG sees in the live socket table (Loopback/None).
+	// PodIP plus a configured port wouldn't work on Loopback mode where the
+	// listener is on 169.254.169.254:80, not on PodIP.
+	local := LocalAddrFromRequest(r)
+	if local == nil {
+		return nil, errors.New("local addr not captured for this connection")
+	}
+	dstIP, ok := netip.AddrFromSlice(local.IP.To4())
+	if !ok {
+		return nil, fmt.Errorf("local addr %v is not an IPv4 address", local.IP)
 	}
 
-	// update context, logger and request
-	ctx := context.WithValue(r.Context(), podServiceAccountReferenceContextKey{}, saRef)
-	l := logging.FromRequest(r).WithField("node", logrus.Fields{
-		"name": s.opts.NodeName,
-		"service_account": logrus.Fields{
-			"name":      saRef.Name,
-			"namespace": saRef.Namespace,
-		},
-	})
-	r = logging.IntoRequest(r.WithContext(ctx), l)
+	uid, err := s.opts.Attestation.Lookup(clientIP, dstIP.Unmap(), uint16(clientPort), uint16(local.Port))
+	if err != nil {
+		return nil, fmt.Errorf("attestation lookup: %w", err)
+	}
 
-	return saRef, r, nil
+	pod, err := s.opts.Pods.GetByUID(r.Context(), uid)
+	if err != nil {
+		return nil, fmt.Errorf("getting pod with uid %s: %w", uid, err)
+	}
+	return pod, nil
 }
 
 func (s *Server) lookupPodByIP(ctx context.Context, clientIP string) (*corev1.Pod, error) {
@@ -242,22 +290,4 @@ func (s *Server) lookupPodByIP(ctx context.Context, clientIP string) (*corev1.Po
 	})
 
 	return pod, err
-}
-
-func (s *Server) getCurrentNode(ctx context.Context) (*corev1.Node, error) {
-	getNodeFailures := s.metrics.getNodeFailures
-
-	var node *corev1.Node
-	err := retry.Do(ctx, retry.Operation{
-		Description:    "get the current node",
-		FailureCounter: getNodeFailures,
-		Func: func() error {
-			var err error
-			node, err = s.opts.Node.Get(ctx)
-			return err
-		},
-		IsRetryable: func(error) bool { return true },
-	})
-
-	return node, err
 }

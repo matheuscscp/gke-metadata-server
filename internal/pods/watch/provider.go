@@ -17,6 +17,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	informersv1 "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
@@ -47,7 +48,10 @@ type (
 	}
 )
 
-const ipIndex = "ip"
+const (
+	ipIndex  = "ip"
+	uidIndex = "uid"
+)
 
 func NewProvider(opts ProviderOptions) *Provider {
 	numPods := metrics.NewCachedPodsGauge()
@@ -61,17 +65,27 @@ func NewProvider(opts ProviderOptions) *Provider {
 		opts.ResyncPeriod,
 		cache.Indexers{
 			ipIndex: func(obj any) ([]string, error) {
-				if podIP := obj.(*corev1.Pod).Status.PodIP; podIP != "" {
+				pod := obj.(*corev1.Pod)
+				// hostNetwork pods share the node IP, so indexing them by IP
+				// would make GetByIP return ambiguous results. They are
+				// resolved by UID via kernel attestation instead.
+				if pod.Spec.HostNetwork {
+					return nil, nil
+				}
+				if podIP := pod.Status.PodIP; podIP != "" {
 					return []string{podIP}, nil
+				}
+				return nil, nil
+			},
+			uidIndex: func(obj any) ([]string, error) {
+				if uid := string(obj.(*corev1.Pod).UID); uid != "" {
+					return []string{uid}, nil
 				}
 				return nil, nil
 			},
 		},
 		func(lo *metav1.ListOptions) {
-			lo.FieldSelector = strings.Join([]string{
-				"spec.nodeName=" + opts.NodeName,
-				"spec.hostNetwork=false",
-			}, ",")
+			lo.FieldSelector = "spec.nodeName=" + opts.NodeName
 		},
 	)
 
@@ -125,6 +139,54 @@ func (p *Provider) GetByIP(ctx context.Context, ipAddr string) (*corev1.Pod, err
 	}
 	p.cacheMisses.Inc()
 	return pod, nil
+}
+
+func (p *Provider) GetByUID(ctx context.Context, uid string) (*corev1.Pod, error) {
+	pod, err := p.getByUID(uid)
+	if err == nil {
+		return pod, nil
+	}
+	if p.opts.FallbackSource == nil {
+		return nil, fmt.Errorf("error getting pod with uid %s from cache: %w", uid, err)
+	}
+
+	logging.
+		FromContext(ctx).
+		WithError(err).
+		WithField("pod_uid", uid).
+		Error("error getting pod by uid from cache, delegating request to fallback source")
+
+	pod, err = p.opts.FallbackSource.GetByUID(ctx, uid)
+	if err != nil {
+		return nil, err
+	}
+	p.cacheMisses.Inc()
+	return pod, nil
+}
+
+func (p *Provider) getByUID(uid string) (*corev1.Pod, error) {
+	list, err := p.informer.GetIndexer().Index(uidIndex, &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{UID: types.UID(uid)},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("cache: error listing pods in the node matching uid %s: %w", uid, err)
+	}
+	list = pods.FilterPods(list)
+
+	if n := len(list); n != 1 {
+		if n == 0 {
+			return nil, fmt.Errorf("cache: no pods found in the node matching uid %s", uid)
+		}
+		refs := make([]string, n)
+		for i, v := range list {
+			pod := v.(*corev1.Pod)
+			refs[i] = fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
+		}
+		return nil, fmt.Errorf("cache: multiple pods found in the node matching uid %s (%v pods): %s",
+			uid, n, strings.Join(refs, ", "))
+	}
+
+	return list[0].(*corev1.Pod), nil
 }
 
 func (p *Provider) getByIP(ipAddr string) (*corev1.Pod, error) {

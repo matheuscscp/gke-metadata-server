@@ -90,18 +90,22 @@ func TestEndToEnd(t *testing.T) {
 			name:           "timoni with watch",
 			emulatorValues: "timoni.cue",
 			pods: []pod{
+				// Each (routing mode, pod kind) combination has exactly one
+				// dedicated test pod, pinned to the node with the matching
+				// routing mode, so every supported attestation path is
+				// exercised deterministically.
 				{
 					name:               "test-impersonation",
 					serviceAccountName: "test-impersonated",
 					nodeSelector: map[string]string{
-						"hasRoutingMode": "true",
+						"node.gke-metadata-server.matheuscscp.io/routingMode": "eBPF",
 					},
 				},
 				{
 					name:               "test-direct-access",
 					serviceAccountName: "test",
 					nodeSelector: map[string]string{
-						"hasRoutingMode": "true",
+						"node.gke-metadata-server.matheuscscp.io/routingMode": "eBPF",
 					},
 				},
 				{
@@ -109,7 +113,7 @@ func TestEndToEnd(t *testing.T) {
 					file:               "pod-gcloud.yaml",
 					serviceAccountName: "test",
 					nodeSelector: map[string]string{
-						"hasRoutingMode": "true",
+						"node.gke-metadata-server.matheuscscp.io/routingMode": "eBPF",
 					},
 				},
 				{
@@ -126,24 +130,45 @@ func TestEndToEnd(t *testing.T) {
 						"node.gke-metadata-server.matheuscscp.io/routingMode": "None",
 					},
 				},
-				// for host network pods the service account is retrieved from the node
+				// hostNetwork pods on each routing mode. The eBPF case exercises
+				// the BPF sockops attestation map; Loopback and None exercise
+				// the netlink SOCK_DIAG + /proc walk fallback.
 				{
-					name:               "test-host-network",
-					serviceAccountName: "",
+					name:               "test-host-network-ebpf",
+					serviceAccountName: "test-impersonated",
 					hostNetwork:        true,
 					nodeSelector: map[string]string{
-						"hasRoutingMode":    "true",
-						"hasServiceAccount": "true",
+						"node.gke-metadata-server.matheuscscp.io/routingMode": "eBPF",
+					},
+				},
+				// Second hostNetwork pod on the SAME eBPF node bound to a
+				// different ServiceAccount. Both share the node IP, so the
+				// pre-attestation source-IP path would have collapsed them to
+				// a single identity. Both succeeding concurrently with their
+				// own SAs is the canonical proof that kernel attestation
+				// disambiguates hostNetwork pods.
+				{
+					name:               "test-host-network-ebpf-disambig",
+					serviceAccountName: "test",
+					hostNetwork:        true,
+					nodeSelector: map[string]string{
+						"node.gke-metadata-server.matheuscscp.io/routingMode": "eBPF",
 					},
 				},
 				{
-					name:               "test-host-network-on-node-without-service-account",
-					serviceAccountName: "",
+					name:               "test-host-network-loopback",
+					serviceAccountName: "test-impersonated",
 					hostNetwork:        true,
-					expectedExitCode:   1,
 					nodeSelector: map[string]string{
-						"hasRoutingMode":    "true",
-						"hasServiceAccount": "false",
+						"node.gke-metadata-server.matheuscscp.io/routingMode": "Loopback",
+					},
+				},
+				{
+					name:               "test-host-network-none",
+					serviceAccountName: "test-impersonated",
+					hostNetwork:        true,
+					nodeSelector: map[string]string{
+						"node.gke-metadata-server.matheuscscp.io/routingMode": "None",
 					},
 				},
 			},
@@ -335,7 +360,6 @@ func applyPods(t *testing.T, pods []pod) {
 		var noneRoutingEnv string
 		if p.nodeSelector["node.gke-metadata-server.matheuscscp.io/routingMode"] == "None" {
 			noneRoutingEnv = `
-    env:
     - name: HOST_IP
       valueFrom:
         fieldRef:
@@ -347,8 +371,16 @@ func applyPods(t *testing.T, pods []pod) {
     - name: GCE_METADATA_ROOT
       value: "$(HOST_IP):$(GKE_METADATA_SERVER_PORT)"
     - name: GCE_METADATA_IP
-      value: "$(HOST_IP):$(GKE_METADATA_SERVER_PORT)"
-`
+      value: "$(HOST_IP):$(GKE_METADATA_SERVER_PORT)"`
+		}
+		// On pods pinned to eBPF nodes, signal that the daemon's --test-proxy-upstream
+		// marker server is reachable so TestProxyPassthrough can issue a hard
+		// assertion rather than skipping. Pods not pinned to eBPF skip the test.
+		var ebpfEnv string
+		if p.nodeSelector["node.gke-metadata-server.matheuscscp.io/routingMode"] == "eBPF" {
+			ebpfEnv = `
+    - name: EXPECT_PROXY_UPSTREAM
+      value: "true"`
 		}
 		var nodeSelector string
 		if len(p.nodeSelector) > 0 {
@@ -364,7 +396,7 @@ func applyPods(t *testing.T, pods []pod) {
 		pod = strings.ReplaceAll(pod, "<SERVICE_ACCOUNT>", serviceAccountName)
 		pod = strings.ReplaceAll(pod, "<HOST_NETWORK>", fmt.Sprint(p.hostNetwork))
 		pod = strings.ReplaceAll(pod, "<GO_TEST_DIGEST>", fmt.Sprint(goTestDigest))
-		pod = strings.ReplaceAll(pod, "<NONE_ROUTING_ENV>", noneRoutingEnv)
+		pod = strings.ReplaceAll(pod, "<EXTRA_ENV>", noneRoutingEnv+ebpfEnv)
 		pod = strings.ReplaceAll(pod, "<NODE_SELECTOR>", nodeSelector)
 
 		// apply

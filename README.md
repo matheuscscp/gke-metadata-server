@@ -235,6 +235,12 @@ In this routing mode the emulator hooks an eBPF program to the `connect()` sysca
 The eBPF program looks at the destination address and, if it matches the hard-coded
 address mentioned above, modifies the address to the actual address of the emulator.
 
+This mode also attaches a `cgroup/sock_ops` program that records the cgroup ID
+of every TCP-connecting task into a 4-tuple-keyed map at `TCP_CONNECT_CB`. The
+emulator consults that map for hostNetwork pod requests and resolves the cgroup
+ID to a pod UID by walking `/sys/fs/cgroup`, giving hostNetwork pods per-pod
+identity (see [Pods running on the host network](#pods-running-on-the-host-network)).
+
 This mode may have conflicts with other eBPF-based tools running in the cluster.
 It works well with a default installation of Cilium, but if you are using Cilium
 to replace `kube-proxy`
@@ -347,52 +353,72 @@ docs [here](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-to
 
 ### Limitations and Security Risks
 
-#### Pod identification by IP address
+#### Pod identification
 
-The emulator uses the client IP address reported in the HTTP request to uniquely identify
-the requesting Pod in the Kubernetes API (just like in the native GKE implementation).
+The strategy is picked per request by `(routing mode, pod kind)`. There is
+no fallback between strategies — each combination has exactly one path.
 
-If an attacker can easily perform IP address impersonation attacks in your cluster, e.g.
-[ARP spoofing](https://cloud.hacktricks.xyz/pentesting-cloud/kubernetes-security/kubernetes-network-attacks),
-then they will most likely exploit this design choice to steal your credentials.
-**Please evaluate the risk of such attacks in your cluster before choosing this tool.**
+| routing mode | non-hostNetwork pod | hostNetwork pod |
+|---|---|---|
+| `eBPF` | kernel attestation (sockops 4-tuple → cgroup ID → pod UID) | same |
+| `Loopback` | source IP → `GetByIP` (node-scoped) | netlink SOCK_DIAG → `/proc/<pid>/cgroup` → pod UID |
+| `None` | source IP → `GetByIP` (node-scoped) | netlink SOCK_DIAG → `/proc/<pid>/cgroup` → pod UID |
 
-*(Please also note that the attack explained in the link above requires Pods configured
-with very high privileges, which should normally not be allowed in sensitive/production
-clusters. If the security of your cluster is really important, then you should be
-[enforcing restrictions](https://github.com/open-policy-agent/gatekeeper) for preventing
-Pods from being created with such high privileges in the majority of cases.)*
+In `eBPF` mode every pod is identified by **kernel attestation** — the
+source IP is not consulted at all. In `Loopback` and `None` modes, regular
+pods are identified by their source IP (pod IPs are unique within a Node
+and `GetByIP` is node-scoped, so this is sound), while hostNetwork pods —
+which share the Node's IP — fall back to the netlink-based attestation
+chain. See the [host-network section](#pods-running-on-the-host-network)
+below for the kernel-attestation details.
+
+The trust root for source IP is the kernel's report on the TCP connection
+— never any HTTP-level header (e.g. `X-Forwarded-For`).
+
+If an attacker can perform source-IP impersonation in your cluster (e.g.
+[ARP spoofing](https://cloud.hacktricks.xyz/pentesting-cloud/kubernetes-security/kubernetes-network-attacks)),
+the source-IP strategy used by `Loopback`/`None` for non-hostNetwork pods
+can be exploited to steal credentials. **Please evaluate the risk of such
+attacks in your cluster before choosing this tool.** The attack referenced
+typically requires Pods running with very high privileges, which should
+normally be blocked in production clusters via PSA, [Gatekeeper](https://github.com/open-policy-agent/gatekeeper)
+or equivalent policy. The kernel-attestation paths (`eBPF` for any pod,
+netlink for hostNetwork pods) do not depend on source IP and are not
+affected by ARP spoofing.
 
 #### Pods running on the host network
 
-In a cluster there may also be Pods running on the *host network*, i.e. Pods with the
-field `spec.hostNetwork` set to `true`. Such Pods share the IP address of the Node
-where they are running on, i.e *their IP is not unique*, and therefore they cannot be
-uniquely identified by the emulator through the client IP address reported in the HTTP
-request (like mentioned in the previous section).
+Pods with `spec.hostNetwork: true` share the Node's IP address, so the
+source IP the emulator sees on the connection is not unique to the pod.
+Both routing-mode-specific kernel-attestation paths are described below;
+the `eBPF` chain is the same path used for *every* pod in `eBPF` mode
+(non-hostNetwork pods are also resolved through it), and the netlink
+chain is only used for hostNetwork pods in `Loopback` and `None` modes.
 
-If your use case requires, Pods running on the host network are allowed to use a
-***shared*** Kubernetes ServiceAccount configured through the following pair of
-annotations or labels on the Node:
+- In `eBPF` routing mode, a `cgroup/sock_ops` BPF program records the
+  connecting task's cgroup ID into a 4-tuple-keyed map at TCP connect time.
+  The emulator looks up the 4-tuple from the accepted connection, walks
+  `/sys/fs/cgroup` to find the matching directory, and extracts the pod UID
+  from the kubelet's `pod<UID>` cgroup naming convention.
+- In `Loopback` and `None` routing modes, the emulator queries the host's
+  socket table via `NETLINK_SOCK_DIAG` to resolve the 4-tuple to its socket
+  inode, walks `/proc/<pid>/fd` to find the owning PID, then reads
+  `/proc/<pid>/cgroup` for the same `pod<UID>` extraction.
 
-```yaml
-node.gke-metadata-server.matheuscscp.io/serviceAccountName: <name>
-node.gke-metadata-server.matheuscscp.io/serviceAccountNamespace: <namespace>
-```
+Both paths produce a kubernetes pod UID without trusting source IP or any
+HTTP-level information. The pod's regular ServiceAccount (configured via
+`spec.serviceAccountName`) is then used; there is **no** node-level shared
+ServiceAccount.
 
-Annotations are preferred over labels because they are less impactful to etcd since
-they are not indexed. Labels are also supported because not all Kubernetes providers
-support configuring annotations on Node pools/groups. KinD, for example, does not
-(see [testdata/kind.yaml](./testdata/kind.yaml)).
+Hard requirements: a Linux kernel with cgroup v2 unified hierarchy and BPF
+cgroup-hook support (in practice any kernel from the last few years —
+`bpf_get_current_cgroup_id` has been available since 4.18). No specific CNI
+is required; Cilium is what the project's kind test setup happens to use,
+not a runtime dependency.
 
-Remember to add appropriate Node selectors/tolerations to your Pods so they are
-scheduled on the Nodes where the shared ServiceAccount is configured. There are
-many different ways to achieve this depending on your use case, so please refer
-to the Kubernetes documentation for more information.
-
-*Be careful when sharing identities between too many workloads! Please assess
-your security requirements and the risks of sharing identities between workloads
-in your cluster.*
+Sandboxed container runtimes (gVisor, Kata) are unsupported because their
+userspace kernels are not visible to host BPF programs and not represented
+in the host's `/proc`.
 
 #### Token Cache
 

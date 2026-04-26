@@ -7,4 +7,5 @@ terraform.*
 Chart.yaml
 config.cue
 internal/redirect/redirect_bpf*
+internal/attestation/bpf/attest_bpf*
 ebpf/vmlinux.h

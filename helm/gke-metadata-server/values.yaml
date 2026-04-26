@@ -35,6 +35,11 @@ config:
     maxAttempts: 3 # Maximum number of attempts to try looking up a pod by the client connection IP address.
     retryInitialDelay: 1s # Initial delay for retrying pod lookups upon failures.
     retryMaxDelay: 30s # Maximum delay for retrying pod lookups upon failures.
+  # testProxyUpstream is a TEST-ONLY flag. When true, in eBPF routing mode the
+  # daemon binds 169.254.169.254 to lo and serves a marker on port 80 to allow
+  # the project's e2e suite to assert the proxy-passthrough chain is wired up.
+  # Has no effect outside eBPF mode. Do not enable in production.
+  testProxyUpstream: false
 
 podAnnotations: {}
   # Optionally, configure Prometheus to scrape the server:

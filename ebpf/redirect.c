@@ -12,7 +12,7 @@
 #define AF_INET 2
 
 struct Config {
-	__u32 emulator_pid;
+	__u64 emulator_cgroup_id;
 	__u32 emulator_ip;
 	__u16 emulator_port;
 	__u16 debug;
@@ -38,11 +38,8 @@ int redirect_connect4(struct bpf_sock_addr *ctx) {
 	const __u32 dst_port = bpf_ntohs(ctx->user_port);
 
 	// 0xA9FEA9FE is 169.254.169.254, the GKE Metadata Server IP address.
-	// 0xA9FEC4F5 is 169.254.196.245, the IP address we chose for
-	// self-discovery of the emulator PID, and 12345 is the port.
-	// If the connection is not targeting either of these addresses,
-	// do nothing, just allow it.
-	if (!(dst == 0xA9FEA9FE && dst_port == 80) && !(dst == 0xA9FEC4F5 && dst_port == 12345)) {
+	// If the connection is not targeting that address on port 80, do nothing.
+	if (dst != 0xA9FEA9FE || dst_port != 80) {
 		return 1;
 	}
 
@@ -55,28 +52,14 @@ int redirect_connect4(struct bpf_sock_addr *ctx) {
 		return 1;
 	}
 
-	// Get the PID of the current process.
-	const __u64 pid_tgid = bpf_get_current_pid_tgid();
-	const __u32 pid = pid_tgid >> 32;
-
-	// If the emulator PID is 0 and the connection is targeting the self-discovery
-	// address, store the current PID as the emulator PID and block the connection.
-	if (conf->emulator_pid == 0) {
-		if (dst == 0xA9FEC4F5 && dst_port == 12345) {
-			conf->emulator_pid = pid;
-			if (conf->debug) {
-				bpf_printk("Discovered emulator PID: %d", pid);
-			}
-			return 0; // Block the connection.
-		}
-		bpf_printk("Error: redirect_connect4 called before emulator PID discovery");
-		return 1;
-	}
-
-	// If the connection is coming from the emulator process, allow it without redirection.
-	if (pid == conf->emulator_pid) {
+	// If the connection is coming from the emulator's cgroup, allow it
+	// without redirection. The cgroup ID is set by userspace at startup
+	// from the inode of the daemon's own cgroup directory; it is
+	// kernel-attested and stable for the lifetime of the daemon's pod.
+	const __u64 cgid = bpf_get_current_cgroup_id();
+	if (cgid == conf->emulator_cgroup_id) {
 		if (conf->debug) {
-			bpf_printk("Not redirecting connection from emulator process (PID: %d)", pid);
+			bpf_printk("Not redirecting connection from emulator cgroup (id: %llu)", cgid);
 		}
 		return 1;
 	}
