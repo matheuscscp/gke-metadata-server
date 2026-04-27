@@ -1,4 +1,4 @@
-## GA is coming soon!
+## GA is here!
 
 Please [check it out](https://github.com/matheuscscp/gke-metadata-server/discussions/460)!
 
