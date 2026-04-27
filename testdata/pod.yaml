@@ -55,7 +55,8 @@ spec:
   dnsPolicy: ClusterFirstWithHostNet
   containers:
   - name: test
-    image: ghcr.io/matheuscscp/gke-metadata-server/test@<GO_TEST_DIGEST>
+    image: <LOCAL_IMAGE>:<LOCAL_TAG_GOTEST>
+    imagePullPolicy: Never
     env:
     # POD_NAME is exposed via the downward API because hostNetwork pods
     # share the host's UTS namespace — their HOSTNAME is the node name,

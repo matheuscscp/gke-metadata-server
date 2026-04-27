@@ -12,13 +12,26 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  pull-request:
+  e2e:
+    # Matrix axis: which CNI / Cilium configuration the kind cluster runs.
+    # cilium-default is the historical setup; cilium-kpr exercises Cilium's
+    # kube-proxy-replacement (validates multi-attach coexistence with our
+    # cgroup/connect4 redirect program); kindnet validates the README's "no
+    # specific CNI required" claim by running on kind's default CNI.
+    #
+    # The aggregator job below is the one wired up to branch protection as
+    # the required `pull-request` status check; this matrix job is what
+    # actually runs the work.
+    strategy:
+      fail-fast: false
+      matrix:
+        cni: [cilium-default, cilium-kpr, kindnet]
+    name: e2e (${{ matrix.cni }})
     runs-on: ubuntu-latest
     environment: pull-request
     permissions:
       contents: read
       id-token: write
-      packages: write
       pull-requests: write
 
     steps:
@@ -66,8 +79,30 @@ jobs:
         if [ -n "$TOOLS_DIR" ]; then
           sudo ln -sfn "$TOOLS_DIR" "/usr/lib/linux-tools/$(uname -r)"
         fi
-    - name: Set version
-      run: echo "100.0.0-ci" > version.txt
-    - run: make gen-ebpf ci-cluster build build-go-test ci-test
+    # Pipeline order is intentional:
+    #   ci-cluster (kind + GCP provider) → build (local docker image, ~30-60s,
+    #   acts as the GCP-propagation buffer) → build-go-test (same) →
+    #   kind-load-images → ci-test. Container images are built locally and
+    #   loaded into kind's containerd; nothing is pushed to a registry for
+    #   PR validation.
+    - run: make gen-ebpf ci-cluster build build-go-test kind-load-images ci-test
       env:
         PLATFORMS: linux/amd64
+        CNI: ${{ matrix.cni }}
+
+  # Aggregator wired up as the required `pull-request` status check in branch
+  # protection. Runs after every matrix entry regardless of their outcome
+  # (`if: always()`) and fails iff any matrix entry didn't succeed. This way
+  # the required-checks list stays a single name independent of how many CNI
+  # configurations the matrix grows to.
+  pull-request:
+    needs: e2e
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+    - name: Verify all matrix entries succeeded
+      run: |
+        if [ "${{ needs.e2e.result }}" != "success" ]; then
+          echo "e2e matrix result: ${{ needs.e2e.result }}"
+          exit 1
+        fi

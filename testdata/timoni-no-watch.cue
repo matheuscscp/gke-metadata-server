@@ -14,6 +14,7 @@ values: settings: {
 }
 
 values: image: {
-	repository: "ghcr.io/matheuscscp/gke-metadata-server/test"
-	digest:     "<CONTAINER_DIGEST>"
+	repository: "<LOCAL_IMAGE>"
+	tag:        "<LOCAL_TAG_DAEMON>"
+	pullPolicy: "Never"
 }

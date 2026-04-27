@@ -241,13 +241,15 @@ emulator consults that map for hostNetwork pod requests and resolves the cgroup
 ID to a pod UID by walking `/sys/fs/cgroup`, giving hostNetwork pods per-pod
 identity (see [Pods running on the host network](#pods-running-on-the-host-network)).
 
-This mode may have conflicts with other eBPF-based tools running in the cluster.
-It works well with a default installation of Cilium, but if you are using Cilium
-to replace `kube-proxy`
-([docs](https://docs.cilium.io/en/stable/network/kubernetes/kubeproxy-free/))
-then this mode will have a direct conflict with your setup, since for this Cilium
-feature to work it needs to hook to many additional points, including the `connect()`
-syscall.
+This mode coexists with other eBPF tools that attach to `cgroup/connect4` —
+notably Cilium, including with [`kubeProxyReplacement`](https://docs.cilium.io/en/stable/network/kubernetes/kubeproxy-free/)
+enabled (which makes Cilium attach its own `cgroup/connect4` for service-VIP
+redirection). Both programs are loaded under the same hook via the kernel's
+multi-attach API (`BPF_LINK_CREATE`), and act on disjoint destinations:
+Cilium rewrites ClusterIP-range destinations, this emulator rewrites
+`169.254.169.254:80` only. Either ordering between the two programs
+produces the same result. CI validates this coexistence on every PR
+(`e2e (cilium-kpr)` matrix entry).
 
 The advantage of this mode is that the emulator can bind to any port, not just port 80.
 This is because we modify the destination address of connections targeting our endpoint
@@ -412,9 +414,12 @@ ServiceAccount.
 
 Hard requirements: a Linux kernel with cgroup v2 unified hierarchy and BPF
 cgroup-hook support (in practice any kernel from the last few years —
-`bpf_get_current_cgroup_id` has been available since 4.18). No specific CNI
-is required; Cilium is what the project's kind test setup happens to use,
-not a runtime dependency.
+`bpf_get_current_cgroup_id` has been available since 4.18). No specific
+CNI is required. CI exercises three configurations on every PR:
+`cilium-default` (Cilium 1.19.x with default values), `cilium-kpr` (Cilium
+with `kubeProxyReplacement=true`, which makes Cilium attach its own
+`cgroup/connect4` program alongside ours), and `kindnet` (kind's default
+CNI, no Cilium).
 
 Sandboxed container runtimes (gVisor, Kata) are unsupported because their
 userspace kernels are not visible to host BPF programs and not represented
