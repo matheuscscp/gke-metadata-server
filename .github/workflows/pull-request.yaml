@@ -7,13 +7,32 @@ on:
   pull_request:
   workflow_dispatch:
 
-permissions: {}
+permissions:
+  statuses: write
 
 concurrency:
   group: continuous-integration # lock for shared CI resources
   cancel-in-progress: false
 
 jobs:
+  # Post a pending commit status so that workflow_dispatch runs (used by the
+  # upgrade workflows to trigger CI on bot-created PR branches) show up as a
+  # check on the PR. Default GITHUB_TOKEN-created PRs do not auto-fire
+  # workflows, so we dispatch manually and surface results via the statuses
+  # API.
+  e2e-pending:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Set pending status on PR
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        gh api "repos/${{ github.repository }}/statuses/${{ github.sha }}" \
+          -f state=pending \
+          -f context="pull-request" \
+          -f description="End-to-end tests running" \
+          -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
   e2e:
     # Matrix axis: which CNI / Cilium configuration the kind cluster runs.
     # cilium-default is the historical setup; cilium-kpr exercises Cilium's
@@ -98,13 +117,26 @@ jobs:
   # the required-checks list stays a single name independent of how many CNI
   # configurations the matrix grows to.
   pull-request:
-    needs: e2e
+    needs: [e2e-pending, e2e]
     if: always()
     runs-on: ubuntu-latest
     steps:
-    - name: Verify all matrix entries succeeded
+    - name: Update status on PR
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        if [ "${{ needs.e2e.result }}" != "success" ]; then
-          echo "e2e matrix result: ${{ needs.e2e.result }}"
+        result="${{ needs.e2e.result }}"
+        if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
+          gh api "repos/${{ github.repository }}/statuses/${{ github.sha }}" \
+            -f state=failure \
+            -f context="pull-request" \
+            -f description="End-to-end tests failed" \
+            -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          echo "e2e matrix result: $result"
           exit 1
         fi
+        gh api "repos/${{ github.repository }}/statuses/${{ github.sha }}" \
+          -f state=success \
+          -f context="pull-request" \
+          -f description="End-to-end tests passed" \
+          -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
