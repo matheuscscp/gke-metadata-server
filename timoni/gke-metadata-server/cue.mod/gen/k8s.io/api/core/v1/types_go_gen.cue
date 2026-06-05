@@ -172,8 +172,7 @@ import (
 
 	// portworxVolume represents a portworx volume attached and mounted on kubelets host machine.
 	// Deprecated: PortworxVolume is deprecated. All operations for the in-tree portworxVolume type
-	// are redirected to the pxd.portworx.com CSI driver when the CSIMigrationPortworx feature-gate
-	// is on.
+	// are redirected to the pxd.portworx.com CSI driver.
 	// +optional
 	portworxVolume?: #PortworxVolumeSource @go(PortworxVolume,*PortworxVolumeSource) @protobuf(24,bytes,opt)
 
@@ -230,10 +229,9 @@ import (
 	// A failure to resolve or pull the image during pod startup will block containers from starting and may add significant latency. Failures will be retried using normal volume backoff and will be reported on the pod reason and message.
 	// The types of objects that may be mounted by this volume are defined by the container runtime implementation on a host machine and at minimum must include all valid types supported by the container image field.
 	// The OCI object gets mounted in a single directory (spec.containers[*].volumeMounts.mountPath) by merging the manifest layers in the same way as for container images.
-	// The volume will be mounted read-only (ro) and non-executable files (noexec).
+	// The volume will be mounted read-only (ro).
 	// Sub path mounts for containers are not supported (spec.containers[*].volumeMounts.subpath) before 1.33.
 	// The field spec.securityContext.fsGroupChangePolicy has no effect on this volume type.
-	// +featureGate=ImageVolume
 	// +optional
 	image?: #ImageVolumeSource @go(Image,*ImageVolumeSource) @protobuf(30,bytes,opt)
 }
@@ -359,8 +357,7 @@ import (
 
 	// portworxVolume represents a portworx volume attached and mounted on kubelets host machine.
 	// Deprecated: PortworxVolume is deprecated. All operations for the in-tree portworxVolume type
-	// are redirected to the pxd.portworx.com CSI driver when the CSIMigrationPortworx feature-gate
-	// is on.
+	// are redirected to the pxd.portworx.com CSI driver.
 	// +optional
 	portworxVolume?: #PortworxVolumeSource @go(PortworxVolume,*PortworxVolumeSource) @protobuf(18,bytes,opt)
 
@@ -719,7 +716,8 @@ import (
 	#PersistentVolumeClaimControllerResizeError |
 	#PersistentVolumeClaimNodeResizeError |
 	#PersistentVolumeClaimVolumeModifyVolumeError |
-	#PersistentVolumeClaimVolumeModifyingVolume
+	#PersistentVolumeClaimVolumeModifyingVolume |
+	#PersistentVolumeClaimUnused
 
 // PersistentVolumeClaimResizing - a user trigger resize of pvc has been started
 #PersistentVolumeClaimResizing: #PersistentVolumeClaimConditionType & "Resizing"
@@ -738,6 +736,17 @@ import (
 
 // Volume is being modified
 #PersistentVolumeClaimVolumeModifyingVolume: #PersistentVolumeClaimConditionType & "ModifyingVolume"
+
+// PersistentVolumeClaimUnused indicates whether the PVC is currently not in use by any Pod.
+// When status is True, the PVC is not referenced by any non-terminal Pod.
+// The lastTransitionTime indicates when the PVC last transitioned to being unused.
+//
+// Both in-use time and unused time duration indicated by this condition may be shorter or
+// slightly longer than actual in-use time or unused time because of processing delays or
+// when this feature was enabled in the cluster.
+//
+// Requires PersistentVolumeClaimUnusedSinceTime alpha featuregate
+#PersistentVolumeClaimUnused: #PersistentVolumeClaimConditionType & "Unused"
 
 // +enum
 // When a controller receives persistentvolume claim update with ClaimResourceStatus for a resource
@@ -3792,7 +3801,6 @@ import (
 	// AllocatedResources represents the compute resources allocated for this container by the
 	// node. Kubelet sets this value to Container.Resources.Requests upon successful pod admission
 	// and after successfully admitting desired pod resize.
-	// +featureGate=InPlacePodVerticalScalingAllocatedStatus
 	// +optional
 	allocatedResources?: #ResourceList @go(AllocatedResources) @protobuf(10,bytes,rep,casttype=ResourceList,castkey=ResourceName)
 
@@ -3859,6 +3867,8 @@ import (
 #ResourceHealthStatusUnhealthy: #ResourceHealthStatus & "Unhealthy"
 #ResourceHealthStatusUnknown:   #ResourceHealthStatus & "Unknown"
 
+#ResourceHealthMessageMaxLength: 1024
+
 // ResourceID is calculated based on the source of this resource health information.
 // For DevicePlugin:
 //
@@ -3887,6 +3897,12 @@ import (
 	//
 	// In future we may want to introduce the PermanentlyUnhealthy Status.
 	health?: #ResourceHealthStatus @go(Health) @protobuf(2,bytes)
+
+	// Message provides human-readable context for Health (e.g. "ECC error count exceeded threshold").
+	// This field is populated by the kubelet when ResourceHealthStatusMessage is enabled if the DRA plugin returns a message, and is null otherwise.
+	// +featureGate=ResourceHealthStatusMessage
+	// +optional
+	message?: string @go(Message,*string) @protobuf(6,bytes,opt)
 }
 
 // ContainerUser represents user identity information
@@ -4034,8 +4050,6 @@ import (
 	type: #PodConditionType @go(Type) @protobuf(1,bytes,opt,casttype=PodConditionType)
 
 	// If set, this represents the .metadata.generation that the pod condition was set based upon.
-	// The PodObservedGenerationTracking feature gate must be enabled to use this field.
-	// +featureGate=PodObservedGenerationTracking
 	// +optional
 	observedGeneration?: int64 @go(ObservedGeneration) @protobuf(7,varint,opt)
 
@@ -4095,6 +4109,30 @@ import (
 	// depending on the mount result.
 	// +optional
 	recursiveReadOnly?: #RecursiveReadOnlyMode @go(RecursiveReadOnly,*RecursiveReadOnlyMode) @protobuf(4,bytes,opt,casttype=RecursiveReadOnlyMode)
+
+	// volumeStatus represents volume-type-specific status about the mounted
+	// volume.
+	// +optional
+	volumeStatus?: #VolumeStatus @go(VolumeStatus,*VolumeStatus) @protobuf(5,bytes,opt)
+}
+
+// VolumeStatus represents the status of a mounted volume.
+// At most one of its members must be specified.
+#VolumeStatus: {
+	// image represents an OCI object (a container image or artifact) pulled and mounted on the kubelet's host machine.
+	// +featureGate=ImageVolumeWithDigest
+	// +optional
+	image?: #ImageVolumeStatus @go(Image,*ImageVolumeStatus) @protobuf(1,bytes,opt)
+}
+
+// ImageVolumeStatus represents the image-based volume status.
+#ImageVolumeStatus: {
+	// ImageRef is the digest of the image used for this volume.
+	// It should have a value that's similar to the pod's status.containerStatuses[i].imageID.
+	// The ImageRef length should not exceed 256 characters.
+	// +kubebuilder:validation:MaxLength=256
+	// +required
+	imageRef: string @go(ImageRef) @protobuf(1,bytes,opt)
 }
 
 // RestartPolicy describes how the container should be restarted.
@@ -4893,7 +4931,6 @@ import (
 	// When set to false, a new userns is created for the pod. Setting false is useful for
 	// mitigating container breakout vulnerabilities even allowing users to run their
 	// containers as root without actually having root privileges on the host.
-	// This field is alpha-level and is only honored by servers that enable the UserNamespacesSupport feature.
 	// +k8s:conversion-gen=false
 	// +optional
 	hostUsers?: bool @go(HostUsers,*bool) @protobuf(37,bytes,opt)
@@ -4959,17 +4996,22 @@ import (
 	// +optional
 	hostnameOverride?: string @go(HostnameOverride,*string) @protobuf(41,bytes,opt)
 
-	// WorkloadRef provides a reference to the Workload object that this Pod belongs to.
-	// This field is used by the scheduler to identify the PodGroup and apply the
-	// correct group scheduling policies. The Workload object referenced
-	// by this field may not exist at the time the Pod is created.
-	// This field is immutable, but a Workload object with the same name
-	// may be recreated with different policies. Doing this during pod scheduling
+	// SchedulingGroup provides a reference to the immediate scheduling runtime
+	// grouping object that this Pod belongs to.
+	// This field is used by the scheduler to identify the group and apply the
+	// correct group scheduling policies. The association with a group also
+	// impacts other lifecycle aspects of a Pod that are relevant in a wider context
+	// of scheduling like preemption, resource attachment, etc. If not specified,
+	// the Pod is treated as a single unit in all of these aspects.
+	// The group object referenced by this field may not exist at the time the
+	// Pod is created.
+	// This field is immutable, but a group object with the same name may be
+	// recreated with different policies. Doing this during pod scheduling
 	// may result in the placement not conforming to the expected policies.
 	//
 	// +featureGate=GenericWorkload
 	// +optional
-	workloadRef?: #WorkloadReference @go(WorkloadRef,*WorkloadReference) @protobuf(42,bytes,opt)
+	schedulingGroup?: #PodSchedulingGroup @go(SchedulingGroup,*PodSchedulingGroup) @protobuf(43,bytes,opt)
 }
 
 // PodResourceClaim references exactly one ResourceClaim, either directly
@@ -4978,6 +5020,14 @@ import (
 //
 // It adds a name to it that uniquely identifies the ResourceClaim inside the Pod.
 // Containers that need access to the ResourceClaim reference it with this name.
+//
+// When the DRAWorkloadResourceClaims feature gate is enabled and this Pod
+// belongs to a PodGroup, a PodResourceClaim is matched to a
+// PodGroupResourceClaim if all of their fields are equal (Name,
+// ResourceClaimName, and ResourceClaimTemplateName). A matched claim references
+// a single ResourceClaim shared across all Pods in the PodGroup, reserved for
+// the PodGroup in ResourceClaimStatus.ReservedFor rather than for individual
+// Pods.
 #PodResourceClaim: {
 	// Name uniquely identifies this resource claim inside the pod.
 	// This must be a DNS_LABEL.
@@ -4999,6 +5049,16 @@ import (
 	// generated component, will be used to form a unique name for the
 	// ResourceClaim, which will be recorded in pod.status.resourceClaimStatuses.
 	//
+	// When the DRAWorkloadResourceClaims feature gate is enabled and the pod
+	// belongs to a PodGroup that defines a PodGroupResourceClaim with the same
+	// Name and ResourceClaimTemplateName, this PodResourceClaim resolves to the
+	// ResourceClaim generated for the PodGroup. All pods in the group that
+	// define an equivalent PodResourceClaim matching the
+	// PodGroupResourceClaim's Name and ResourceClaimTemplateName share the same
+	// generated ResourceClaim. ResourceClaims generated for a PodGroup are
+	// owned by the PodGroup and their lifecycles are tied to the PodGroup
+	// instead of any individual pod.
+	//
 	// This field is immutable and no changes will be made to the
 	// corresponding ResourceClaim by the control plane after creating the
 	// ResourceClaim.
@@ -5018,9 +5078,16 @@ import (
 	name: string @go(Name) @protobuf(1,bytes)
 
 	// ResourceClaimName is the name of the ResourceClaim that was
-	// generated for the Pod in the namespace of the Pod. If this is
-	// unset, then generating a ResourceClaim was not necessary. The
-	// pod.spec.resourceClaims entry can be ignored in this case.
+	// generated for the Pod in the namespace of the Pod.
+	//
+	// When the DRAWorkloadResourceClaims feature is enabled and the
+	// corresponding PodResourceClaim matches a PodGroupResourceClaim
+	// made by the Pod's PodGroup, then this is the name of the
+	// ResourceClaim generated and reserved for the PodGroup.
+	//
+	// If this is unset, then generating a ResourceClaim was not
+	// necessary. The pod.spec.resourceClaims entry can be ignored in
+	// this case.
 	//
 	// +optional
 	resourceClaimName?: string @go(ResourceClaimName,*string) @protobuf(2,bytes,opt)
@@ -5079,34 +5146,18 @@ import (
 	name: string @go(Name) @protobuf(1,bytes,opt)
 }
 
-// WorkloadReference identifies the Workload object and PodGroup membership
-// that a Pod belongs to. The scheduler uses this information to apply
-// workload-aware scheduling semantics.
-#WorkloadReference: {
-	// Name defines the name of the Workload object this Pod belongs to.
-	// Workload must be in the same namespace as the Pod.
-	// If it doesn't match any existing Workload, the Pod will remain unschedulable
-	// until a Workload object is created and observed by the kube-scheduler.
-	// It must be a DNS subdomain.
-	//
-	// +required
-	name: string @go(Name) @protobuf(1,bytes,opt)
-
-	// PodGroup is the name of the PodGroup within the Workload that this Pod
-	// belongs to. If it doesn't match any existing PodGroup within the Workload,
-	// the Pod will remain unschedulable until the Workload object is recreated
-	// and observed by the kube-scheduler. It must be a DNS label.
-	//
-	// +required
-	podGroup: string @go(PodGroup) @protobuf(2,bytes,opt)
-
-	// PodGroupReplicaKey specifies the replica key of the PodGroup to which this
-	// Pod belongs. It is used to distinguish pods belonging to different replicas
-	// of the same pod group. The pod group policy is applied separately to each replica.
-	// When set, it must be a DNS label.
+// PodSchedulingGroup identifies the runtime scheduling group instance that a Pod belongs to.
+// The scheduler uses this information to apply workload-aware scheduling semantics.
+// Exactly one field must be specified.
+// +union
+#PodSchedulingGroup: {
+	// PodGroupName specifies the name of the standalone PodGroup object
+	// that represents the runtime instance of this group.
+	// Must be a DNS subdomain.
 	//
 	// +optional
-	podGroupReplicaKey?: string @go(PodGroupReplicaKey) @protobuf(3,bytes,opt)
+	// +oneOf=GroupSelection
+	podGroupName?: string @go(PodGroupName,*string) @protobuf(1,bytes,opt)
 }
 
 // +enum
@@ -5832,7 +5883,6 @@ import (
 #PodStatus: {
 	// If set, this represents the .metadata.generation that the pod status was set based upon.
 	// The PodObservedGenerationTracking feature gate must be enabled to use this field.
-	// +featureGate=PodObservedGenerationTracking
 	// +optional
 	observedGeneration?: int64 @go(ObservedGeneration) @protobuf(17,varint,opt)
 
@@ -6001,6 +6051,16 @@ import (
 	// +featureGate=InPlacePodLevelResourcesVerticalScaling
 	// +optional
 	resources?: #ResourceRequirements @go(Resources,*ResourceRequirements) @protobuf(20,bytes,opt)
+
+	// NodeAllocatableResourceClaimStatuses contains the status of node-allocatable resources
+	// that were allocated for this pod through DRA claims. This includes resources currently
+	// reported in v1.Node `status.allocatable` that are not extended resources
+	// (see https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#extended-resources).
+	// Examples include "cpu", "memory", "ephemeral-storage", and hugepages.
+	// +featureGate=DRANodeAllocatableResources
+	// +optional
+	// +listType=atomic
+	nodeAllocatableResourceClaimStatuses?: [...#NodeAllocatableResourceClaimStatus] @go(NodeAllocatableResourceClaimStatuses,[]NodeAllocatableResourceClaimStatus) @protobuf(21,bytes,rep)
 }
 
 // PodStatusResult is a wrapper for PodStatus returned by kubelet that can be encode/decoded
@@ -6107,18 +6167,18 @@ import (
 	// Defaults to 1.
 	// More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicationcontroller#what-is-a-replicationcontroller
 	// +optional
-	// +k8s:optional
+	// +k8s:alpha(since: "1.36")=+k8s:optional
 	// +default=1
-	// +k8s:minimum=0
+	// +k8s:alpha(since: "1.36")=+k8s:minimum=0
 	replicas?: int32 @go(Replicas,*int32) @protobuf(1,varint,opt)
 
 	// Minimum number of seconds for which a newly created pod should be ready
 	// without any of its container crashing, for it to be considered available.
 	// Defaults to 0 (pod will be considered available as soon as it is ready)
 	// +optional
-	// +k8s:optional
+	// +k8s:alpha(since: "1.36")=+k8s:optional
 	// +default=0
-	// +k8s:minimum=0
+	// +k8s:alpha(since: "1.36")=+k8s:minimum=0
 	minReadySeconds?: int32 @go(MinReadySeconds) @protobuf(4,varint,opt)
 
 	// Selector is a label query over pods that should match the Replicas count.
@@ -6209,8 +6269,8 @@ import (
 	// be the same as the Pod(s) that the replication controller manages.
 	// Standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
-	// +k8s:subfield(name)=+k8s:optional
-	// +k8s:subfield(name)=+k8s:format=k8s-long-name
+	// +k8s:alpha(since: "1.36")=+k8s:subfield(name)=+k8s:optional
+	// +k8s:alpha(since: "1.36")=+k8s:subfield(name)=+k8s:format=k8s-long-name
 	metadata?: metav1.#ObjectMeta @go(ObjectMeta) @protobuf(1,bytes,opt)
 
 	// Spec defines the specification of the desired behavior of the replication controller.
@@ -7130,7 +7190,6 @@ import (
 	recursiveReadOnlyMounts?: bool @go(RecursiveReadOnlyMounts,*bool) @protobuf(1,varint,opt)
 
 	// UserNamespaces is set to true if the runtime handler supports UserNamespaces, including for volumes.
-	// +featureGate=UserNamespacesSupport
 	// +optional
 	userNamespaces?: bool @go(UserNamespaces,*bool) @protobuf(2,varint,opt)
 }
@@ -7326,7 +7385,6 @@ import (
 	config?: #NodeConfigStatus @go(Config,*NodeConfigStatus) @protobuf(11,bytes,opt)
 
 	// The available runtime handlers.
-	// +featureGate=UserNamespacesSupport
 	// +optional
 	// +listType=atomic
 	runtimeHandlers?: [...#NodeRuntimeHandler] @go(RuntimeHandlers,[]NodeRuntimeHandler) @protobuf(12,bytes,rep)
@@ -8879,7 +8937,6 @@ import (
 	// procMount denotes the type of proc mount to use for the containers.
 	// The default value is Default which uses the container runtime defaults for
 	// readonly paths and masked paths.
-	// This requires the ProcMountType feature flag to be enabled.
 	// Note that this field cannot be set when spec.os.name is windows.
 	// +optional
 	procMount?: #ProcMountType @go(ProcMount,*ProcMountType) @protobuf(9,bytes,opt)
@@ -9100,4 +9157,20 @@ import (
 	// Defaults to Always if :latest tag is specified, or IfNotPresent otherwise.
 	// +optional
 	pullPolicy?: #PullPolicy @go(PullPolicy) @protobuf(2,bytes,opt,casttype=PullPolicy)
+}
+
+// NodeAllocatableResourceClaimStatus describes the status of node allocatable resources allocated via DRA.
+#NodeAllocatableResourceClaimStatus: {
+	// ResourceClaimName is the resource claim referenced by the pod that resulted in this node allocatable resource allocation.
+	// +required
+	resourceClaimName: string @go(ResourceClaimName) @protobuf(1,bytes,opt)
+
+	// Containers lists the names of all containers in this pod that reference the claim.
+	// +optional
+	// +listType=set
+	containers?: [...string] @go(Containers,[]string) @protobuf(2,bytes,rep)
+
+	// Resources is a map of the node-allocatable resource name to the aggregate quantity allocated to the claim.
+	// +required
+	resources: {[string]: resource.#Quantity} @go(Resources,map[ResourceName]resource.Quantity) @protobuf(3,bytes,rep)
 }
