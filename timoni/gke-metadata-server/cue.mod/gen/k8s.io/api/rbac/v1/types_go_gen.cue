@@ -22,6 +22,8 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 #PolicyRule: {
 	// Verbs is a list of Verbs that apply to ALL the ResourceKinds contained in this rule. '*' represents all verbs.
 	// +listType=atomic
+	// +required
+	// +k8s:alpha(since: "1.36")=+k8s:required
 	verbs: [...string] @go(Verbs,[]string) @protobuf(1,bytes,rep)
 
 	// APIGroups is the name of the APIGroup that contains the resources.  If multiple API groups are specified, any action requested against one of
@@ -54,6 +56,7 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 #Subject: {
 	// Kind of object being referenced. Values defined by this API group are "User", "Group", and "ServiceAccount".
 	// If the Authorizer does not recognized the kind value, the Authorizer should report an error.
+	// +required
 	kind: string @go(Kind) @protobuf(1,bytes,opt)
 
 	// APIGroup holds the API group of the referenced subject.
@@ -64,7 +67,7 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	// Name of the object being referenced.
 	// +required
-	// +k8s:required
+	// +k8s:alpha(since: "1.36")=+k8s:required
 	name: string @go(Name) @protobuf(3,bytes,opt)
 
 	// Namespace of the referenced object.  If the object kind is non-namespace, such as "User" or "Group", and this value is not empty
@@ -77,14 +80,16 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 // +structType=atomic
 #RoleRef: {
 	// APIGroup is the group for the resource being referenced
-	apiGroup: string @go(APIGroup) @protobuf(1,bytes,opt)
+	// +optional
+	apiGroup?: string @go(APIGroup) @protobuf(1,bytes,opt)
 
 	// Kind is the type of resource being referenced
+	// +required
 	kind: string @go(Kind) @protobuf(2,bytes,opt)
 
 	// Name is the name of resource being referenced
 	// +required
-	// +k8s:required
+	// +k8s:alpha(since: "1.36")=+k8s:required
 	name: string @go(Name) @protobuf(3,bytes,opt)
 }
 
@@ -99,6 +104,7 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	// Rules holds all the PolicyRules for this Role
 	// +optional
 	// +listType=atomic
+	// +k8s:alpha(since: "1.36")=+k8s:optional
 	rules?: [...#PolicyRule] @go(Rules,[]PolicyRule) @protobuf(2,bytes,rep)
 }
 
@@ -115,11 +121,13 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	// Subjects holds references to the objects the role applies to.
 	// +optional
 	// +listType=atomic
+	// +k8s:alpha(since: "1.36")=+k8s:optional
 	subjects?: [...#Subject] @go(Subjects,[]Subject) @protobuf(2,bytes,rep)
 
 	// RoleRef can reference a Role in the current namespace or a ClusterRole in the global namespace.
 	// If the RoleRef cannot be resolved, the Authorizer must return an error.
 	// This field is immutable.
+	// +required
 	roleRef: #RoleRef @go(RoleRef) @protobuf(3,bytes,opt)
 }
 
@@ -158,6 +166,7 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	// Rules holds all the PolicyRules for this ClusterRole
 	// +optional
 	// +listType=atomic
+	// +k8s:alpha(since: "1.36")=+k8s:optional
 	rules?: [...#PolicyRule] @go(Rules,[]PolicyRule) @protobuf(2,bytes,rep)
 
 	// AggregationRule is an optional field that describes how to build the Rules for this ClusterRole.
@@ -188,11 +197,13 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	// Subjects holds references to the objects the role applies to.
 	// +optional
 	// +listType=atomic
+	// +k8s:alpha(since: "1.36")=+k8s:optional
 	subjects?: [...#Subject] @go(Subjects,[]Subject) @protobuf(2,bytes,rep)
 
 	// RoleRef can only reference a ClusterRole in the global namespace.
 	// If the RoleRef cannot be resolved, the Authorizer must return an error.
 	// This field is immutable.
+	// +required
 	roleRef: #RoleRef @go(RoleRef) @protobuf(3,bytes,opt)
 }
 
