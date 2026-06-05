@@ -1,0 +1,20 @@
+# Copyright 2026 Matheus Pimenta.
+# SPDX-License-Identifier: AGPL-3.0
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: <POD_NAME>
+  namespace: default
+spec:
+  serviceAccountName: <SERVICE_ACCOUNT>
+  restartPolicy: Never
+<HOST_ALIASES>
+  containers:
+  - name: probe
+    image: <LOCAL_IMAGE>:<LOCAL_TAG_PYTEST>
+    imagePullPolicy: Never
+    env:
+    - name: EXPECT_DNS
+      value: "<EXPECT_DNS>"
+<NODE_SELECTOR>

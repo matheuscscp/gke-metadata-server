@@ -14,6 +14,7 @@ export CNI
 LOCAL_IMAGE := gke-metadata-server-test
 LOCAL_TAG_DAEMON := container
 LOCAL_TAG_GOTEST := go-test
+LOCAL_TAG_PYTEST := python-test
 # Helm/Timoni need a valid SemVer for chart/module metadata; the value is
 # only used as a string label in PR-mode applies (filesystem-based, not OCI).
 LOCAL_VERSION := 0.0.0-dev
@@ -21,7 +22,7 @@ PLATFORMS ?= linux/amd64
 CILIUM_VERSION ?= 1.19.4
 
 .PHONY: dev
-dev: tidy gen-ebpf dev-cluster build build-go-test kind-load-images dev-test
+dev: tidy gen-ebpf dev-cluster build build-go-test build-pytest kind-load-images dev-test
 
 .PHONY: clean
 clean:
@@ -169,6 +170,14 @@ build-go-test:
 	mv .dockerignore .dockerignore.test
 	mv .dockerignore.bkp .dockerignore
 
+.PHONY: build-pytest
+# Builds the Python test image with google-auth baked in. Used by the
+# test-python-dns and test-python-no-dns pods to prove the google-auth hostname
+# fetch needs DNS resolution of metadata.google.internal.
+build-pytest:
+	docker buildx build . --platform ${PLATFORMS} \
+		-t ${LOCAL_IMAGE}:${LOCAL_TAG_PYTEST} -f Dockerfile.pytest --load
+
 .PHONY: kind-load-images
 # Loads the locally-built daemon and test images into the kind cluster's
 # containerd. Must run after both `build` and `build-go-test` and after the
@@ -177,6 +186,7 @@ build-go-test:
 kind-load-images:
 	kind load docker-image --name gke-metadata-server ${LOCAL_IMAGE}:${LOCAL_TAG_DAEMON}
 	kind load docker-image --name gke-metadata-server ${LOCAL_IMAGE}:${LOCAL_TAG_GOTEST}
+	kind load docker-image --name gke-metadata-server ${LOCAL_IMAGE}:${LOCAL_TAG_PYTEST}
 
 .PHONY: test-unit
 test-unit:

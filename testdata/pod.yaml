@@ -38,10 +38,12 @@ metadata:
   namespace: default
 spec:
   serviceAccountName: <SERVICE_ACCOUNT> # Use the ServiceAccount created above.
-  # This DNS record is required because the Google libraries hardcode the metadata server
-  # address as the hostname "metadata.google.internal". Sometimes they also hardcode the
-  # IP address. Sometimes they only hardcode the IP address, in which case this setting
-  # would not be needed. It all depends on what library your Pod is using. Test it!
+  # The Google client libraries run an OnGCE check before fetching credentials.
+  # Outside real GCE that check resolves metadata.google.internal and probes the
+  # metadata IP in parallel and trusts whichever answers first, so the name has to
+  # resolve for detection to stay reliable. hostAliases provides that mapping.
+  # Libraries that reach the server only by IP do not strictly need it, libraries
+  # that default to the hostname (Python google-auth, gcloud) also need it to fetch.
   hostAliases:
   - hostnames: [metadata.google.internal]
     ip: 169.254.169.254
