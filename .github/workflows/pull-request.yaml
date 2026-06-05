@@ -103,10 +103,11 @@ jobs:
     # Pipeline order is intentional:
     #   ci-cluster (kind + GCP provider) → build (local docker image, ~30-60s,
     #   acts as the GCP-propagation buffer) → build-go-test (same) →
+    #   build-pytest (Python image for the DNS test pods) →
     #   kind-load-images → ci-test. Container images are built locally and
     #   loaded into kind's containerd; nothing is pushed to a registry for
     #   PR validation.
-    - run: make gen-ebpf ci-cluster build build-go-test kind-load-images ci-test
+    - run: make gen-ebpf ci-cluster build build-go-test build-pytest kind-load-images ci-test
       env:
         PLATFORMS: linux/amd64
         CNI: ${{ matrix.cni }}

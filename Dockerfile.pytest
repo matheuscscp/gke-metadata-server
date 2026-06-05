@@ -1,0 +1,14 @@
+# Copyright 2026 Matheus Pimenta.
+# SPDX-License-Identifier: AGPL-3.0
+
+# Prebuilt image for the Python DNS test pods. google-auth is baked in at build
+# time so the pods never fetch from PyPI at runtime.
+FROM python:3.13-slim@sha256:b04b5d7233d2ad9c379e22ea8927cd1378cd15c60d4ef876c065b25ea8fb3bf3
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir google-auth==2.53.0 requests==2.32.3
+
+COPY testdata/python_probe.py ./python_probe.py
+
+CMD [ "python", "/app/python_probe.py" ]

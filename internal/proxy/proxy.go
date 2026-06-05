@@ -4,10 +4,12 @@
 package proxy
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/matheuscscp/gke-metadata-server/internal/logging"
@@ -101,31 +103,35 @@ func (p *proxy) Close() error {
 }
 
 func (p *proxy) handle(client net.Conn) {
-	// read first line to determine if it's a metadata request
-	var buf []byte
-	matches := true
-	toRead := "GET /computeMetadata/v1"
 	l := logger().WithField("clientAddr", client.RemoteAddr().String())
-	for len(toRead) > 0 {
-		b := make([]byte, len(toRead))
-		n, err := client.Read(b)
+
+	// Sniff the HTTP request line to decide where this connection goes. The
+	// genuine GKE metadata server serves the root path and everything under
+	// /computeMetadata, so those must reach the inner metadata server. The root
+	// probe is what ADC libraries (google-auth ping, the Go SDK testOnGCE) use
+	// to detect GCE, so it cannot be forwarded upstream. Any other request is
+	// proxied through to 169.254.169.254:80 verbatim. We read just enough of
+	// "METHOD PATH HTTP/.." to extract the path, bounded by sniffCap so a slow
+	// or garbage client cannot make us buffer unboundedly.
+	const sniffCap = 8192
+	var buf []byte
+	chunk := make([]byte, 256)
+	for {
+		n, err := client.Read(chunk)
+		buf = append(buf, chunk[:n]...)
+		if requestPathComplete(buf) || len(buf) >= sniffCap {
+			break
+		}
 		if err != nil {
 			l.WithError(err).Error("error reading from client")
 			client.Close()
 			return
 		}
-		buf = append(buf, b[:n]...)
-		if string(toRead[:n]) != string(b[:n]) {
-			// not a metadata request
-			matches = false
-			break
-		}
-		toRead = toRead[n:]
 	}
 	client = &sniffedConn{Conn: client, buf: buf}
 
-	// if it's a metadata request, enqueue it and return
-	if matches {
+	// if it targets the metadata surface, enqueue it for the inner server
+	if isMetadataRequest(buf) {
 		select {
 		case p.queue <- client:
 		case <-p.ctx.Done():
@@ -170,6 +176,39 @@ func (p *proxy) handle(client net.Conn) {
 	}()
 	<-done
 	<-done
+}
+
+// requestPathComplete reports whether buf already contains the full HTTP
+// request path, meaning the second space in "METHOD PATH HTTP/.." has been read
+// or the request line ended, so sniffing can stop.
+func requestPathComplete(buf []byte) bool {
+	if bytes.IndexByte(buf, '\n') >= 0 {
+		return true
+	}
+	sp := bytes.IndexByte(buf, ' ')
+	return sp >= 0 && bytes.IndexByte(buf[sp+1:], ' ') >= 0
+}
+
+// isMetadataRequest reports whether the sniffed request line targets the
+// metadata surface served by the emulator, meaning a GET for the root path or
+// any path under /computeMetadata. This mirrors what the genuine GKE metadata
+// server serves with 200 and the Metadata-Flavor Google header. Any other
+// request is proxied through to the real 169.254.169.254:80 endpoint.
+func isMetadataRequest(buf []byte) bool {
+	const method = "GET "
+	if !bytes.HasPrefix(buf, []byte(method)) {
+		return false
+	}
+	rest := buf[len(method):]
+	sp := bytes.IndexByte(rest, ' ')
+	if sp < 0 {
+		return false
+	}
+	path := string(rest[:sp])
+	if q := strings.IndexByte(path, '?'); q >= 0 {
+		path = path[:q]
+	}
+	return path == "/" || path == "/computeMetadata" || strings.HasPrefix(path, "/computeMetadata/")
 }
 
 func (s *sniffedConn) Read(b []byte) (int, error) {

@@ -15,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"cloud.google.com/go/compute/metadata"
 	"cloud.google.com/go/storage"
 	"github.com/coreos/go-oidc/v3/oidc"
 	jwt "github.com/golang-jwt/jwt/v5"
@@ -52,12 +51,6 @@ func isDirectAccessPod() bool {
 		return true
 	}
 	return false
-}
-
-func TestOnGCE(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	assert.True(t, metadata.OnGCEWithContext(ctx))
 }
 
 func TestGKEServiceAccountTokenAPI(t *testing.T) {
@@ -232,6 +225,36 @@ func TestProxyPassthrough(t *testing.T) {
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 	assert.Equal(t, proxytest.Marker, resp.Header.Get(proxytest.HeaderName))
+}
+
+// TestOnGCERootProbe exercises the bare "GET /" that ADC client libraries use
+// to detect GCE. google-auth's ping and the Go SDK's testOnGCE both require
+// HTTP 200 with the Metadata-Flavor: Google header on the root path. This is a
+// raw request rather than metadata.OnGCE, so it stays immune to the two masks
+// that hide the failure in the Go library, namely the GCE_METADATA_HOST
+// short-circuit and the metadata.google.internal /etc/hosts DNS fallback. The
+// Python library probes the same way, which is why #501 was reported there
+// first. On eBPF nodes the proxy used to route only "GET /computeMetadata/v1"
+// to the metadata server, so the root probe was forwarded upstream and lost the
+// header. Gated to eBPF nodes via EXPECT_PROXY_UPSTREAM, like
+// TestProxyPassthrough.
+func TestOnGCERootProbe(t *testing.T) {
+	if os.Getenv("EXPECT_PROXY_UPSTREAM") != "true" {
+		t.Skip("EXPECT_PROXY_UPSTREAM not set, pod is not on an eBPF node")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://169.254.169.254/", nil)
+	require.NoError(t, err)
+	req.Header.Set("Metadata-Flavor", "Google")
+	// Force a fresh TCP connection so the proxy sniffs the request line for
+	// this request instead of reusing a keep-alive connection.
+	client := &http.Client{Transport: &http.Transport{DisableKeepAlives: true}}
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "Google", resp.Header.Get("Metadata-Flavor"))
 }
 
 func TestGKEServiceAccountIdentityAPI(t *testing.T) {

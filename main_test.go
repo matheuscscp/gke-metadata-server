@@ -22,6 +22,8 @@ type pod struct {
 	serviceAccountName string
 	nodeSelector       map[string]string
 	hostNetwork        bool
+	hostAliases        bool
+	expectDNS          string
 	expectedExitCode   int
 }
 
@@ -37,6 +39,7 @@ var (
 	localImage     = envOrDefault("LOCAL_IMAGE", "gke-metadata-server-test")
 	localTagDaemon = envOrDefault("LOCAL_TAG_DAEMON", "container")
 	localTagGoTest = envOrDefault("LOCAL_TAG_GOTEST", "go-test")
+	localTagPytest = envOrDefault("LOCAL_TAG_PYTEST", "python-test")
 )
 
 func envOrDefault(k, d string) string {
@@ -170,6 +173,28 @@ func TestEndToEnd(t *testing.T) {
 					hostNetwork:        true,
 					nodeSelector: map[string]string{
 						"node.gke-metadata-server.matheuscscp.io/routingMode": "None",
+					},
+				},
+				// Two Python pods proving the google-auth hostname fetch needs
+				// DNS. Both run on the eBPF node, so detection over the IP
+				// succeeds in both. With hostAliases the metadata.google.internal
+				// fetch resolves and succeeds, without it the same fetch fails,
+				// which pins the requirement on DNS rather than on reachability.
+				{
+					name:        "test-python-dns",
+					file:        "pod-python.yaml",
+					hostAliases: true,
+					expectDNS:   "yes",
+					nodeSelector: map[string]string{
+						"node.gke-metadata-server.matheuscscp.io/routingMode": "eBPF",
+					},
+				},
+				{
+					name:      "test-python-no-dns",
+					file:      "pod-python.yaml",
+					expectDNS: "no",
+					nodeSelector: map[string]string{
+						"node.gke-metadata-server.matheuscscp.io/routingMode": "eBPF",
 					},
 				},
 			},
@@ -349,30 +374,14 @@ func applyPods(t *testing.T, pods []pod) {
 		// On pods pinned to eBPF nodes, signal that the daemon's --test-proxy-upstream
 		// marker server is reachable so TestProxyPassthrough can issue a hard
 		// assertion rather than skipping. Pods not pinned to eBPF skip the test.
-		//
-		// Also set GCE_METADATA_HOST so cloud.google.com/go/compute/metadata's
-		// OnGCE short-circuits to true without probing 169.254.169.254 — the
-		// proxy-passthrough marker server intercepts non-metadata requests on
-		// that IP and replies without `Metadata-Flavor: Google`, which races
-		// with the library's parallel DNS strategy and flakes OnGCE to false.
+		// No GCE_METADATA_HOST is set on eBPF or Loopback pods. Both intercept
+		// 169.254.169.254 transparently, so the libraries reach the daemon over
+		// the IP and the detection path is exercised for real.
 		var ebpfEnv string
 		if p.nodeSelector["node.gke-metadata-server.matheuscscp.io/routingMode"] == "eBPF" {
 			ebpfEnv = `
     - name: EXPECT_PROXY_UPSTREAM
-      value: "true"
-    - name: GCE_METADATA_HOST
-      value: "169.254.169.254"`
-		}
-		// Loopback mode binds the daemon directly to 169.254.169.254:80; the
-		// library's HTTP probe to that IP gets a metadata response from the
-		// daemon, but for paths it doesn't recognise (like `/`) it can return
-		// without the expected header and lose the OnGCE race the same way.
-		// Short-circuit it the same way as eBPF.
-		var loopbackEnv string
-		if p.nodeSelector["node.gke-metadata-server.matheuscscp.io/routingMode"] == "Loopback" {
-			loopbackEnv = `
-    - name: GCE_METADATA_HOST
-      value: "169.254.169.254"`
+      value: "true"`
 		}
 		var nodeSelector string
 		if len(p.nodeSelector) > 0 {
@@ -384,12 +393,21 @@ func applyPods(t *testing.T, pods []pod) {
 			}
 			nodeSelector = b.String()
 		}
+		var hostAliases string
+		if p.hostAliases {
+			hostAliases = `  hostAliases:
+  - hostnames: [metadata.google.internal]
+    ip: 169.254.169.254`
+		}
 		pod = strings.ReplaceAll(string(b), "<POD_NAME>", p.name)
 		pod = strings.ReplaceAll(pod, "<SERVICE_ACCOUNT>", serviceAccountName)
 		pod = strings.ReplaceAll(pod, "<HOST_NETWORK>", fmt.Sprint(p.hostNetwork))
+		pod = strings.ReplaceAll(pod, "<HOST_ALIASES>", hostAliases)
 		pod = strings.ReplaceAll(pod, "<LOCAL_IMAGE>", localImage)
 		pod = strings.ReplaceAll(pod, "<LOCAL_TAG_GOTEST>", localTagGoTest)
-		pod = strings.ReplaceAll(pod, "<EXTRA_ENV>", noneRoutingEnv+ebpfEnv+loopbackEnv)
+		pod = strings.ReplaceAll(pod, "<LOCAL_TAG_PYTEST>", localTagPytest)
+		pod = strings.ReplaceAll(pod, "<EXPECT_DNS>", p.expectDNS)
+		pod = strings.ReplaceAll(pod, "<EXTRA_ENV>", noneRoutingEnv+ebpfEnv)
 		pod = strings.ReplaceAll(pod, "<NODE_SELECTOR>", nodeSelector)
 
 		// apply
