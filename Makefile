@@ -19,7 +19,7 @@ LOCAL_TAG_PYTEST := python-test
 # only used as a string label in PR-mode applies (filesystem-based, not OCI).
 LOCAL_VERSION := 0.0.0-dev
 PLATFORMS ?= linux/amd64
-CILIUM_VERSION ?= 1.19.4
+CILIUM_VERSION ?= 1.19.5
 
 .PHONY: dev
 dev: tidy gen-ebpf dev-cluster build build-go-test build-pytest kind-load-images dev-test
