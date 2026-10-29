@@ -71,6 +71,7 @@ func main() {
 		podLookupMaxAttempts                int
 		podLookupRetryInitialDelay          time.Duration
 		podLookupRetryMaxDelay              time.Duration
+		redirectCgroupPath                  string
 		testProxyUpstream                   bool
 	)
 
@@ -116,6 +117,8 @@ func main() {
 		"Initial delay for retrying pod lookups upon failures")
 	flags.DurationVar(&podLookupRetryMaxDelay, "pod-lookup-retry-max-delay", 30*time.Second,
 		"Maximum delay for retrying pod lookups upon failures")
+	flags.StringVar(&redirectCgroupPath, "redirect-cgroup-path", "",
+		"cgroup v2 directory to attach the eBPF redirect to (default: the root, /sys/fs/cgroup). Set it to the pods' subtree, e.g. /sys/fs/cgroup/kubepods.slice, so host processes keep the real metadata server.")
 	flags.BoolVar(&testProxyUpstream, "test-proxy-upstream", false,
 		"Test-only: in eBPF mode, bind 169.254.169.254 to lo and serve a marker on port 80 to e2e-test the proxy passthrough chain. Has no effect outside eBPF mode. Do not enable in production.")
 
@@ -280,7 +283,7 @@ func main() {
 	if err != nil {
 		l.WithError(err).Fatal("error getting current node")
 	}
-	routingMode, closeRoute, err := routing.LoadAndAttach(curNode, emulatorIP, serverPort)
+	routingMode, closeRoute, err := routing.LoadAndAttach(curNode, emulatorIP, serverPort, redirectCgroupPath)
 	if err != nil {
 		l.WithField("routing", routingMode).WithError(err).Fatal("error loading and attaching network route")
 	}

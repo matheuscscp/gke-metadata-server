@@ -16,13 +16,13 @@ import (
 
 // LoadAndAttach looks up the routing mode from the Node's annotations
 // or labels and loads and attaches the routing mechanism accordingly.
-func LoadAndAttach(node *corev1.Node, emulatorIP netip.Addr, emulatorPort int) (string, func() error, error) {
+func LoadAndAttach(node *corev1.Node, emulatorIP netip.Addr, emulatorPort int, redirectCgroupPath string) (string, func() error, error) {
 	var loadAndAttach func() (func() error, error)
 
 	mode := getMode(node)
 	switch mode {
 	case api.RoutingModeBPF:
-		loadAndAttach = redirect.LoadAndAttach(emulatorIP, emulatorPort)
+		loadAndAttach = redirect.LoadAndAttach(emulatorIP, emulatorPort, redirectCgroupPath)
 	case api.RoutingModeLoopback:
 		loadAndAttach = loopback.LoadAndAttach
 	case api.RoutingModeNone:

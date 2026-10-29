@@ -241,6 +241,14 @@ emulator consults that map for hostNetwork pod requests and resolves the cgroup
 ID to a pod UID by walking `/sys/fs/cgroup`, giving hostNetwork pods per-pod
 identity (see [Pods running on the host network](#pods-running-on-the-host-network)).
 
+By default the `connect()` program is attached to the cgroup v2 root, so every process on
+the Node is redirected, including host services. On a VM whose own metadata server listens on
+`169.254.169.254` (for example a self-managed cluster on GCE VMs), host services that use it for
+the VM's service account would then reach the emulator, which refuses them because they are not
+Pods. Set `--redirect-cgroup-path` (Helm `config.redirectCgroupPath`, Timoni
+`redirectCgroupPath`) to the Pods' cgroup subtree, for example `/sys/fs/cgroup/kubepods.slice`
+with the kubelet's systemd cgroup driver, to redirect only Pods.
+
 This mode coexists with other eBPF tools that attach to `cgroup/connect4` —
 notably Cilium, including with [`kubeProxyReplacement`](https://docs.cilium.io/en/stable/network/kubernetes/kubeproxy-free/)
 enabled (which makes Cilium attach its own `cgroup/connect4` for service-VIP
