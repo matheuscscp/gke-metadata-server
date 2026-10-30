@@ -140,12 +140,13 @@ func TestLoadAndAttach(t *testing.T) {
 				Annotations: map[string]string{api.AnnotationRoutingMode: tt.mode},
 			}}
 			mode, cgroupPath, closeRoute, err := LoadAndAttach(node, netip.Addr{}, 0, tt.path)
-			assert.Equal(t, tt.mode, mode)
 			if tt.wantErr != "" {
 				assert.ErrorContains(t, err, tt.wantErr)
+				assert.Empty(t, mode)
 				return
 			}
 			require.NoError(t, err)
+			assert.Equal(t, tt.mode, mode)
 			assert.Empty(t, cgroupPath)
 			assert.NoError(t, closeRoute())
 		})

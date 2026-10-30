@@ -32,7 +32,7 @@ func LoadAndAttach(node *corev1.Node, emulatorIP netip.Addr, emulatorPort int, r
 	case api.RoutingModeBPF:
 		var err error
 		if cgroupPath, err = checkCgroupPath(redirectCgroupPath); err != nil {
-			return mode, "", nil, err
+			return "", "", nil, err
 		}
 		loadAndAttach = redirect.LoadAndAttach(emulatorIP, emulatorPort, cgroupPath)
 	case api.RoutingModeLoopback:
@@ -42,12 +42,12 @@ func LoadAndAttach(node *corev1.Node, emulatorIP netip.Addr, emulatorPort int, r
 			return func() error { return nil }, nil
 		}
 	default:
-		return mode, "", nil, fmt.Errorf("invalid routing mode: %s", mode)
+		return "", "", nil, fmt.Errorf("invalid routing mode: %s", mode)
 	}
 
 	close, err := loadAndAttach()
 	if err != nil {
-		return mode, "", nil, err
+		return "", "", nil, err
 	}
 	return mode, cgroupPath, close, nil
 }
