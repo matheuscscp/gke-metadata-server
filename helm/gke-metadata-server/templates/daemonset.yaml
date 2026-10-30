@@ -72,6 +72,9 @@ spec:
         {{- if .Values.config.healthPort }}
         - --health-port={{ .Values.config.healthPort }}
         {{- end }}
+        {{- if .Values.config.redirectCgroupPath }}
+        - --redirect-cgroup-path={{ .Values.config.redirectCgroupPath }}
+        {{- end }}
         {{- if .Values.config.logLevel }}
         - --log-level={{ .Values.config.logLevel }}
         {{- end }}

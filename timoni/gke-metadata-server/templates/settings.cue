@@ -25,6 +25,10 @@ import (
  	// healthPort is the TCP port for the health server to listen HTTP on.
 	healthPort: int & >0 & <65536 | *16322
 
+	// redirectCgroupPath is the cgroup v2 directory the eBPF redirect is attached to (eBPF routing mode only).
+	// Unset means the root, so every process on the Node is redirected.
+	redirectCgroupPath?: string & =~"^/sys/fs/cgroup(/.*)?$"
+
 	// watchPods is the watch settings for gke-metadata-server to watch Pods running on the same Node.
 	watchPods: #watchSettings
 

@@ -81,6 +81,9 @@ import (
 						if #config.settings.healthPort != _|_ {
 							"--health-port=\(#config.settings.healthPort)"
 						}
+						if #config.settings.redirectCgroupPath != _|_ {
+							"--redirect-cgroup-path=\(#config.settings.redirectCgroupPath)"
+						}
 						if #config.settings.watchPods.enable {
 							"--watch-pods"
 						}

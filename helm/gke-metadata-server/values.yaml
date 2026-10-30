@@ -15,6 +15,10 @@ config:
   logLevel: info # Log level. Accepted values: panic, fatal, error, warning, info, debug, trace
   serverPort: 16321 # TCP port where the metadata HTTP server will listen on.
   healthPort: 16322 # TCP port where the health HTTP server will listern on.
+  # eBPF routing mode only: the cgroup v2 directory the redirect is attached to.
+  # Empty means the root (/sys/fs/cgroup), so every process on the Node is redirected.
+  # Set e.g. /sys/fs/cgroup/kubepods.slice to redirect Pods only.
+  redirectCgroupPath: ""
   watchPods:
     enable: true # Whether or not to watch and cache the Pods running on the same Node.
     disableFallback: false # Whether or not to disable the simple fallback method for looking up Pods upon cache misses.

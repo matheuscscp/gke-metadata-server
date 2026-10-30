@@ -45,7 +45,7 @@ func LoadAndAttach() (*Map, error) {
 	}
 
 	lnk, err := link.AttachCgroup(link.CgroupOptions{
-		Path:    "/sys/fs/cgroup",
+		Path:    attestation.CgroupV2Mount,
 		Attach:  ebpf.AttachCGroupSockOps,
 		Program: objs.AttestConnect,
 	})
