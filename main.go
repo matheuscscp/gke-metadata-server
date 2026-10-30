@@ -118,7 +118,7 @@ func main() {
 	flags.DurationVar(&podLookupRetryMaxDelay, "pod-lookup-retry-max-delay", 30*time.Second,
 		"Maximum delay for retrying pod lookups upon failures")
 	flags.StringVar(&redirectCgroupPath, "redirect-cgroup-path", "",
-		"cgroup v2 directory to attach the eBPF redirect to (default: the root, /sys/fs/cgroup). Set it to the pods' subtree, e.g. /sys/fs/cgroup/kubepods.slice, so host processes keep the real metadata server.")
+		"cgroup v2 directory to attach the eBPF redirect to on Nodes in eBPF routing mode (default: the root, /sys/fs/cgroup). Set it to the Pods' subtree, e.g. /sys/fs/cgroup/kubepods.slice, so host processes keep the real metadata server. It must contain the emulator's own Pod.")
 	flags.BoolVar(&testProxyUpstream, "test-proxy-upstream", false,
 		"Test-only: in eBPF mode, bind 169.254.169.254 to lo and serve a marker on port 80 to e2e-test the proxy passthrough chain. Has no effect outside eBPF mode. Do not enable in production.")
 
@@ -283,7 +283,7 @@ func main() {
 	if err != nil {
 		l.WithError(err).Fatal("error getting current node")
 	}
-	routingMode, closeRoute, err := routing.LoadAndAttach(curNode, emulatorIP, serverPort, redirectCgroupPath)
+	routingMode, cgroupPath, closeRoute, err := routing.LoadAndAttach(curNode, emulatorIP, serverPort, redirectCgroupPath)
 	if err != nil {
 		l.WithField("routing", routingMode).WithError(err).Fatal("error loading and attaching network route")
 	}
@@ -322,10 +322,14 @@ func main() {
 		attestationLookuper = sockdiag.New()
 	}
 
-	l.WithFields(logrus.Fields{
+	routingFields := logrus.Fields{
 		"routing":    routingMode,
 		"serverAddr": serverAddr,
-	}).Info("routing mode loaded and attached")
+	}
+	if cgroupPath != "" {
+		routingFields["cgroupPath"] = cgroupPath
+	}
+	l.WithFields(routingFields).Info("routing mode loaded and attached")
 
 	// test-only: bring up the proxy-passthrough marker upstream on lo so the
 	// e2e suite can prove the cgroup-ID self-exemption + userspace forward

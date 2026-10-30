@@ -14,6 +14,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/matheuscscp/gke-metadata-server/internal/attestation"
 	"github.com/matheuscscp/gke-metadata-server/internal/logging"
 
 	"github.com/cilium/ebpf"
@@ -23,14 +24,7 @@ import (
 //go:generate sh -c "bpftool btf dump file /sys/kernel/btf/vmlinux format c > ../../ebpf/vmlinux.h"
 //go:generate go run github.com/cilium/ebpf/cmd/bpf2go -type Config redirect ../../ebpf/redirect.c
 
-const cgroupv2Mount = "/sys/fs/cgroup"
-
-// LoadAndAttach attaches the connect4 program to cgroupPath (default: the
-// cgroup v2 root), so only processes in that subtree are redirected.
 func LoadAndAttach(emulatorIP netip.Addr, emulatorPort int, cgroupPath string) func() (func() error, error) {
-	if cgroupPath == "" {
-		cgroupPath = cgroupv2Mount
-	}
 	return func() (func() error, error) {
 		var objs redirectObjects
 		if err := loadRedirectObjects(&objs, nil); err != nil {
@@ -92,13 +86,25 @@ func LoadAndAttach(emulatorIP netip.Addr, emulatorPort int, cgroupPath string) f
 // read from /proc/self/cgroup, which on a unified system has a single line
 // of the form "0::<path>".
 func selfCgroupID() (uint64, error) {
+	dir, err := SelfCgroupDir()
+	if err != nil {
+		return 0, err
+	}
+	var st syscall.Stat_t
+	if err := syscall.Stat(dir, &st); err != nil {
+		return 0, fmt.Errorf("error stating cgroup directory %q: %w", dir, err)
+	}
+	return st.Ino, nil
+}
+
+func SelfCgroupDir() (string, error) {
 	f, err := os.Open("/proc/self/cgroup")
 	if err != nil {
-		return 0, fmt.Errorf("error opening /proc/self/cgroup: %w", err)
+		return "", fmt.Errorf("error opening /proc/self/cgroup: %w", err)
 	}
 	defer f.Close()
 
-	var cgroupPath string
+	var rel string
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -106,21 +112,15 @@ func selfCgroupID() (uint64, error) {
 		// has hierarchy-id "0" and empty controllers.
 		fields := strings.SplitN(line, ":", 3)
 		if len(fields) == 3 && fields[0] == "0" && fields[1] == "" {
-			cgroupPath = fields[2]
+			rel = fields[2]
 			break
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return 0, fmt.Errorf("error reading /proc/self/cgroup: %w", err)
+		return "", fmt.Errorf("error reading /proc/self/cgroup: %w", err)
 	}
-	if cgroupPath == "" {
-		return 0, errors.New("could not find cgroup v2 entry in /proc/self/cgroup; only the unified hierarchy is supported")
+	if rel == "" {
+		return "", errors.New("could not find cgroup v2 entry in /proc/self/cgroup; only the unified hierarchy is supported")
 	}
-
-	dir := filepath.Join(cgroupv2Mount, cgroupPath)
-	var st syscall.Stat_t
-	if err := syscall.Stat(dir, &st); err != nil {
-		return 0, fmt.Errorf("error stating cgroup directory %q: %w", dir, err)
-	}
-	return st.Ino, nil
+	return filepath.Join(attestation.CgroupV2Mount, rel), nil
 }

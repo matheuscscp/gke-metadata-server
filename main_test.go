@@ -54,11 +54,13 @@ func TestEndToEnd(t *testing.T) {
 		name           string
 		emulatorValues string
 		allNodes       bool
+		checkHostNodes string
 		pods           []pod
 	}{
 		{
 			name:           "helm",
 			emulatorValues: "helm.yaml",
+			checkHostNodes: "node.gke-metadata-server.matheuscscp.io/routingMode=eBPF",
 			pods: []pod{{
 				name:               "test-impersonation",
 				serviceAccountName: "test-impersonated",
@@ -82,6 +84,7 @@ func TestEndToEnd(t *testing.T) {
 			name:           "timoni all nodes",
 			emulatorValues: "timoni-all-nodes.cue",
 			allNodes:       true,
+			checkHostNodes: "allNodesTest=true",
 			pods: []pod{{
 				name:               "test-impersonation",
 				serviceAccountName: "test-impersonated",
@@ -209,6 +212,9 @@ func TestEndToEnd(t *testing.T) {
 			applyPods(t, tt.pods)
 			exitCodes := waitForPods(t, tt.pods)
 			checkExitCodes(t, tt.pods, exitCodes)
+			if tt.checkHostNodes != "" {
+				checkHostNotRedirected(t, tt.checkHostNodes)
+			}
 		})
 	}
 }
@@ -489,6 +495,27 @@ func checkExitCodes(t *testing.T, pods []pod, exitCodes []int) {
 	if failed {
 		t.Fail()
 	}
+}
+
+func checkHostNotRedirected(t *testing.T, nodeSelector string) {
+	t.Helper()
+
+	b, err := exec.Command(
+		"kubectl",
+		"--context", "kind-gke-metadata-server",
+		"get", "nodes",
+		"-l", nodeSelector,
+		"-o", "jsonpath={.items[0].metadata.name}").CombinedOutput()
+	require.NoError(t, err, string(b))
+	node := strings.TrimSpace(string(b))
+
+	b, _ = exec.Command(
+		"docker", "exec", node,
+		"curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", "10",
+		"-H", "Metadata-Flavor: Google",
+		"http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/email").CombinedOutput()
+	require.Equal(t, "204", strings.TrimSpace(string(b)),
+		"a host process on %s must reach the --test-proxy-upstream marker server directly, not the emulator", node)
 }
 
 func printDebugInfo(t *testing.T, pods []pod, exitCodes []int) {
