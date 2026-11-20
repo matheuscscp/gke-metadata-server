@@ -200,20 +200,26 @@ func New(ctx context.Context, opts ServerOptions) *Server {
 		w.WriteHeader(http.StatusOK)
 	})
 	// /readyz exercises the full request path against the daemon itself
-	// using a fresh TCP connection (DisableKeepAlives), then asks the
+	// using a fresh TCP connection (DisableKeepAlives) and asks the
 	// attestation lookuper whether it captured that connection's 4-tuple.
 	// In eBPF mode this gates readiness on the sockops program actually
 	// firing for new connects; in netlink modes the verify is a no-op.
+	// The verify runs right after the dial, while the connection is open:
+	// the eBPF program deletes the entry when the socket closes, and with
+	// DisableKeepAlives the connection is closed once the response is read.
 	healthHandler.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
 		l := logging.FromRequest(r)
-		var local, remote *net.TCPAddr
+		var verifyErr error
 		client := &http.Client{Transport: &http.Transport{
 			DisableKeepAlives: true,
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 				conn, err := (&net.Dialer{}).DialContext(ctx, network, addr)
-				if err == nil {
-					local = conn.LocalAddr().(*net.TCPAddr)
-					remote = conn.RemoteAddr().(*net.TCPAddr)
+				if err == nil && opts.Attestation != nil {
+					local := conn.LocalAddr().(*net.TCPAddr)
+					remote := conn.RemoteAddr().(*net.TCPAddr)
+					src, _ := netip.AddrFromSlice(local.IP.To4())
+					dst, _ := netip.AddrFromSlice(remote.IP.To4())
+					verifyErr = opts.Attestation.Verify(src.Unmap(), dst.Unmap(), uint16(local.Port), uint16(remote.Port))
 				}
 				return conn, err
 			},
@@ -250,14 +256,10 @@ func New(ctx context.Context, opts ServerOptions) *Server {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		if opts.Attestation != nil && local != nil && remote != nil {
-			src, _ := netip.AddrFromSlice(local.IP.To4())
-			dst, _ := netip.AddrFromSlice(remote.IP.To4())
-			if err := opts.Attestation.Verify(src.Unmap(), dst.Unmap(), uint16(local.Port), uint16(remote.Port)); err != nil {
-				l.WithError(err).Error("readiness: attestation pipeline did not capture self-connection")
-				w.WriteHeader(http.StatusInternalServerError)
-				return
-			}
+		if verifyErr != nil {
+			l.WithError(verifyErr).Error("readiness: attestation pipeline did not capture self-connection")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
 		}
 		w.WriteHeader(http.StatusOK)
 	})

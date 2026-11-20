@@ -24,8 +24,9 @@ import (
 
 // Map wraps the loaded sockops program and its companion lookup map. Lookup
 // returns ErrNotFound when the 4-tuple is unknown — typically because the
-// connect happened before the program was attached, or the LRU evicted the
-// entry. The (mode, pod-kind) dispatch in the server treats this as a hard
+// connect happened before the program was attached, the connection did not
+// target the daemon port directly or the connection is already closed.
+// The (mode, pod-kind) dispatch in the server treats this as a hard
 // attestation failure (HTTP 403); there is no fallback to source IP by
 // design.
 type Map struct {
@@ -37,11 +38,26 @@ type Map struct {
 var ErrNotFound = errors.New("attestation: 4-tuple not in map")
 
 // LoadAndAttach loads the sockops program and attaches it to the host's
-// cgroup root so it fires for every active TCP connect on the node.
-func LoadAndAttach() (*Map, error) {
+// cgroup root so it fires for every active TCP connect on the node. Only
+// connects to serverPort are recorded, and each record is deleted again
+// when its socket closes.
+func LoadAndAttach(serverPort int) (*Map, error) {
+	if serverPort <= 0 || serverPort > 65535 {
+		return nil, fmt.Errorf("invalid server port %d", serverPort)
+	}
+
 	var objs attestObjects
 	if err := loadAttestObjects(&objs, nil); err != nil {
 		return nil, fmt.Errorf("loading attest eBPF objects: %w", err)
+	}
+
+	// Configure the program before attaching it, so it never runs with an
+	// empty config.
+	config := attestAttestConfig{ServerPort: uint16(serverPort)}
+	var key uint32 = 0
+	if err := objs.attestMaps.MapAttestConfig.Update(&key, &config, ebpf.UpdateAny); err != nil {
+		objs.Close()
+		return nil, fmt.Errorf("updating attest eBPF config map: %w", err)
 	}
 
 	lnk, err := link.AttachCgroup(link.CgroupOptions{
