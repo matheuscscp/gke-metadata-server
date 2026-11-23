@@ -295,8 +295,9 @@ func main() {
 	}
 
 	// Pick the per-mode attestation strategy. eBPF mode loads a sockops
-	// program that records every active TCP connect's 4-tuple -> cgroup ID,
-	// which userspace resolves to a pod UID by walking /sys/fs/cgroup.
+	// program that records the 4-tuple -> cgroup ID of every open TCP
+	// connection to the daemon port, which userspace resolves to a pod UID
+	// by walking /sys/fs/cgroup.
 	// Loopback and None modes use a userspace netlink SOCK_DIAG fallback
 	// that resolves a 4-tuple to the owning socket's inode, walks
 	// /proc/<pid>/fd to find the PID, then reads /proc/<pid>/cgroup. The
@@ -305,7 +306,7 @@ func main() {
 	var attestationLookuper server.AttestationLookuper
 	switch routingMode {
 	case api.RoutingModeBPF:
-		attestMap, err := attestbpf.LoadAndAttach()
+		attestMap, err := attestbpf.LoadAndAttach(serverPort)
 		if err != nil {
 			l.WithError(err).Fatal("error loading attestation eBPF program")
 		}

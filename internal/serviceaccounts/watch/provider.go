@@ -80,8 +80,15 @@ func NewProvider(ctx context.Context, opts ProviderOptions) *Provider {
 			}
 		},
 		DeleteFunc: func(obj any) {
+			if tombstone, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+				obj = tombstone.Obj
+			}
+			sa, ok := obj.(*corev1.ServiceAccount)
+			if !ok {
+				return
+			}
 			numServiceAccounts.Dec()
-			saRef := serviceaccounts.ReferenceFromObject(obj.(*corev1.ServiceAccount))
+			saRef := serviceaccounts.ReferenceFromObject(sa)
 			for _, l := range p.listeners {
 				l.DeleteServiceAccount(saRef)
 			}

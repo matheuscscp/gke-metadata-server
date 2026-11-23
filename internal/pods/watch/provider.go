@@ -107,8 +107,15 @@ func NewProvider(opts ProviderOptions) *Provider {
 			}
 		},
 		DeleteFunc: func(obj any) {
+			if tombstone, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+				obj = tombstone.Obj
+			}
+			pod, ok := obj.(*corev1.Pod)
+			if !ok {
+				return
+			}
 			numPods.Dec()
-			saRef := serviceaccounts.ReferenceFromPod(obj.(*corev1.Pod))
+			saRef := serviceaccounts.ReferenceFromPod(pod)
 			for _, l := range p.listeners {
 				l.DeletePodServiceAccount(saRef)
 			}
